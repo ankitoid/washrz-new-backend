@@ -27,7 +27,8 @@ app.use(
       "http://dep-washrz-dev.s3-website.ap-south-1.amazonaws.com",
       "https://www.magha1.com",
        "http://erp.drydash.in.s3-website.ap-south-1.amazonaws.com",
-      "https://erp.drydash.in"
+      "https://erp.drydash.in",
+      "http://localhost:5173"
     ],
     methods: "GET, POST, PUT, DELETE, PATCH",
     credentials: true, // Allow credentials (cookies) to be sent with the request
@@ -46,7 +47,8 @@ const io = new Server(server, {
       "http://dep-washrz-dev.s3-website.ap-south-1.amazonaws.com",
       "https://www.magha1.com",
       "http://erp.drydash.in.s3-website.ap-south-1.amazonaws.com",
-      "https://erp.drydash.in"
+      "https://erp.drydash.in",
+      "http://localhost:5173"
     ],
     credentials: true,
   },
