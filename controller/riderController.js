@@ -251,6 +251,7 @@ export const getRescheduledPickups = async (req, res) => {
 export const deletePickup = catchAsync(async (req, res, next) => {
   const pickupData = await Pickup.findByIdAndUpdate(req.params.id, {
     isDeleted: true,
+    PickupStatus:"cancelled"
   });
   if (!pickupData) {
     return next(new AppError("No pickup found with that ID", 404));

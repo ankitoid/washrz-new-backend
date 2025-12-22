@@ -136,12 +136,15 @@ export const assignPickupRider = async (req, res) => {
     // Get current date in YYYY-MM-DD format
     const riderDate = new Date().toISOString().split("T")[0];
 
+    // const PickupStatus =  "assigned";
+
     // Find the order by ID and update the rider name and riderDate
     const pickup = await Pickup.findByIdAndUpdate(
       orderId, // Use orderId instead of pickupId as per frontend
       {
         riderName,
-        riderDate, // Add riderDate field
+        riderDate,
+        PickupStatus : "assigned"
       },
       { new: true }
     );
