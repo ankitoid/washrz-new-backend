@@ -103,18 +103,19 @@ export const addPickup = catchAsync(async (req, res, next) => {
 //   });
 // });
 export const getPickups = catchAsync(async (req, res, next) => {
-  const { date,status } = req.query; // Date filter from query and status filter
+  const { date,status} = req.query; // Date filter from query and status filter
   const startDate = date ? new Date(date) : new Date(); // Default to current date
   startDate.setHours(0, 0, 0, 0);
   const endDate = new Date(startDate);
   endDate.setHours(23, 59, 59, 999);
+
+  console.log('this is status==>>',status)
 
   const [pickups, countTotal] = await Promise.all([
     new APIFeatures(
       pickup.find({
         PickupStatus: status,
         type: "live",
-        isDeleted: false,
         isRescheduled: false,
         pickup_date: { $gte: startDate, $lte: endDate },
       }),
@@ -131,6 +132,9 @@ export const getPickups = catchAsync(async (req, res, next) => {
       pickup_date: { $gte: startDate, $lte: endDate },
     }),
   ]);
+
+  console.log("this is the deleted pickups",pickups,countTotal);
+  
 
   res.status(200).json({
     Pickups: pickups,

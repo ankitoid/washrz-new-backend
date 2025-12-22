@@ -28,7 +28,7 @@ router.post("/addSchedulePickup", addSchedulePickup);
 router.get("/getSchedulePickups", getSchedulePickups);
 router.post("/addCustomer", addCustomer);
 router.get("/getCustomers", getCustomers);
-router.put("/deletePickup/:id", deletePickup);
+router.patch("/deletePickup/:id", deletePickup);
 router.put("/completePickup/:id", completePickup);
 
 router.post("/addOrder", addOrder);
