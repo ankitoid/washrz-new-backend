@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
-
+ 
 const { Schema } = mongoose;
-
+ 
 const itemSchema = new Schema({
   heading: String,
   subHeading: String,
@@ -10,7 +10,7 @@ const itemSchema = new Schema({
   price: Number,
   newQtyPrice: Number,
 });
-
+ 
 const orderSchema = new Schema(
   {
     contactNo: String,
@@ -21,7 +21,7 @@ const orderSchema = new Schema(
     order_id: String,
     status: {
       type: String,
-      enum: ["intransit", "processing", "ready for delivery", "delivered"],
+      enum: ["intransit", "processing", "ready for delivery","delivery rider assigned", "delivered"],
       default: "processing",
     },
     intransitImage: [String],
@@ -33,6 +33,7 @@ const orderSchema = new Schema(
       intransit: { type: Date, default: null },
       processing: { type: Date, default: null },
       readyForDelivery: { type: Date, default: null },
+      deliveryriderassigned : { type: Date, default: null },
       delivered: { type: Date, default: null },
     },
     rescheduledDate: { type: Date, default: null }, // Add rescheduled date
@@ -47,6 +48,6 @@ const orderSchema = new Schema(
   },
   { timestamps: true }
 );
-
+ 
 const Order = mongoose.model("Order", orderSchema);
 export default Order;

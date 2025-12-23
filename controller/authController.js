@@ -416,7 +416,9 @@ export const updateOrderStatus = async (req, res) => {
       updateData["statusHistory.processing"] = new Date();
     } else if (status === "ready for delivery") {
       updateData["statusHistory.readyForDelivery"] = new Date();
-    } else if (status === "delivered") {
+    } else if (status === "delivery rider assigned") {
+      updateData["statusHistory.deliveryriderassigned"] = new Date();
+    }else if (status === "delivered") {
       updateData["statusHistory.delivered"] = new Date();
     }
 

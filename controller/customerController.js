@@ -109,16 +109,23 @@ export const getPickups = catchAsync(async (req, res, next) => {
   const endDate = new Date(startDate);
   endDate.setHours(23, 59, 59, 999);
 
-  console.log('this is status==>>',status)
+  console.log('this is status==>>',status,startDate,endDate)
+
+    // ✅ Base filter
+  const baseFilter = {
+    PickupStatus: status,
+    type: "live",
+    isRescheduled: false,
+  };
+
+  // ✅ Apply date filter ONLY when status is NOT deleted
+  if (status !== "deleted") {
+    baseFilter.pickup_date = { $gte: startDate, $lte: endDate };
+  }
 
   const [pickups, countTotal] = await Promise.all([
     new APIFeatures(
-      pickup.find({
-        PickupStatus: status,
-        type: "live",
-        isRescheduled: false,
-        pickup_date: { $gte: startDate, $lte: endDate },
-      }),
+      pickup.find(baseFilter),
       req.query
     )
       .sort()
@@ -580,6 +587,25 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
     }
   }
 
+  // delivery rider assigned
+    if (req.query.status === "delivery rider assigned") {
+    if (user.role === "admin" || user.role === "plant-manager") {
+      const status = req.query.status;
+      const [orders, countTotal] = await Promise.all([
+        new APIFeatures(order.find({ status, plantName: plantName }), req.query)
+          .sort()
+          .limitFields()
+          .paginate().query,
+        order.countDocuments({ status, plantName: plantName }),
+      ]);
+ 
+      res.status(200).json({
+        orders: orders,
+        total: countTotal,
+        message: "Orders retrieved successfully",
+      });
+    }
+  }
   // delivered
   if (req.query.status === "delivered") {
     if (user.role === "admin" || user.role === "plant-manager") {
@@ -699,6 +725,7 @@ export const changeOrderStatus = catchAsync(async (req, res, next) => {
     "intransit",
     "processing",
     "ready for delivery",
+    "delivery rider assigned",
     "delivered",
   ];
 
