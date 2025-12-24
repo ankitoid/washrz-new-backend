@@ -278,9 +278,9 @@ export const deletePickup = catchAsync(async (req, res, next) => {
 
 export const completePickup = catchAsync(async (req, res, next) => {
   const pickupData = await pickup.findByIdAndUpdate(req.params.id, {
-    isDeleted: true,
+    // isDeleted: true,
     PickupStatus: "complete",
-    type: "",
+    // type: "",
   });
   if (!pickupData) {
     return next(new AppError("No pickup found with that ID", 404));

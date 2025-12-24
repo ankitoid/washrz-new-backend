@@ -9,7 +9,7 @@ const schema = new pickupSchema(
     slot: { type: String, default: "NA" },
     PickupStatus: {
       type: String,
-      enum: ["pending", "complete", "deleted"],
+      enum: ["pending", "complete", "deleted","assigned"],
       default: "pending",
     },
     type: {
