@@ -589,7 +589,7 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
 
   // delivery rider assigned
     if (req.query.status === "delivery rider assigned") {
-    if (user.role === "admin" || user.role === "plant-manager") {
+    if (user.role === "admin" || user.role === "plant-manager" || user.role === "rider") {
       const status = req.query.status;
       const [orders, countTotal] = await Promise.all([
         new APIFeatures(order.find({ status, plantName: plantName }), req.query)
