@@ -122,7 +122,13 @@ export const signup = catchAsync(async (req, res, next) => {
   // console.log(url);
   // await new Email(newUser, url).sendWelcome();
 
-  createSendToken(newUser, newUser.role, 201, req, res);
+  // createSendToken(newUser, newUser.role, 201, req, res);
+
+  res.status(201).json(
+    {
+      message: "user has been created sucessfully!"
+    }
+  )
 });
 
 export const login = catchAsync(async (req, res, next) => {
