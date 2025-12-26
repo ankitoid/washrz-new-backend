@@ -148,12 +148,12 @@ export const login = catchAsync(async (req, res, next) => {
   createSendToken(user, user.role, 200, req, res);
 });
 
-export const logoutUser = (req, res) => {
+export const logoutUser = async (req, res) => {
   res.cookie("jwt", "loggedout", {
     expires: new Date(Date.now() + 1000),
     httpOnly: true,
   });
-  res.clearCookie("token");
+  await res.clearCookie("token");
   res.status(200).json({ status: "successfully logout" });
 };
 

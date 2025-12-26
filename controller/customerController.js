@@ -588,24 +588,51 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
   }
 
   // delivery rider assigned
-    if (req.query.status === "delivery rider assigned") {
-    if (user.role === "admin" || user.role === "plant-manager" || user.role === "rider") {
-      const status = req.query.status;
-      const [orders, countTotal] = await Promise.all([
-        new APIFeatures(order.find({ status, plantName: plantName }), req.query)
-          .sort()
-          .limitFields()
-          .paginate().query,
-        order.countDocuments({ status, plantName: plantName }),
-      ]);
+if (req.query.status === "delivery rider assigned") {
+  const status = req.query.status;
+  if (user.role === "admin" || user.role === "plant-manager") {
+    const [orders, countTotal] = await Promise.all([
+      new APIFeatures(
+        order.find({ status, plantName }),
+        req.query
+      ).sort().limitFields().paginate().query,
+      order.countDocuments({ status, plantName }),
+    ]);
  
-      res.status(200).json({
-        orders: orders,
-        total: countTotal,
-        message: "Orders retrieved successfully",
-      });
-    }
+    return res.status(200).json({
+      orders,
+      total: countTotal,
+      message: "Orders retrieved successfully",
+    });
   }
+ 
+  if (user.role === "rider") {
+    const riderName = user.name;
+ 
+    const [orders, countTotal] = await Promise.all([
+      new APIFeatures(
+        order.find({
+          status,
+          plantName,
+          riderName,
+        }),
+        req.query
+      ).sort().limitFields().paginate().query,
+      order.countDocuments({
+        status,
+        plantName,
+        riderName,
+      }),
+    ]);
+ 
+    return res.status(200).json({
+      orders,
+      total: countTotal,
+      message: "Orders retrieved successfully",
+    });
+  }
+}
+ 
   // delivered
   if (req.query.status === "delivered") {
     if (user.role === "admin" || user.role === "plant-manager") {
