@@ -114,6 +114,8 @@ export const assignRider = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    req.socket.emit("assignOrder", { order });
+
     res.status(200).json({
       status: "success",
       data: {
