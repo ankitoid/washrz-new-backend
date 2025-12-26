@@ -150,7 +150,7 @@ export const login = catchAsync(async (req, res, next) => {
 
 export const logoutUser = (req, res) => {
   res.cookie("jwt", "loggedout", {
-    expires: new Date(Date.now() + 10 * 1000),
+    expires: new Date(Date.now() + 1000),
     httpOnly: true,
   });
   res.clearCookie("token");
