@@ -55,6 +55,7 @@ export const addPickup = catchAsync(async (req, res, next) => {
   req.socket.emit("addPickup", pickupData);
   res.status(200).json({
     message: "Pickup Added Sucessfully",
+    data : pickupData
   });
 });
 
@@ -123,6 +124,13 @@ export const getPickups = catchAsync(async (req, res, next) => {
     baseFilter.pickup_date = { $gte: startDate, $lte: endDate };
   }
 
+  if(status === "deleted")
+  {
+    baseFilter.type = "",
+    baseFilter.isDeleted = true
+  }
+
+  
   const [pickups, countTotal] = await Promise.all([
     new APIFeatures(
       pickup.find(baseFilter),
@@ -305,6 +313,7 @@ export const addSchedulePickup = catchAsync(async (req, res, next) => {
   req.socket.emit("addSchedulePickup", schedulePickupData);
   res.status(200).json({
     message: "SchedulePickup Added Sucessfully",
+    data:schedulePickupData
   });
 });
 
