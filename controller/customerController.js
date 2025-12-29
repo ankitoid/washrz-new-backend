@@ -107,8 +107,7 @@ export const getPickups = catchAsync(async (req, res, next) => {
   const { date,status} = req.query; // Date filter from query and status filter
   const startDate = date ? new Date(date) : new Date(); // Default to current date
   startDate.setHours(0, 0, 0, 0);
-  const endDate = new Date(startDate);
-  endDate.setHours(23, 59, 59, 999);
+  const endDate = new Date();
 
   console.log('this is status==>>',status,startDate,endDate)
 
