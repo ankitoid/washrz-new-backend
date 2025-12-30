@@ -166,7 +166,7 @@ const moveRescheduledPickups = async () => {
       pickup.PickupStatus = "pending";
       pickup.isRescheduled = false;
       pickup.rescheduledDate = null;
-      pickup.pickup_date = today;
+      // pickup.pickup_date = today;
       await pickup.save();
     }
 

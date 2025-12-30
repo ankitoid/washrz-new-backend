@@ -332,7 +332,7 @@ const schedulePickuptolive = async () => {
       pickupData.isRescheduled = false;
       pickupData.isDeleted = false;
       pickupData.PickupStatus = "pending";
-      pickupData.pickup_date = currentDate;
+      // pickupData.pickup_date = currentDate;
 
       await pickupData.save(); // Save the changes
     }
