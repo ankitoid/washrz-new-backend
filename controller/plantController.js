@@ -172,19 +172,46 @@ export const assignPickupRider = async (req, res) => {
 };
 
 cron.schedule("30 0 * * *", async () => {
-  // Scheduled for 12:30 AM daily
+  // Runs every day at 12:30 AM
   try {
-    // Clear riderName and riderDate from Pickups
-    await Pickup.updateMany({}, { $unset: { riderName: "", riderDate: "" } });
-    console.log("Cleared riderName and riderDate from all pickups");
+    // Update pickups:
+    // 1. If status is "assigned" → change to "pending"
+    // 2. Clear riderName & riderDate (except completed & deleted)
+    await Pickup.updateMany(
+      {
+        PickupStatus: { $nin: ["complete", "deleted"] }
+      },
+      {
+        $set: {
+          PickupStatus: "pending"
+        },
+        $unset: {
+          riderName: "",
+          riderDate: ""
+        }
+      }
+    );
 
-    // Clear riderName and riderDate from Orders
-    await Order.updateMany({}, { $unset: { riderName: "", riderDate: "" } });
+    console.log("Pickup statuses updated and rider data cleared");
+
+    // Clear rider info from Orders
+    await Order.updateMany(
+      {},
+      {
+        $unset: {
+          riderName: "",
+          riderDate: ""
+        }
+      }
+    );
+
     console.log("Cleared riderName and riderDate from all orders");
+
   } catch (error) {
     console.error("Error clearing rider data:", error);
   }
 });
+
 
 // Function to delete pickups with specific contact numbers
 const deleteSpecificPickups = async () => {
