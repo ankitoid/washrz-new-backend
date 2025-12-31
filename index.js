@@ -5,6 +5,7 @@ import authRoutes from "./routes/authRoutes.js";
 import riderRoutes from "./routes/riderRoutes.js";
 import plantRoutes from "./routes/plantRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
+import revenueRoutes from "./routes/revenueRoutes.js";
 import AppError from "./utills/appError.js";
 import http from "http";
 import cors from "cors";
@@ -108,6 +109,7 @@ app.use("/api/v1", customerRoutes);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/rider", riderRoutes);
 app.use("/api/v1/plant", plantRoutes);
+app.use("/api/v1", revenueRoutes);
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });

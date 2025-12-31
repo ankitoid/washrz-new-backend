@@ -6,6 +6,7 @@ import {
   getOrderById,
   getPickupById,
   getplantusers,
+  getUser,
   login,
   logoutUser,
   protect,
@@ -30,5 +31,6 @@ router.post("/uploadFiles/:id", uploadFiles);
 router.get("/getOrderById/:id", getOrderById);
 router.get("/getPickupById/:id", getPickupById);
 router.get("/getMedia/:orderId", getMedia);
+router.get("/getuser/:id",getUser);
 
 export { router as default };
