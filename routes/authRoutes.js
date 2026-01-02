@@ -13,6 +13,7 @@ import {
   refreshToken,
   signup,
   updateOrderStatus,
+  updateUserPassword,
   uploadFiles,
 } from "../controller/authController.js";
 import { getProfile } from "../controller/userController.js";
@@ -32,5 +33,6 @@ router.get("/getOrderById/:id", getOrderById);
 router.get("/getPickupById/:id", getPickupById);
 router.get("/getMedia/:orderId", getMedia);
 router.get("/getuser/:id",getUser);
+router.patch("/updatepassword/:id",updateUserPassword)
 
 export { router as default };

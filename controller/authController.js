@@ -8,6 +8,7 @@ import Order from "../models/orderSchema.js";
 import AWS from "aws-sdk";
 import multer from "multer";
 import Pickup from "../models/pickupSchema.js";
+import bcrypt from "bcryptjs/dist/bcrypt.js";
 
 const signAccToken = (id, type) => {
   return jwt.sign({ id, userType: type }, process.env.JWT_SECRET, {
@@ -124,11 +125,9 @@ export const signup = catchAsync(async (req, res, next) => {
 
   // createSendToken(newUser, newUser.role, 201, req, res);
 
-  res.status(201).json(
-    {
-      message: "user has been created sucessfully!"
-    }
-  )
+  res.status(201).json({
+    message: "user has been created sucessfully!",
+  });
 });
 
 export const login = catchAsync(async (req, res, next) => {
@@ -254,7 +253,7 @@ export const forgotPassword = catchAsync(async (req, res, next) => {
   }
 
   // 2) Generate the random reset token
-  const resetToken = user.createPasswordResetToken();
+  const resetToken = User.createPasswordResetToken();
   await user.save({ validateBeforeSave: false });
 
   // 3) Send it to user's email
@@ -398,34 +397,65 @@ export const deleteUser = catchAsync(async (req, res, next) => {
 
 // get single user
 
-export const getUser = catchAsync(async (req,res,next) =>
-{
-const {id} = req.params;
-const user = await User.findById(id);
+export const getUser = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+  const user = await User.findById(id);
 
-console.log("this is the userrr",user);
+  console.log("this is the userrr", user);
 
-if(!user)
-{
-  return res.status(404).json({
+  if (!user) {
+    return res.status(404).json({
       status: "fail",
       message: "User not found",
     });
-}
+  }
 
   res.status(200).json({
     status: "success",
     message: "User fetched successfully",
     data: user,
   });
+});
 
-})
-
-// const updateUserPassword = catchAsync(async (req,res,next) =>
-// {
-//   const {id} = req.params;
-   
-// })
+export const updateUserPassword = catchAsync(async (req, res, next) => {
+  try {
+    console.log("i am called===>>>>>")
+    const { id } = req.params;
+    const { password } = req.body;
+    
+    if (!password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Password is required" 
+      });
+    }
+    
+    const hashpassword = await bcrypt.hash(password, 12);
+    const user = await User.findByIdAndUpdate(
+      id,
+      { password: hashpassword },
+      { new: true }
+    );
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "User not found" 
+      });
+    }
+    
+    res.status(200).json({ 
+      success: true, 
+      message: "Password changed successfully!" 
+    });
+  } catch (error) {
+    console.log("this is error", error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
 
 // Update order status
 export const updateOrderStatus = async (req, res) => {
@@ -455,7 +485,7 @@ export const updateOrderStatus = async (req, res) => {
       updateData["statusHistory.readyForDelivery"] = new Date();
     } else if (status === "delivery rider assigned") {
       updateData["statusHistory.deliveryriderassigned"] = new Date();
-    }else if (status === "delivered") {
+    } else if (status === "delivered") {
       updateData["statusHistory.delivered"] = new Date();
     }
 
@@ -620,6 +650,3 @@ export const getMedia = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch media" });
   }
 };
-
-
-
