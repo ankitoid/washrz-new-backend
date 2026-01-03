@@ -167,7 +167,7 @@ export const getAssignedPickups = catchAsync(async (req, res, next) => {
   }
 
   // Use the user's plant name to filter pickups
-  const plantName = user.plant;
+  // const plantName = user.plant;
   const riderName = user.name;
 
   const todayDate = new Date().toISOString().split("T")[0];
@@ -180,7 +180,7 @@ export const getAssignedPickups = catchAsync(async (req, res, next) => {
           type: "live",
           isDeleted: false,
           isRescheduled: false,
-          plantName: plantName, // Filter based on user's plant name
+          // plantName: plantName, // Filter based on user's plant name
         }),
         req.query
       )
@@ -192,7 +192,7 @@ export const getAssignedPickups = catchAsync(async (req, res, next) => {
         type: "live",
         isDeleted: false,
         isRescheduled: false,
-        plantName: plantName,
+        // plantName: plantName,
       }),
     ]);
     res.status(200).json({
@@ -240,7 +240,7 @@ export const getAssignedPickups = catchAsync(async (req, res, next) => {
           type: "live",
           isDeleted: false,
           isRescheduled: false,
-          plantName: plantName, // Filter based on user's plant name
+          // plantName: plantName, // Filter based on user's plant name
           riderName: riderName,
           riderDate: todayDate, // Filter for today's assigned pickups
         }),
@@ -254,7 +254,7 @@ export const getAssignedPickups = catchAsync(async (req, res, next) => {
         type: "live",
         isDeleted: false,
         isRescheduled: false,
-        plantName: plantName,
+        // plantName: plantName,
         riderName: riderName,
         riderDate: todayDate, // Count only today's pickups
       }),
