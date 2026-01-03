@@ -621,14 +621,14 @@ if (req.query.status === "delivery rider assigned") {
       new APIFeatures(
         order.find({
           status,
-          plantName,
+          // plantName,
           riderName,
         }),
         req.query
       ).sort().limitFields().paginate().query,
       order.countDocuments({
         status,
-        plantName,
+        // plantName,
         riderName,
       }),
     ]);
