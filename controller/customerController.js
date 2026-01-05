@@ -157,6 +157,45 @@ export const getPickups = catchAsync(async (req, res, next) => {
   });
 });
 
+export const getPickupById = catchAsync(async (req,res,next) =>
+{
+ try {
+   const {id} = req.params;
+
+  const requiredPickup = await pickup.findById(id);
+
+  if(!requiredPickup){
+    return res.status(404).json({ message: "Pickup not found" });
+  }
+
+  res.status(200).json({ message: "Pickup retrived successfully!" ,data:requiredPickup });
+ } catch (error) {
+  console.log("this is the error==>>",error)
+ }
+});
+
+
+export const updatePickupById = catchAsync(async (req,res,next) =>
+{
+ try {
+   const {id} = req.params;
+
+   const {address} = req.body
+
+  const requiredPickup = await pickup.findByIdAndUpdate(id,{
+    Address : address
+  });
+
+  if(!requiredPickup){
+    return res.status(404).json({ message: "no data found to edit!" });
+  }
+
+  res.status(200).json({ message: "Address Edited Sucessfully !" ,data:requiredPickup });
+ } catch (error) {
+  console.log("this is the error==>>",error)
+ }
+});
+
 export const getAssignedPickups = catchAsync(async (req, res, next) => {
   const { email } = req.query;
 
@@ -596,50 +635,87 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
   }
 
   // delivery rider assigned
-if (req.query.status === "delivery rider assigned") {
-  const status = req.query.status;
-  if (user.role === "admin" || user.role === "plant-manager") {
-    const [orders, countTotal] = await Promise.all([
-      new APIFeatures(
-        order.find({ status, plantName }),
-        req.query
-      ).sort().limitFields().paginate().query,
-      order.countDocuments({ status, plantName }),
-    ]);
+// if (req.query.status === "delivery rider assigned") {
+//   const status = req.query.status;
+//   if (user.role === "admin" || user.role === "plant-manager") {
+//     const [orders, countTotal] = await Promise.all([
+//       new APIFeatures(
+//         order.find({ status, plantName }),
+//         req.query
+//       ).sort().limitFields().paginate().query,
+//       order.countDocuments({ status, plantName }),
+//     ]);
  
-    return res.status(200).json({
-      orders,
-      total: countTotal,
-      message: "Orders retrieved successfully",
-    });
-  }
+//     return res.status(200).json({
+//       orders,
+//       total: countTotal,
+//       message: "Orders retrieved successfully",
+//     });
+//   }
  
-  if (user.role === "rider") {
-    const riderName = user.name;
+//   if (user.role === "rider") {
+//     const riderName = user.name;
  
-    const [orders, countTotal] = await Promise.all([
-      new APIFeatures(
-        order.find({
-          status,
-          // plantName,
-          riderName,
-        }),
-        req.query
-      ).sort().limitFields().paginate().query,
-      order.countDocuments({
+//     const [orders, countTotal] = await Promise.all([
+//       new APIFeatures(
+//         order.find({
+//           status,
+//           // plantName,
+//           riderName,
+//         }),
+//         req.query
+//       ).sort().limitFields().paginate().query,
+//       order.countDocuments({
+//         status,
+//         // plantName,
+//         riderName,
+//       }),
+//     ]);
+ 
+//     return res.status(200).json({
+//       orders,
+//       total: countTotal,
+//       message: "Orders retrieved successfully",
+//     });
+//   }
+// }
+
+  if (req.query.status === "delivered") {
+    const dateStr = req.query.date || new Date().toISOString().split("T")[0];
+    const start = new Date(dateStr);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+ 
+    const deliveredDateFilter = {
+      "statusHistory.delivered": { $gte: start, $lt: end },
+    };
+    if (user.role === "admin" || user.role === "plant-manager") {
+      const status = req.query.status;
+      const baseFilter = {
         status,
-        // plantName,
-        riderName,
-      }),
-    ]);
+        plantName: plantName,
+        ...deliveredDateFilter,
+      };
+      const [orders, countTotal] = await Promise.all([
+        new APIFeatures(order.find(baseFilter), req.query)
+          .sort()
+          .limitFields()
+          .paginate().query,
+        order.countDocuments(baseFilter),
+      ]);
  
-    return res.status(200).json({
-      orders,
-      total: countTotal,
-      message: "Orders retrieved successfully",
-    });
+      return res.status(200).json({
+        orders,
+        total: countTotal,
+        message: "Orders retrieved successfully",
+      });
+    }
+    return res
+      .status(403)
+      .json({ message: "Not authorized to view delivered orders" });
   }
-}
+ 
  
   // delivered
   if (req.query.status === "delivered") {
