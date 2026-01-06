@@ -34,23 +34,29 @@ const uploadToS3 = (file, bucketName, folder = "intransiteOrderImage") => {
   return s3.upload(params).promise();
 };
 
-export const uploadFiles = (req, res, next) => {  
+export const uploadFiles = (req, res, next) => {
   upload(req, res, async (err) => {
-    console.log("this is the err:: ", err)
+    console.log("this is the err:: ", err);
     if (err) {
       return res.status(400).json({ message: "Error uploading files.", err });
     }
-    
-    console.log("req.files?", req.files)
+
+    console.log("req.files?", req.files);
     const { id } = req.params;
     const { image } = req.files; // Array of image files
     const voice = req.files?.voice || [];
     const location = req.body?.location || null; // Location optional bana diya
     const { currObj, price } = req.body;
 
-
-    console.log("this is the response i  am getting ===>>",id,image,voice,location,currObj, price)
-
+    console.log(
+      "this is the response i  am getting ===>>",
+      id,
+      image,
+      voice,
+      location,
+      currObj,
+      price
+    );
 
     if (!id || !image || !price) {
       return res.status(400).json({
@@ -131,7 +137,6 @@ export const uploadFiles = (req, res, next) => {
 export const reschedulePickup = async (req, res) => {
   const { id } = req.params;
   const { newDate } = req.body;
-
   try {
     const pickup = await Pickup.findById(id);
     if (!pickup) {
@@ -156,7 +161,7 @@ const moveRescheduledPickups = async () => {
   try {
     const today = new Date();
     const pickupsToMove = await Pickup.find({
-      rescheduledDate: { $lte: today },
+      rescheduledDate: { $gte: today },
       isRescheduled: true,
       type: "reschdule",
     });
@@ -257,7 +262,7 @@ export const getRescheduledPickups = async (req, res) => {
 export const deletePickup = catchAsync(async (req, res, next) => {
   const pickupData = await Pickup.findByIdAndUpdate(req.params.id, {
     isDeleted: true,
-    PickupStatus:"cancelled"
+    PickupStatus: "cancelled",
   });
   if (!pickupData) {
     return next(new AppError("No pickup found with that ID", 404));

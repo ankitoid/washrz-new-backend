@@ -487,6 +487,8 @@ export const updateOrderStatus = async (req, res) => {
       updateData["statusHistory.deliveryriderassigned"] = new Date();
     } else if (status === "delivered") {
       updateData["statusHistory.delivered"] = new Date();
+    } else if (status === "cancelled") {
+      updateData["statusHistory.cancelled"] = new Date();
     }
 
     // Update the order status and statusHistory in the database

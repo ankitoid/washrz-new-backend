@@ -21,7 +21,7 @@ const orderSchema = new Schema(
     order_id: String,
     status: {
       type: String,
-      enum: ["intransit", "processing", "ready for delivery","delivery rider assigned", "delivered"],
+      enum: ["intransit", "processing", "ready for delivery","delivery rider assigned", "delivered","cancelled"],
       default: "processing",
     },
     intransitImage: [String],
@@ -35,6 +35,7 @@ const orderSchema = new Schema(
       readyForDelivery: { type: Date, default: null },
       deliveryriderassigned : { type: Date, default: null },
       delivered: { type: Date, default: null },
+      cancelled: { type: Date, default: null }
     },
     rescheduledDate: { type: Date, default: null }, // Add rescheduled date
     isRescheduled: { type: Boolean, default: false }, // Flag to check if rescheduled

@@ -182,7 +182,7 @@ export const updatePickupById = catchAsync(async (req,res,next) =>
 
    const {name,address} = req.body
 
-   console.log("this is the resss-->>>",id,name,address);
+   console.log("this is the resss-->>>",id,name,address)
 
   const requiredPickup = await pickup.findByIdAndUpdate(id,{
     Name : name,
@@ -683,6 +683,30 @@ if (req.query.status === "delivery rider assigned") {
   }
 }
 
+if (req.query.status === "cancelled") {
+    if (user.role === "admin" || user.role === "plant-manager") {
+      const status = req.query.status;
+      const [orders, countTotal] = await Promise.all([
+        new APIFeatures(order.find({ status, plantName: plantName }), req.query)
+          .sort()
+          .limitFields()
+          .paginate().query,
+        order.countDocuments({ status, plantName: plantName }),
+      ]);
+ 
+      return res.status(200).json({
+        orders,
+        total: countTotal,
+        message: "Orders retrieved successfully",
+      });
+    }
+ 
+    return res
+      .status(403)
+      .json({ message: "Not authorized to view cancelled orders" });
+  }
+ 
+
   if (req.query.status === "delivered") {
     const dateStr = req.query.date || new Date().toISOString().split("T")[0];
     const start = new Date(dateStr);
@@ -839,6 +863,7 @@ export const changeOrderStatus = catchAsync(async (req, res, next) => {
     "intransit",
     "processing",
     "ready for delivery",
+    "cancelled",
     "delivery rider assigned",
     "delivered",
   ];
