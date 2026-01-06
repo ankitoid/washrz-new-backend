@@ -180,9 +180,12 @@ export const updatePickupById = catchAsync(async (req,res,next) =>
  try {
    const {id} = req.params;
 
-   const {address} = req.body
+   const {name,address} = req.body
+
+   console.log("this is the resss-->>>",id,name,address);
 
   const requiredPickup = await pickup.findByIdAndUpdate(id,{
+    Name : name,
     Address : address
   });
 

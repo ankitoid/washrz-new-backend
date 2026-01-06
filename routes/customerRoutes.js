@@ -15,9 +15,11 @@ import {
   getOrderTotalBill,
   getOrders,
   getOrdersByFilter,
+  getPickupById,
   getPickups,
   getSchedulePickups,
   updateOrderById,
+  updatePickupById,
 } from "../controller/customerController.js";
 const router = express.Router();
 
@@ -30,6 +32,8 @@ router.post("/addCustomer", addCustomer);
 router.get("/getCustomers", getCustomers);
 router.patch("/deletePickup/:id", deletePickup);
 router.put("/completePickup/:id", completePickup);
+// router.post("/getpickupbyId/:id",)
+router.route("/pickupbyId/:id").get(getPickupById).patch(updatePickupById)
 
 router.post("/addOrder", addOrder);
 router.get("/getOrders", getOrders);
