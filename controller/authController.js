@@ -9,6 +9,7 @@ import AWS from "aws-sdk";
 import multer from "multer";
 import Pickup from "../models/pickupSchema.js";
 import bcrypt from "bcryptjs/dist/bcrypt.js";
+import otp from "../models/otpSchema.js";
 
 const signAccToken = (id, type) => {
   return jwt.sign({ id, userType: type }, process.env.JWT_SECRET, {
@@ -60,35 +61,80 @@ const signRefToken = (id, type) => {
 //   });
 // };
 
+// commented on 08-Jan
+// const createSendToken = async (user, type, statusCode, req, res) => {
+//   try {
+//     const accessToken = signAccToken(user._id, type);
+//     const refreshToken = signRefToken(user._id, type);
+
+//     console.log("this is the user",user)
+
+//     user.refreshToken = refreshToken;
+//     user.passwordConfirm = user.password;
+//     await user.save();
+
+//     res.cookie("jwt", refreshToken, {
+//       httpOnly: true,
+//       secure: true,
+//       sameSite: "None",
+//       maxAge: 24 * 60 * 60 * 1000,
+//     });
+
+//     user.password = undefined;
+
+//     res.status(statusCode).json({
+//       status: "success",
+//       tokens: { accessToken, refreshToken },
+//       data: {
+//         user,
+//       },
+//     });
+//   } catch (error) {
+//     res.status(500).json({ status: "fail", message: error.message });
+//   }
+// };
+
 const createSendToken = async (user, type, statusCode, req, res) => {
   try {
     const accessToken = signAccToken(user._id, type);
     const refreshToken = signRefToken(user._id, type);
 
-    user.refreshToken = refreshToken;
-    user.passwordConfirm = user.password;
-    await user.save();
+    await User.updateOne(
+      { _id: user._id },
+      { refreshToken }
+    );
 
-    res.cookie("jwt", refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "None",
-      maxAge: 24 * 60 * 60 * 1000,
-    });
+    const clientType = req.headers["x-client-type"] || "web";
+
+    if (clientType === "web") {
+      res.cookie("jwt", refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "None",
+        maxAge: 24 * 60 * 60 * 1000,
+      });
+    }
 
     user.password = undefined;
 
-    res.status(statusCode).json({
+    return res.status(statusCode).json({
       status: "success",
-      tokens: { accessToken, refreshToken },
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
       data: {
         user,
       },
     });
   } catch (error) {
-    res.status(500).json({ status: "fail", message: error.message });
+    return res.status(500).json({
+      status: "fail",
+      message: error.message,
+    });
   }
 };
+
 
 export const signup = catchAsync(async (req, res, next) => {
   const {
@@ -195,7 +241,7 @@ export const protect = catchAsync(async (req, res, next) => {
     );
   }
 
-  // GRANT ACCESS TO PROTECTED ROUTE
+// GRANT ACCESS TO PROTECTED ROUTE
   req.user = currentUser;
   res.locals.user = currentUser;
   next();
@@ -652,3 +698,119 @@ export const getMedia = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch media" });
   }
 };
+
+
+function generateCompactTimestamp(date = new Date()) {
+  return (
+    String(date.getDate()).padStart(2, "0") +
+    String(date.getMonth() + 1).padStart(2, "0") +
+    date.getFullYear() +
+    String(date.getHours()).padStart(2, "0") +
+    String(date.getMinutes()).padStart(2, "0")
+  );
+}
+
+
+const sendOtpOnWhatsApp = async (phone,otp) =>
+{
+try {
+   const url = `https://live-mt-server.wati.io/101289/api/v1/sendTemplateMessage?whatsappNumber=${phone}`
+  const options = {
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json-patch+json',
+    Authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1bmlxdWVfbmFtZSI6ImF5dXNoc2luZ2g4NDIwMThAZ21haWwuY29tIiwibmFtZWlkIjoiYXl1c2hzaW5naDg0MjAxOEBnbWFpbC5jb20iLCJlbWFpbCI6ImF5dXNoc2luZ2g4NDIwMThAZ21haWwuY29tIiwiYXV0aF90aW1lIjoiMDEvMDcvMjAyNiAwNzo0MDoxNCIsInRlbmFudF9pZCI6IjEwMTI4OSIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOlsiQlJPQURDQVNUX01BTkFHRVIiLCJURU1QTEFURV9NQU5BR0VSIiwiT1BFUkFUT1IiLCJERVZFTE9QRVIiLCJBVVRPTUFUSU9OX01BTkFHRVIiXSwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.wbDwYBA3-XNyKfIy7kzjpRFmLBZrkms5apdyU7lkeV4'
+  },
+  body: `{"parameters":[{"name":"1","value":${otp}}],"template_name":"drydash_otp","broadcast_name":"drydash_otp_${generateCompactTimestamp()}"}`
+};
+
+const res = await fetch(url,options)
+const json = await res.json()
+// console.log("this is json",json)
+return json
+} catch (error) {
+  console.log('this is the error',error)
+}
+}
+
+//login through otp
+
+export const loginViaOtp = catchAsync(async (req,res,next) =>
+{
+  const {phoneNumber} = req.body;
+
+  if(!phoneNumber)
+  {
+     return next(new AppError("Please enter phone Number!", 400));
+  }
+
+  const gen_otp =  Math.floor(100000 + Math.random() * 900000)
+
+  const expire_at =  new Date(Date.now() + 5 * 60 * 1000);
+
+
+  const result = await otp.findOneAndUpdate(
+    {Phone:phoneNumber},
+    {
+      Otp : gen_otp.toString(),
+      Expire_At : expire_at
+    },
+    {
+      upsert : true,  // create if not exist
+      new : true      // return created/updated doc
+    }
+  );
+
+const otp_res = await sendOtpOnWhatsApp(phoneNumber,gen_otp);
+
+// console.log("here is the result",otp_res)
+
+  res.status(200).json({
+    status: "success",
+    message : `otp sent on ${phoneNumber} successfully!`,
+  });
+
+})
+
+
+export const verifyOtp = catchAsync(async (req,res,next) =>
+{
+   const {otp : userOtp,phoneNumber} = req.body;
+
+   if(!phoneNumber)
+   {
+    return next(new AppError("Please provide PhoneNumber! ", 400));
+   }else if(!userOtp)
+   {
+     return next(new AppError("Please provide otp! ", 400));
+   }
+
+   const record = await otp.findOne({
+    Phone : phoneNumber,
+    Otp : userOtp.toString(),
+    Expire_At : {$gt : new Date()},
+   });
+
+
+   if(!record){
+    return next(new AppError("Invalid or expired OTP! ", 400));
+   }
+
+   await otp.updateOne({Phone:phoneNumber},{$unset:{Otp:"",Expire_At:""}});
+
+   const user = await User.findOne({phone:phoneNumber})
+
+  //  console.log("this is the user===>>",user);
+
+  if (!user) {
+    return next(new AppError("User not found", 404));
+  }
+
+  await createSendToken(user, user.role, 200, req, res);
+
+  //   res.status(200).json({
+  //   status: "success",
+  //   message: "OTP verified successfully",
+  // });
+}
+);

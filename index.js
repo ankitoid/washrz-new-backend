@@ -30,7 +30,8 @@ app.use(
        "http://erp.drydash.in.s3-website.ap-south-1.amazonaws.com",
       "https://erp.drydash.in",
       "http://localhost:5173",
-      "https://new.drydash.in"
+      "https://new.drydash.in",
+      "http://localhost:8081"
     ],
     methods: "GET, POST, PUT, DELETE, PATCH",
     credentials: true, // Allow credentials (cookies) to be sent with the request
@@ -51,7 +52,8 @@ const io = new Server(server, {
       "http://erp.drydash.in.s3-website.ap-south-1.amazonaws.com",
       "https://erp.drydash.in",
       "http://localhost:5173",
-      "https://new.drydash.in"
+      "https://new.drydash.in",
+      "http://localhost:8081"
     ],
     credentials: true,
   },

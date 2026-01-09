@@ -5,6 +5,8 @@ import Pickup from "../models/pickupSchema.js";
 import Order from "../models/orderSchema.js";
 import catchAsync from "../utills/catchAsync.js";
 import User from "../models/userModel.js";
+import pickup from "../models/pickupSchema.js";
+import APIFeatures from "../utills/apiFeatures.js";
 
 // upload audio and voice
 // Configure AWS S3
@@ -605,3 +607,53 @@ export const getRiderDashboardData = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+
+//get all rider pickups
+
+export const getRiderPickups = async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    const user = await User.findOne({ email: email });
+    if (!user || !user.plant) {
+      return res.status(404).json({ message: "User or Plant not found" });
+    }
+    const riderName = user.name;
+
+    const [pickups, countTotal] = await Promise.all([
+      new APIFeatures(
+        pickup.find({
+          PickupStatus: "assigned",
+          type: "live",
+          isDeleted: false,
+          isRescheduled: false,
+          riderName: riderName,
+        }),
+        req.query
+      )
+        .sort()
+        .limitFields()
+        .paginate().query,
+      pickup.countDocuments({
+        PickupStatus: "assigned",
+        type: "live",
+        isDeleted: false,
+        isRescheduled: false,
+        riderName: riderName,
+      }),
+    ]);
+    res.status(200).json({
+      status: "success",
+      total: countTotal,
+      Pickups: pickups,
+    });
+  } catch (error) {
+    console.log("there is some error", error);
+    res.status(500).json({ message: error });
+  }
+};
+
+
+
+

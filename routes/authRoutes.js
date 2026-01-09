@@ -8,6 +8,7 @@ import {
   getplantusers,
   getUser,
   login,
+  loginViaOtp,
   logoutUser,
   protect,
   refreshToken,
@@ -15,6 +16,7 @@ import {
   updateOrderStatus,
   updateUserPassword,
   uploadFiles,
+  verifyOtp,
 } from "../controller/authController.js";
 import { getProfile } from "../controller/userController.js";
 const router = express.Router();
@@ -34,5 +36,7 @@ router.get("/getPickupById/:id", getPickupById);
 router.get("/getMedia/:orderId", getMedia);
 router.get("/getuser/:id",getUser);
 router.patch("/updatepassword/:id",updateUserPassword)
+router.post("/loginthroughotp",loginViaOtp)
+router.post("/verifyOtp",verifyOtp)
 
 export { router as default };

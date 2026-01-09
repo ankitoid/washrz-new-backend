@@ -5,6 +5,7 @@ import {
   getRescheduledOrders,
   getRescheduledPickups,
   getRiderDashboardData,
+  getRiderPickups,
   rescheduleOrder,
   reschedulePickup,
   uploadCancelInfo,
@@ -17,6 +18,7 @@ const router = express.Router();
 router.post("/uploadFiles/:id", uploadFiles);
 router.put("/reschedulePickup/:id", reschedulePickup);
 router.get("/rescheduled-pickups", getRescheduledPickups);
+router.get("/getriderpickups",getRiderPickups)
 router.put("/deletePickup/:id", deletePickup);
 router.post("/uploadCancelInfo/:id", uploadCancelInfo);
 // router.get("/rescheduled-pickups", getRescheduledPickups);
