@@ -566,7 +566,7 @@ const s3 = new AWS.S3({
 // Configure multer for file upload
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fieldSize: 25 * 1024 * 1024 },
+  limits: { fieldSize: 100 * 1024 * 1024 },
 }).fields([
   { name: "image", maxCount: 10 }, // `image` should match frontend field name
   { name: "voice", maxCount: 1 }, // `voice` should match frontend field name
