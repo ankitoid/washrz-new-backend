@@ -1,3 +1,4 @@
+import express from "express"
 import AWS from "aws-sdk";
 import multer from "multer";
 import cron from "node-cron";
@@ -47,7 +48,7 @@ export const uploadFiles = (req, res, next) => {
     const { id } = req.params;
     const { image } = req.files; // Array of image files
     const voice = req.files?.voice || [];
-    req.app.use(express.json());
+    req.app.use(express.json({ limit: '100mb' }));
     const location = req.body?.location || null; // Location optional bana diya
     const { currObj, price } = req.body;
 

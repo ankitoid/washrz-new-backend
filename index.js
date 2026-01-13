@@ -93,7 +93,7 @@ app.get("/test", (req, res) => {
 
 app.use("/api/v1/rider/uploadFiles/:id", addAppToRequest(app),uploadFiles);
 
-app.use(express.json());
+app.use(express.json({ limit: '100mb' }));
 app.use(addSocketToRequest(io));
 app.post("/send", (req, res) => {
   const message = req.body.message;
