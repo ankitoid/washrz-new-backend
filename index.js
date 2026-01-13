@@ -12,6 +12,7 @@ import cors from "cors";
 import os from "os";
 import { Server } from "socket.io";
 import cookies from "cookie-parser";
+import { uploadFiles } from "./controller/authController.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -81,6 +82,9 @@ app.get("/test", (req, res) => {
   });
 });
 
+
+app.use("/api/v1/rider/uploadFiles/:id", uploadFiles);
+
 app.use(express.json());
 app.use(addSocketToRequest(io));
 app.post("/send", (req, res) => {
@@ -106,6 +110,7 @@ io.on("connection", (socket) => {
   console.log("hii this is the socket id--->> ", socket.id);
   socket.emit("backendMessage", { message: "a new client connected" });
 });
+
 
 app.use("/api/v1", customerRoutes);
 app.use("/api/v1/auth", authRoutes);

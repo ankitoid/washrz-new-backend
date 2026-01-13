@@ -15,7 +15,7 @@ import {
 
 const router = express.Router();
 
-router.post("/uploadFiles/:id", uploadFiles);
+// router.post("/uploadFiles/:id", uploadFiles);
 router.put("/reschedulePickup/:id", reschedulePickup);
 router.get("/rescheduled-pickups", getRescheduledPickups);
 router.get("/getriderpickups",getRiderPickups)
