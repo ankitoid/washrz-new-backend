@@ -19,7 +19,7 @@ const s3 = new AWS.S3({
 // Configure multer for file upload
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fieldSize: 25 * 1024 * 1024 },
+  limits: { fieldSize: 100 * 1024 * 1024 },
 }).fields([
   { name: "image", maxCount: 10 }, // Allow up to 10 images
   { name: "voice", maxCount: 1 },
@@ -277,7 +277,7 @@ export const deletePickup = catchAsync(async (req, res, next) => {
 // Configure multer for file upload (note and optional voice)
 const uploadNote = multer({
   storage: multer.memoryStorage(),
-  limits: { fieldSize: 25 * 1024 * 1024 },
+  limits: { fieldSize: 100 * 1024 * 1024 },
 }).fields([
   { name: "note", maxCount: 1 }, // `note` text field
   { name: "voice", maxCount: 1 }, // `voice` is optional and can be provided from the frontend
@@ -352,7 +352,7 @@ export const uploadCancelInfo = catchAsync(async (req, res, next) => {
 // Configure multer for file upload (image) when rider compelet order
 const uploadImage = multer({
   storage: multer.memoryStorage(),
-  limits: { fieldSize: 25 * 1024 * 1024 },
+  limits: { fieldSize: 100 * 1024 * 1024 },
 }).fields([{ name: "image", maxCount: 1 }]);
 
 export const uploadDeliverImage = catchAsync(async (req, res) => {
