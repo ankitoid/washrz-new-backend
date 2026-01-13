@@ -12,7 +12,7 @@ import cors from "cors";
 import os from "os";
 import { Server } from "socket.io";
 import cookies from "cookie-parser";
-import { uploadFiles } from "./controller/authController.js";
+import { uploadFiles } from "./controller/riderController.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -60,6 +60,14 @@ const io = new Server(server, {
   },
   allowEIO3: true,
 });
+
+const addAppToRequest = (app) => {
+  return (req, res, next) => {
+    req.app = app; // Add the app  to the request
+    next();
+  };
+};
+ 
  
 const addSocketToRequest = (io) => {
   return (req, res, next) => {
@@ -83,7 +91,7 @@ app.get("/test", (req, res) => {
 });
 
 
-app.use("/api/v1/rider/uploadFiles/:id", uploadFiles);
+app.use("/api/v1/rider/uploadFiles/:id", addAppToRequest(app),uploadFiles);
 
 app.use(express.json());
 app.use(addSocketToRequest(io));
