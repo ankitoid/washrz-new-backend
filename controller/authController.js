@@ -744,6 +744,14 @@ export const loginViaOtp = catchAsync(async (req,res,next) =>
      return next(new AppError("Please enter phone Number!", 400));
   }
 
+  const user = await User.findOne({ phoneNumber });
+
+  if (!user) {
+    return next(
+      new AppError("This mobile number is not registered. Please sign up through admin!", 404)
+    );
+  }
+
   const gen_otp =  Math.floor(100000 + Math.random() * 900000)
 
   const expire_at =  new Date(Date.now() + 5 * 60 * 1000);
@@ -756,7 +764,7 @@ export const loginViaOtp = catchAsync(async (req,res,next) =>
       Expire_At : expire_at
     },
     {
-      upsert : true,  // create if not exist
+      upsert : false,  // not want to create a new one in db
       new : true      // return created/updated doc
     }
   );
