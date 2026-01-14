@@ -764,7 +764,7 @@ export const loginViaOtp = catchAsync(async (req,res,next) =>
       Expire_At : expire_at
     },
     {
-      upsert : false,  // not want to create a new one in db
+      upsert : true,  // not want to create a new one in db
       new : true      // return created/updated doc
     }
   );
