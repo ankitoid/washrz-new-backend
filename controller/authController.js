@@ -744,7 +744,7 @@ export const loginViaOtp = catchAsync(async (req,res,next) =>
      return next(new AppError("Please enter phone Number!", 400));
   }
 
-  const user = await User.findOne({ phoneNumber });
+  const user = await User.findOne({ phone:phoneNumber });
 
   if (!user) {
     return next(
@@ -764,7 +764,7 @@ export const loginViaOtp = catchAsync(async (req,res,next) =>
       Expire_At : expire_at
     },
     {
-      upsert : true,  // not want to create a new one in db
+      upsert : true,  // want to create a new one in db
       new : true      // return created/updated doc
     }
   );
