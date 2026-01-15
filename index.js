@@ -117,6 +117,18 @@ app.post("/send", (req, res) => {
 io.on("connection", (socket) => {
   console.log("hii this is the socket id--->> ", socket.id);
   socket.emit("backendMessage", { message: "a new client connected" });
+
+  
+  socket.on("joinRider", ({ riderId }) => {
+    if (!riderId) return;
+
+    socket.join(`rider:${riderId}`);
+    console.log(`Rider joined room: rider:${riderId}`);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
+  });
 });
 
 

@@ -98,7 +98,10 @@ export const getRiders = async (req, res) => {
 // Assign rider to an order
 export const assignRider = async (req, res) => {
   try {
-    const { orderId, riderName } = req.body;
+    const { orderId, riderName,riderId} = req.body;
+
+    console.log("this is the orderid-->>", orderId, riderName,riderId)
+
 
     // Get current date in YYYY-MM-DD format
     const riderDate = new Date().toISOString().split("T")[0];
@@ -115,6 +118,12 @@ export const assignRider = async (req, res) => {
     }
 
     req.socket.emit("assignOrder", { order });
+
+    if (riderId) {
+      req.socket
+        .to(`rider:${riderId}`)
+        .emit("assignOrder", { order });
+    }
 
     res.status(200).json({
       status: "success",
@@ -133,7 +142,9 @@ export const assignRider = async (req, res) => {
 // Assign rider to an order
 export const assignPickupRider = async (req, res) => {
   try {
-    const { orderId, riderName } = req.body;
+    const { orderId, riderName,riderId } = req.body;
+
+    console.log("this is the req.body", orderId, riderName,riderId)
 
     // Get current date in YYYY-MM-DD format
     const riderDate = new Date().toISOString().split("T")[0];
@@ -146,7 +157,7 @@ export const assignPickupRider = async (req, res) => {
       {
         riderName,
         riderDate,
-        PickupStatus : "assigned"
+        PickupStatus: "assigned",
       },
       { new: true }
     );
@@ -156,6 +167,12 @@ export const assignPickupRider = async (req, res) => {
     }
 
     req.socket.emit("assignedPickup", { pickup, riderName });
+
+    if (riderId) {
+      req.socket
+        .to(`rider:${riderId}`)
+        .emit("riderAssignedPickup", { pickup });
+    }
 
     res.status(200).json({
       status: "success",
@@ -179,16 +196,16 @@ cron.schedule("30 0 * * *", async () => {
     // 2. Clear riderName & riderDate (except completed & deleted)
     await Pickup.updateMany(
       {
-        PickupStatus: { $nin: ["complete", "deleted"] }
+        PickupStatus: { $nin: ["complete", "deleted"] },
       },
       {
         $set: {
-          PickupStatus: "pending"
+          PickupStatus: "pending",
         },
         $unset: {
           riderName: "",
-          riderDate: ""
-        }
+          riderDate: "",
+        },
       }
     );
 
@@ -200,18 +217,16 @@ cron.schedule("30 0 * * *", async () => {
       {
         $unset: {
           riderName: "",
-          riderDate: ""
-        }
+          riderDate: "",
+        },
       }
     );
 
     console.log("Cleared riderName and riderDate from all orders");
-
   } catch (error) {
     console.error("Error clearing rider data:", error);
   }
 });
-
 
 // Function to delete pickups with specific contact numbers
 const deleteSpecificPickups = async () => {
