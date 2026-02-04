@@ -35,6 +35,7 @@ if (!global.firebaseAdminInitialized) {
           break;
         }
       } catch (err) {
+        console.log("errr, this is the error", err)
         continue;
       }
     }
