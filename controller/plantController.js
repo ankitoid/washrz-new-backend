@@ -3,6 +3,7 @@ import Pickup from "../models/pickupSchema.js";
 import Plant from "../models/plantSchema.js";
 import User from "../models/userModel.js";
 import cron from "node-cron";
+import fcmService from "../services/fcmService.js";
 
 // Create a new plant
 export const addPlant = async (req, res) => {
@@ -98,15 +99,13 @@ export const getRiders = async (req, res) => {
 // Assign rider to an order
 export const assignRider = async (req, res) => {
   try {
-    const { orderId, riderName,riderId} = req.body;
+    const { orderId, riderName, riderId } = req.body;
+    if (!orderId || !riderId) {
+      return res.status(400).json({ message: "orderId and riderId required" });
+    }
 
-    console.log("this is the orderid-->>", orderId, riderName,riderId)
-
-
-    // Get current date in YYYY-MM-DD format
     const riderDate = new Date().toISOString().split("T")[0];
 
-    // Find the order by ID and update the rider name
     const order = await Order.findByIdAndUpdate(
       orderId,
       { riderName, riderDate },
@@ -116,44 +115,73 @@ export const assignRider = async (req, res) => {
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
+    console.log(`🔄 Assigning rider ${riderName} (${riderId}) to order ${orderId}`);
 
     req.socket.emit("assignOrder", { order });
+    req.socket.to(`rider:${riderId}`).emit("assignOrder", { order });
+    console.log(`📡 Socket notification sent to rider:${riderId}`);
 
-    if (riderId) {
-      req.socket
-        .to(`rider:${riderId}`)
-        .emit("assignOrder", { order });
-    }
+    console.log(`📱 Attempting FCM notification for rider ${riderId}`);
+    const fcmResult = await fcmService.sendToRider(
+      riderId,
+      {
+        title: "🎯 New Delivery Assigned",
+        body: `Tap to view Order`
+      },
+      {
+        orderId: String(order._id),
+        orderNumber: order.order_id || String(order._id),
+        type: "delivery_assigned",
+        customerName: order.customerName || "Customer",
+        address: order.address || "Location not specified",
+        amount: order.totalAmount ? `₹${order.totalAmount}` : "N/A",
+        action: "VIEW_ORDER",
+        screen: "OrderDetails",
+        timestamp: new Date().toISOString()
+      }
+    );
 
-    res.status(200).json({
+    console.log(`📊 FCM Result:`, {
+      success: fcmResult.success,
+      sentTo: fcmResult.successCount,
+      failed: fcmResult.failureCount,
+      totalTokens: fcmResult.totalTokens
+    });
+
+    const notificationStatus = fcmResult.success ? 
+      "Push notification sent to rider's device" :
+      "Socket notification sent, but push notification failed";
+
+    return res.status(200).json({
       status: "success",
-      data: {
+      message: `Rider ${riderName} assigned successfully`,
+      data: { 
         order,
+        notification: {
+          status: notificationStatus,
+          fcm: fcmResult,
+          socket: true
+        }
       },
     });
   } catch (error) {
-    res.status(500).json({
-      status: "error",
+    console.error("assignRider error:", error);
+    return res.status(500).json({ 
+      status: "error", 
       message: error.message,
+      code: error.code 
     });
   }
 };
 
-// Assign rider to an order
 export const assignPickupRider = async (req, res) => {
   try {
-    const { orderId, riderName,riderId } = req.body;
+    const { orderId, riderName, riderId } = req.body;
 
-    console.log("this is the req.body", orderId, riderName,riderId)
-
-    // Get current date in YYYY-MM-DD format
     const riderDate = new Date().toISOString().split("T")[0];
 
-    // const PickupStatus =  "assigned";
-
-    // Find the order by ID and update the rider name and riderDate
     const pickup = await Pickup.findByIdAndUpdate(
-      orderId, // Use orderId instead of pickupId as per frontend
+      orderId,
       {
         riderName,
         riderDate,
@@ -172,6 +200,21 @@ export const assignPickupRider = async (req, res) => {
       req.socket
         .to(`rider:${riderId}`)
         .emit("riderAssignedPickup", { pickup });
+      
+      const fcmResult = await fcmService.sendToRider(
+        riderId,
+        {
+          title: "📦 New Pickup Assigned",
+          body: `Pickup - Ready for collection`
+        },
+        {
+          pickupId: String(pickup._id),
+          type: "pickup_assigned",
+          customerName: pickup.customerName || "Customer",
+          action: "view_pickup",
+          screen: "pickup_details"
+        }
+      );
     }
 
     res.status(200).json({
