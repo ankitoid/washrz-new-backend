@@ -1,21 +1,8 @@
 // controller/pushTokenController.js
 import RiderPushToken from "../models/riderPushTokenModel.js";
 
-const logReqContext = (req, label = "") => {
-  console.log(`\n===== ${label} REQUEST CONTEXT =====`);
-  console.log("Method:", req.method);
-  console.log("URL:", req.originalUrl);
-  console.log("Headers.authorization:", req.headers?.authorization);
-  console.log("req.user:", req.user);
-  console.log("req.user?.id:", req.user?.id);
-  console.log("req.user?._id:", req.user?._id);
-  console.log("Body:", req.body);
-  console.log("==================================\n");
-};
-
 export const registerPushToken = async (req, res) => {
   try {
-    logReqContext(req, "REGISTER PUSH TOKEN");
     const authRiderId = req.user?.id || req.user?._id;
     console.log("Resolved authRiderId:", authRiderId);
     if (!authRiderId) {
@@ -84,7 +71,6 @@ export const registerPushToken = async (req, res) => {
 
 export const removePushToken = async (req, res) => {
   try {
-    logReqContext(req, "REMOVE PUSH TOKEN");
     const authRiderId = req.user?.id || req.user?._id;
     console.log("Resolved authRiderId:", authRiderId);
     if (!authRiderId) {
@@ -119,7 +105,6 @@ export const removePushToken = async (req, res) => {
 
 export const listMyTokens = async (req, res) => {
   try {
-    logReqContext(req, "LIST MY TOKENS");
     const authRiderId = req.user?.id || req.user?._id;
 
     if (!authRiderId) {
