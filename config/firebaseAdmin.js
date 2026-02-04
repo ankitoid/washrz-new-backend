@@ -14,6 +14,7 @@ if (!global.firebaseAdminInitialized) {
     const possiblePaths = [
       path.join(__dirname, "..", "secret-key-firebase.json"),
       path.join(process.cwd(), "secret-key-firebase.json"),
+      // path.join(__dirname, "secret-key-firebase.json")
     ];
 
     console.log("paths", possiblePaths)
@@ -23,6 +24,8 @@ if (!global.firebaseAdminInitialized) {
     
     for (const possiblePath of possiblePaths) {
       try {
+         console.log("possiblePath, possiblePaths", possiblePath, possiblePaths)
+        console.log("fs.existsSync(possiblePath)", fs.existsSync(possiblePath))
         if (fs.existsSync(possiblePath)) {
           keyPath = possiblePath;
           serviceAccount = JSON.parse(fs.readFileSync(possiblePath, "utf8"));
