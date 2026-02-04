@@ -154,14 +154,14 @@ class FCMService {
   }
 
   // Send to multiple riders
-  // async sendToMultipleRiders(riderIds, notification, data = {}) {
-  //   const results = [];
-  //   for (const riderId of riderIds) {
-  //     const result = await this.sendToRider(riderId, notification, data);
-  //     results.push({ riderId, ...result });
-  //   }
-  //   return results;
-  // }
+  async sendToMultipleRiders(riderIds, notification, data = {}) {
+    const results = [];
+    for (const riderId of riderIds) {
+      const result = await this.sendToRider(riderId, notification, data);
+      results.push({ riderId, ...result });
+    }
+    return results;
+  }
 }
 
 // Export singleton instance
