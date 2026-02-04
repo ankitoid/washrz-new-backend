@@ -28,7 +28,9 @@ if (!global.firebaseAdminInitialized) {
         console.log("fs.existsSync(possiblePath)", fs.existsSync(possiblePath))
         if (fs.existsSync(possiblePath)) {
           keyPath = possiblePath;
+          console.log("keyPath", keyPath)
           serviceAccount = JSON.parse(fs.readFileSync(possiblePath, "utf8"));
+          console.log("this is the read data", serviceAccount)
           console.log(`✅ Found Firebase key at: ${keyPath}`);
           break;
         }
