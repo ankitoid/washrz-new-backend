@@ -14,8 +14,9 @@ if (!global.firebaseAdminInitialized) {
     const possiblePaths = [
       path.join(__dirname, "..", "secret-key-firebase.json"),
       path.join(process.cwd(), "secret-key-firebase.json"),
-      path.join(__dirname, "secret-key-firebase.json")
     ];
+
+    console.log("paths", possiblePaths)
     
     let serviceAccount = null;
     let keyPath = "";
