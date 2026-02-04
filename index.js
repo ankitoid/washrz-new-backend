@@ -152,7 +152,6 @@ io.sockets.activeRiderLocations = activeRiderLocations;
 const adminRooms = new Set();
 
 io.on("connection", (socket) => {
-  console.log("Socket connected:", socket.id);
   socket.emit("backendMessage", { message: "a new client connected" });
 
   // Rider joins its room
@@ -318,7 +317,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
     if (adminRooms.has(socket.id)) adminRooms.delete(socket.id);
   });
 });
