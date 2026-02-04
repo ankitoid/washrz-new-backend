@@ -4,8 +4,8 @@ import { registerPushToken, removePushToken, listMyTokens } from "../controller/
 
 const router = express.Router();
 
-router.post("/", protect, registerPushToken);
-router.delete("/", protect, removePushToken);
-router.get("/", protect, listMyTokens);
+router.post("/", registerPushToken);
+router.delete("/", removePushToken);
+router.get("/", listMyTokens);
 
 export default router;

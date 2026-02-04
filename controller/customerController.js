@@ -145,10 +145,7 @@ export const getPickups = catchAsync(async (req, res, next) => {
       isRescheduled: false,
       pickup_date: { $gte: startDate, $lte: endDate },
     }),
-  ]);
-
-  console.log("this is the deleted pickups",pickups,countTotal);
-  
+  ]);  
 
   res.status(200).json({
     Pickups: pickups,
