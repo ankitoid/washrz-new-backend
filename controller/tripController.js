@@ -478,3 +478,111 @@ export const getActiveTrip = catchAsync(async (req, res) => {
     },
   });
 });
+
+export const getRidersSummary = catchAsync(async (req, res, next) => {
+  const {
+    date = new Date().toISOString().split("T")[0],
+    page = 1,
+    limit = 50,
+    search = "",
+    sortField = "dailyDistance",
+    sortOrder = "desc",
+  } = req.query;
+
+  const pageNum = Math.max(1, Number(page));
+  const perPage = Math.max(1, Math.min(500, Number(limit)));
+  const skip = (pageNum - 1) * perPage;
+  const sortDirection = sortOrder === "asc" ? 1 : -1;
+
+  const match = { role: "rider" };
+  if (search && String(search).trim() !== "") {
+    const re = { $regex: String(search).trim(), $options: "i" };
+    match.$or = [{ name: re }, { phone: re }];
+  }
+  const pipeline = [ { $match: match },
+    {
+      $lookup: {
+        from: "dailysummaries",
+        let: { userId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$rider", "$$userId"] },
+                  { $eq: ["$date", date] },
+                ],
+              },
+            },
+          },
+          {
+            $project: {
+              totalDistance: 1,
+              startImages: 1,
+              endImages: 1,
+              _id: 0,
+            },
+          },
+        ],
+        as: "daily",
+      },
+    },
+
+    // bring dailyDistance up and default to 0
+    {
+      $addFields: {
+        dailyDistance: {
+          $ifNull: [{ $arrayElemAt: ["$daily.totalDistance", 0] }, 0],
+        },
+        startImages: {
+          $ifNull: [{ $arrayElemAt: ["$daily.startImages", 0] }, []],
+        },
+        endImages: {
+          $ifNull: [{ $arrayElemAt: ["$daily.endImages", 0] }, []],
+        },
+      },
+    },
+
+    // project only the fields we want
+    {
+      $project: {
+        daily: 0,
+      },
+    },
+
+    // sorting
+    { $sort: { [sortField]: sortDirection, _id: 1 } },
+
+    // facet to get data + total count
+    {
+      $facet: {
+        data: [{ $skip: skip }, { $limit: perPage }],
+        totalCount: [{ $count: "count" }],
+      },
+    },
+  ];
+
+  const result = await User.aggregate(pipeline).exec();
+  const data = (result[0] && result[0].data) || [];
+  const totalCount = (result[0] && result[0].totalCount[0] && result[0].totalCount[0].count) || 0;
+
+  const formatted = data.map((u) => ({
+    id: u._id,
+    name: u.name,
+    phone: u.phone || null,
+    totalKm: u.totalKm || 0,
+    lastResetAt: u.lastResetAt || null,
+    dailyDistance: typeof u.dailyDistance === "number" ? u.dailyDistance : Number(u.dailyDistance || 0),
+    startImages: Array.isArray(u.startImages) ? u.startImages : [],
+    endImages: Array.isArray(u.endImages) ? u.endImages : [],
+  }));
+
+  res.status(200).json({
+    date,
+    page: pageNum,
+    limit: perPage,
+    total: totalCount,
+    totalPages: Math.ceil(totalCount / perPage),
+    riders: formatted,
+  });
+});
