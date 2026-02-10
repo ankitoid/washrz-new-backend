@@ -6,6 +6,8 @@ import riderRoutes from "./routes/riderRoutes.js";
 import plantRoutes from "./routes/plantRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import revenueRoutes from "./routes/revenueRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
+import qrRoutes from "./routes/qrRoutes.js";
 import AppError from "./utills/appError.js";
 import tripRoutes from "./routes/tripRoutes.js";
 import http from "http";
@@ -463,6 +465,8 @@ app.use("/api/v1/rider", riderRoutes);
 app.use("/api/v1/location", riderLocationRoutes);
 app.use("/api/v1/plant", plantRoutes);
 app.use("/api/v1", revenueRoutes);
+app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/qr', qrRoutes);
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
