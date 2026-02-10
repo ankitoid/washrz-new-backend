@@ -3,9 +3,18 @@ const pickupSchema = mongoose.Schema;
 
 const schema = new pickupSchema(
   {
+    appCustomerId : String,
+    platform_type: {
+      type: String,
+      enum: ["wati","app"],
+      default: "wati",
+    },
+    tempPickupAdresssId: String,
+    tempDeliveryAddressId: String,
     Name: String,
     Contact: String,
     Address: String,
+    deliveryAddress : String,
     slot: { type: String, default: "NA" },
     PickupStatus: {
       type: String,
@@ -24,6 +33,17 @@ const schema = new pickupSchema(
     cancelNote: { type: String },
     cancelVoice: { type: String },
     plantName: { type: String },
+     pickupLocation: {
+      latitude: Number,
+      longitude: Number,
+    },
+    deliveryLocation: {
+      latitude: Number,
+      longitude: Number,
+    },
+    contactName: String,
+    contactPhone: String,
+    note : String,
     riderName: String,
     riderDate: String,
   },

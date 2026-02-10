@@ -76,16 +76,42 @@ export const uploadFiles = (req, res, next) => {
       // Parse the stringified currObj
       const parsedCurrObj = JSON.parse(currObj);
 
+
+      const pickup_details_arr = await Pickup.find({_id : parsedCurrObj.id})
+
+
+      const pickup_details = pickup_details_arr[0]
+
+      if(pickup_details?.appCustomerId || pickup_details?.platform_type === 'app')
+      {
+        parsedCurrObj.address = pickup_details?.deliveryAddress
+      }
+
       // Parse location only if it exists
       let parsedLocation = null;
+
+      if(pickup_details?.appCustomerId || pickup_details?.platform_type === 'app')
+      {
+        let app_del_location =  {
+        latitude : pickup_details?.deliveryLocation?.latitude,
+        longitude : pickup_details?.deliveryLocation?.longitude
+      }
+
+       parsedLocation = app_del_location
+      }
+       
+
+
+
       if (location) {
         parsedLocation = JSON.parse(location);
       }
 
+
       // Ensure parsedCurrObj is an object
       if (!parsedCurrObj || typeof parsedCurrObj !== "object") {
         return res.status(400).json({ message: "Invalid currObj format." });
-      }
+      } 
 
       // Upload multiple images to S3
       const imageUploads = await Promise.all(
@@ -111,19 +137,36 @@ export const uploadFiles = (req, res, next) => {
         order_id = "WZ" + order_id;
       }
 
+
+  const order_Obj = {
+                   contactNo: parsedCurrObj.contactNo,
+                   customerName: parsedCurrObj.customerName,
+                   address: parsedCurrObj.address,
+                   items: parsedCurrObj.items,
+                   price: price, // From req.body
+                   order_id,
+                   intransitVoice: voiceUpload?.Location || null,
+                   intransitImage: imageUrls, // Save array of image URLs
+                   plantName: parsedCurrObj.plantName,
+                   orderLocation: parsedLocation, // Optional location
+                   appCustomerId : pickup_details?.appCustomerId
+                 }
+
+      if(pickup_details?.appCustomerId || pickup_details?.platform_type === 'app')
+      {
+        order_Obj.platform_type = "app"
+        order_Obj.note = pickup_details?.note
+        order_Obj.appCustomerId = pickup_details?.appCustomerId
+        order_Obj.tempPickupAdresssId = pickup_details?.tempPickupAdresssId
+        order_Obj.tempDeliveryAddressId = pickup_details?.tempDeliveryAddressId
+      }
+
+      console.log('this is the order_Obj',order_Obj)
+
+      // return
+
       // Create a new order in the database
-      await Order.create({
-        contactNo: parsedCurrObj.contactNo,
-        customerName: parsedCurrObj.customerName,
-        address: parsedCurrObj.address,
-        items: parsedCurrObj.items,
-        price: price, // From req.body
-        order_id,
-        intransitVoice: voiceUpload?.Location || null,
-        intransitImage: imageUrls, // Save array of image URLs
-        plantName: parsedCurrObj.plantName,
-        orderLocation: parsedLocation, // Optional location
-      });
+      await Order.create(order_Obj);
 
       res.status(200).json({
         message: "Files uploaded and order status updated to processing.",

@@ -59,6 +59,96 @@ export const addPickup = catchAsync(async (req, res, next) => {
   });
 });
 
+
+
+// export const addPickupthroughApp = catchAsync(async (req, res, next) => {
+
+
+//   const { firstName,lastName, contact, appCustomerId, tempPickupAdresssId,tempDeliveryAddressId,date,slot,note} = req.body;
+
+//   let name = firstName
+
+//   if(lastName)
+//   {
+//     name = name + " " + lastName
+//   }
+
+//     console.log("called",name, contact, appCustomerId, tempPickupAdresssId,tempDeliveryAddressId,date,slot,note)
+
+
+//   let obj = {
+//      Name: name,
+//     Contact: contact,
+//     plantName: "Delhi",
+//     tempPickupAdresssId : tempPickupAdresssId,
+//     tempDeliveryAddressId : tempDeliveryAddressId,
+//     appCustomerId : appCustomerId,
+//     platform_type : "app",
+//     type: "live",
+//     PickupStatus: "pending",
+//     pickup_date: new Date(date),
+//   }
+
+//   if(slot)
+//   {
+//     obj.slot = slot
+//     obj.type = "schedule"
+//   }
+
+//   if(note)
+//   {
+//     obj.note = note
+//   }
+
+//    const addr_obj = await fetch(`http://localhost:3000/v1/addresses?customerid=${appCustomerId}`)
+
+//    let full_addr = "";
+//   let keys = Object.keys(addr_obj[0]);
+
+
+//   for (let i = 0; i < keys.length; i++) {
+//   let key = keys[i];
+
+//   if (
+//     key === "addressLine1" ||
+//     key === "landmark" ||
+//     key === "city" ||
+//     key === "state" ||
+//     key === "pincode"
+//   ) {
+//     full_addr += addr_obj[0][key] + " ";
+//   }
+//   }
+
+  
+//   const pickupData = await pickup.create({
+//     Name: name,
+//     Contact: contact,
+//     Address: full_addr,
+//     plantName: "Delhi",
+//     type: "live",
+//     PickupStatus: "pending",
+//     pickup_date: new Date(),
+//     pickupLocation: {
+//     "latitude": addr_obj[0].latitude,
+//     "longitude": addr_obj[0].longitude
+//   },
+//    contactName : addr_obj[0].contactName ? addr_obj[0].contactName : null,
+//   contactPhone: addr_obj[0].contactPhone ? addr_obj[0].contactPhone : null,
+//      appCustomerId,
+//     tempDeliveryAddressId,
+//     tempPickupAdresssId,
+//     platform_type: "app",
+
+
+// });
+//   req.socket.emit("addPickup", pickupData);
+//   res.status(200).json({
+//     message: "Pickup Added Sucessfully",
+//     data : pickupData
+//   });
+// });
+
 // export const getPickups = catchAsync(async (req, res, next) => {
 //   const [pickups, countTotal] = await Promise.all([
 //     new APIFeatures(pickup.find({ type: "live", isDeleted: false }), req.query)
@@ -103,6 +193,167 @@ export const addPickup = catchAsync(async (req, res, next) => {
 //     message: "Pickup Retrieved Successfully",
 //   });
 // });
+
+export const addPickupthroughApp = catchAsync(async (req, res, next) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      contact,
+      appCustomerId,
+      tempPickupAdresssId,
+      tempDeliveryAddressId,
+      date,
+      slot,
+      note,
+    } = req.body;
+
+    console.log("REQ BODY 👉", req.body);
+
+    // -------------------------
+    // Basic validation
+    // -------------------------
+    if (!firstName || !contact || !appCustomerId) {
+      return res.status(400).json({
+        message: "Required fields are missing",
+      });
+    }
+
+    const name = lastName ? `${firstName} ${lastName}` : firstName;
+
+    // -------------------------
+    // Fetch addresses
+    // -------------------------
+    const addrRes = await fetch(
+      `http://localhost:3000/v1/addresses?customerid=${appCustomerId}`
+    );
+
+    const addrData = await addrRes.json();
+
+    console.log("ADDR API RESPONSE 👉", addrData);
+
+    const addresses = addrData?.results;
+
+    if (!Array.isArray(addresses) || addresses.length === 0) {
+      return res.status(404).json({
+        message: "No address found for this customer",
+      });
+    }
+
+    // -------------------------
+    // Map pickup & delivery addresses by ID
+    // -------------------------
+    const pickupAddress = addresses.find(
+      (addr) => addr.id === tempPickupAdresssId
+    );
+
+    const deliveryAddress = addresses.find(
+      (addr) => addr.id === tempDeliveryAddressId
+    );
+
+    if (!pickupAddress) {
+      return res.status(400).json({
+        message: "Invalid pickup address ID",
+      });
+    }
+
+    if (!deliveryAddress) {
+      return res.status(400).json({
+        message: "Invalid delivery address ID",
+      });
+    }
+
+    // -------------------------
+    // Helper: build full address
+    // -------------------------
+    const buildFullAddress = (address) => {
+      const keys = [
+        "addressLine1",
+        "landmark",
+        "city",
+        "state",
+        "pincode",
+      ];
+
+      return keys
+        .filter((key) => address[key])
+        .map((key) => address[key])
+        .join(" ");
+    };
+
+    // -------------------------
+    // Create pickup payload
+    // -------------------------
+    const pickupPayload = {
+      Name: name,
+      Contact: contact,
+
+      Address: buildFullAddress(pickupAddress),
+
+      plantName: "Delhi",
+      type: slot ? "schedule" : "live",
+      PickupStatus: "pending",
+      pickup_date: new Date(),
+
+      pickupLocation: {
+        latitude: pickupAddress.latitude,
+        longitude: pickupAddress.longitude,
+      },
+
+      contactName: pickupAddress.contactName || null,
+      contactPhone: pickupAddress.contactPhone || null,
+
+      // optional but useful
+      deliveryAddress: buildFullAddress(deliveryAddress),
+      deliveryLocation: {
+        latitude: deliveryAddress.latitude,
+        longitude: deliveryAddress.longitude,
+      },
+
+      appCustomerId,
+      tempPickupAdresssId,
+      tempDeliveryAddressId,
+
+      platform_type: "app",
+    };
+
+    if(slot)
+    { 
+      pickupPayload.slot = slot;
+      pickupPayload.pickup_date = new Date(date)
+    }
+    if (note) pickupPayload.note = note;
+
+    console.log("this is the pickupPayload==>>",pickupPayload)
+
+
+    // -------------------------
+    // Save pickup
+    // -------------------------
+    const pickupData = await pickup.create(pickupPayload);
+
+    // -------------------------
+    // Emit socket event
+    // -------------------------
+    req.socket.emit("addPickup", pickupData);
+
+    return res.status(200).json({
+      message: "Pickup added successfully",
+      data: pickupData,
+    });
+  } catch (error) {
+    console.error("addPickupthroughApp ERROR ❌", error);
+
+    return res.status(500).json({
+      message: "Failed to add pickup",
+      error: error.message,
+    });
+  }
+});
+
+
+
+
 export const getPickups = catchAsync(async (req, res, next) => {
   const { date,status} = req.query; // Date filter from query and status filter
   const startDate = date ? new Date(date) : new Date(); // Default to current date
@@ -404,28 +655,176 @@ export const getSchedulePickups = catchAsync(async (req, res, next) => {
   });
 });
 
+// export const addOrder = catchAsync(async (req, res, next) => {
+//   const { contactNo, customerName, address, items, price } = req.body;
+//   const latestOrder = await order.find().sort({ _id: -1 });
+//   console.log("this is the latesoder---> ", latestOrder);
+//   let order_id = `WZ1001`;
+//   if (latestOrder.length > 0) {
+//     order_id = latestOrder[0].order_id.split("WZ")[1] * 1 + 1;
+//     order_id = "WZ" + order_id;
+//     console.log("updated order id---> ", order_id);
+//   }
+//   await order.create({
+//     contactNo,
+//     customerName,
+//     address,
+//     items,
+//     price,
+//     order_id,
+//   });
+//   res.status(200).json({
+//     message: "Order Added Sucessfully",
+//   });
+// });
+
 export const addOrder = catchAsync(async (req, res, next) => {
-  const { contactNo, customerName, address, items, price } = req.body;
-  const latestOrder = await order.find().sort({ _id: -1 });
-  console.log("this is the latesoder---> ", latestOrder);
-  let order_id = `WZ1001`;
-  if (latestOrder.length > 0) {
-    order_id = latestOrder[0].order_id.split("WZ")[1] * 1 + 1;
-    order_id = "WZ" + order_id;
-    console.log("updated order id---> ", order_id);
+  try {
+    const {
+      contactNo,
+      customerName,
+      items,
+      price,
+      appCustomerId,
+      tempPickupAdresssId,
+      tempDeliveryAddressId,
+    } = req.body;
+
+    // -------------------------
+    // Generate order ID
+    // -------------------------
+    const latestOrder = await order.find().sort({ _id: -1 }).limit(1);
+
+    let order_id = "WZ1001";
+    if (latestOrder.length > 0 && latestOrder[0].order_id) {
+      const lastNumber = Number(latestOrder[0].order_id.replace("WZ", ""));
+      order_id = "WZ" + (lastNumber + 1);
+    }
+
+    // -------------------------
+    // Create base order first
+    // -------------------------
+    await order.create({
+      contactNo,
+      customerName,
+      items,
+      price,
+      order_id,
+    });
+
+    // -------------------------
+    // If app customer → fetch delivery address
+    // -------------------------
+    if (appCustomerId && tempDeliveryAddressId) {
+      const addrRes = await fetch(
+        `http://localhost:3000/v1/addresses?customerid=${appCustomerId}`
+      );
+
+      const addrData = await addrRes.json();
+
+      const addresses = addrData?.results;
+
+      if (!Array.isArray(addresses) || addresses.length === 0) {
+        return res.status(404).json({
+          message: "No address found for this customer",
+        });
+      }
+
+      // -------------------------
+      // Find DELIVERY address only
+      // -------------------------
+      const deliveryAddress = addresses.find(
+        (addr) => addr.id === tempDeliveryAddressId
+      );
+
+      if (!deliveryAddress) {
+        return res.status(400).json({
+          message: "Invalid delivery address ID",
+        });
+      }
+
+      // -------------------------
+      // Helper: build full address
+      // -------------------------
+      const buildFullAddress = (address) => {
+        const keys = [
+          "addressLine1",
+          "landmark",
+          "city",
+          "state",
+          "pincode",
+        ];
+
+        return keys
+          .filter((key) => address[key])
+          .map((key) => address[key])
+          .join(" ");
+      };
+
+      const fullAddress = buildFullAddress(deliveryAddress);
+
+      // -------------------------
+      // Update order with delivery details
+      // -------------------------
+      await order.update(
+        {
+          address: fullAddress,
+
+          appCustomerId,
+          tempDeliveryAddressId,
+          tempPickupAdresssId,
+          platform_type: "app",
+
+          orderLocation: {
+            latitude: deliveryAddress.latitude,
+            longitude: deliveryAddress.longitude,
+          },
+
+          contactName: deliveryAddress.contactName || null,
+          contactPhone: deliveryAddress.contactPhone || null,
+        },
+        {
+          where: { order_id },
+        }
+      );
+    }
+
+    return res.status(200).json({
+      message: "Order Added Successfully",
+      order_id,
+    });
+  } catch (error) {
+    console.error("addOrder ERROR ❌", error);
+
+    return res.status(500).json({
+      message: "Failed to add order",
+      error: error.message,
+    });
   }
-  await order.create({
-    contactNo,
-    customerName,
-    address,
-    items,
-    price,
-    order_id,
-  });
-  res.status(200).json({
-    message: "Order Added Sucessfully",
-  });
 });
+
+
+
+// const changeStateofOrder = async (status, appOrderId) =>
+// {
+// try {
+//    const url = `v1/orders/${appOrderId}`
+//   const options = {
+//   method: 'PATCH',
+//   headers: {
+//     'content-type': 'application/json-patch+json',
+//   },
+//   body: {status}
+// }
+
+// const res = await fetch(url,options)
+// const json = await res.json()
+// // console.log("this is json",json)
+// return json
+// } catch (error) {
+//   console.log('this is the error',error)
+// }
+// }
 
 // export const getOrders = catchAsync(async (req, res, next) => {
 //   const { email } = req.query;
@@ -494,6 +893,7 @@ export const getOrders = catchAsync(async (req, res, next) => {
     message: "Orders Retrieved Successfully",
   });
 });
+
 
 export const getOrdersByFilter = catchAsync(async (req, res, next) => {
   const { email } = req.query;

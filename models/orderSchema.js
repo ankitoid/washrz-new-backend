@@ -126,8 +126,15 @@ const statusHistorySchema = new Schema({
 // ========== MAIN ORDER SCHEMA ==========
 
 const orderSchema = new Schema(
-  {
-    // ========== CUSTOMER INFORMATION ==========
+  { 
+    appCustomerId : String,
+    tempPickupAdresssId: String,
+    tempDeliveryAddressId: String,
+    platform_type: {
+      type: String,
+      enum: ["wati","app"],
+      default: "wati",
+    },
     contactNo: String,
     customerName: String,
     address: String,
@@ -194,8 +201,22 @@ const orderSchema = new Schema(
     image: [String],
     voice: String,
     deliverImage: String,
-    
-    // Location Tracking
+    statusHistory: {
+      intransit: { type: Date, default: null },
+      processing: { type: Date, default: null },
+      readyForDelivery: { type: Date, default: null },
+      deliveryriderassigned : { type: Date, default: null },
+      delivered: { type: Date, default: null },
+      cancelled: { type: Date, default: null }
+    },
+    rescheduledDate: { type: Date, default: null }, // Add rescheduled date
+    isRescheduled: { type: Boolean, default: false }, // Flag to check if rescheduled
+    plantName: String,
+    riderName: String,
+    riderDate: String,
+    contactName: String,
+    contactPhone : String,
+    note : String,
     orderLocation: {
       latitude: Number,
       longitude: Number,
