@@ -474,6 +474,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-server.listen(process.env.PORT || 5000, () => {
+server.listen(process.env.PORT || 5002, () => {
   console.log(`Server is running on port: ${process.env.PORT}`);
 });
