@@ -225,7 +225,7 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     // Fetch addresses
     // -------------------------
     const addrRes = await fetch(
-      `http://localhost:3000/v1/addresses?customerid=${appCustomerId}`
+      `https://live.drydash.in/v1/addresses?customerid=${appCustomerId}`
     );
 
     const addrData = await addrRes.json();

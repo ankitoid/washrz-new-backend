@@ -231,7 +231,7 @@ export const paymentWebhook = async (req, res) => {
 
 export const initiatePayment = async (req, res) => {
   try {
-    const { orderId, paymentMode = 'upi' } = req.body;
+    const { orderId, paymentMode ,email } = req.body;
     
     // Find order - UPDATED FIELD NAME
     const order = await Order.findOne({ order_id: orderId });
@@ -263,7 +263,7 @@ export const initiatePayment = async (req, res) => {
       amount: amount.toString(),
       productinfo: `Order ${order.order_id}`,
       firstname: order.customerName || 'Customer',
-      email: order.email || 'customer@example.com',
+      email: email || 'customer@example.com',
       phone: order.contactNo || '0000000000',
       surl: `${process.env.BACKEND_URL}/api/v1/payments/success-callback`,
       furl: `${process.env.BACKEND_URL}/api/v1/payments/failure-callback`,
