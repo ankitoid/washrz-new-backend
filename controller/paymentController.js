@@ -93,9 +93,11 @@ export const paymentSuccessCallback = async (req, res) => {
     }
     
     console.log('✅ Hash verification successful');
+    console.log("paymentData.txnid =>> ", paymentData.txnid)
     
     // Find order by payment ID
     const order = await Order.findOne({ 'payment.paymentId': paymentData.txnid });
+    console.log("here is the order--> ", order)
     
     if (!order) {
       console.error('Order not found for payment:', paymentData.txnid);
@@ -103,6 +105,7 @@ export const paymentSuccessCallback = async (req, res) => {
     }
     
     // Update payment status (if not already updated by webhook)
+    console.log("this is the=========>>  ", order.isPaid)
     if (!order.isPaid) {
       order.payment.status = 'success';
       order.payment.transactionId = paymentData.mihpayid || paymentData.bank_ref_num;
