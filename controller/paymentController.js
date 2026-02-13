@@ -40,6 +40,8 @@ export const paymentSuccessCallback = async (req, res) => {
     productinfo,
     firstname,
     email, hash } = paymentData;
+
+            const amt = (String(amount)).split(".")[0];
     // Verify hash with correct format
     const generatedHash = generateHash({  key,
     txnid,
@@ -47,8 +49,6 @@ export const paymentSuccessCallback = async (req, res) => {
     productinfo,
     firstname,
     email });
-
-        const amt = (String(amount)).split(".")[0];
 
     console.log("amt", amt);
 
