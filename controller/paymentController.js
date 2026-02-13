@@ -24,18 +24,31 @@ const generateHash = (data) => {
 // PayU Success Callback - User redirected here after successful payment
 export const paymentSuccessCallback = async (req, res) => {
   try {
-    console.log("called------------------------>> paymentSuccessCallback")
     const paymentData = req.method === 'POST' ? req.body : req.query;
-    
-    console.log('Request method:', req.method);
-    console.log('Content-Type:', req.headers['content-type']);
-    console.log('Content-Length:', req.headers['content-length']);
-    console.log('Body (raw):', req.body);
-    console.log('Body keys:', Object.keys(req.body));
-    console.log('Query params:', req.query);
-    
+
+    const {  key,
+    txnid,
+    amount,
+    productinfo,
+    firstname,
+    email } = paymentData;
     // Verify hash with correct format
-    const generatedHash = generateHash(paymentData);
+    const generatedHash = generateHash({  key,
+    txnid,
+    amount,
+    productinfo,
+    firstname,
+    email });
+
+    console.log("payment data", paymentData)
+
+
+    console.log("these ate the adaat::", {  key,
+    txnid,
+    amount,
+    productinfo,
+    firstname,
+    email, cardhash })
     
     if (generatedHash !== paymentData.hash) {
       console.error('Hash verification failed in callback');
