@@ -5,7 +5,6 @@ import axios from 'axios';
 import querystring from 'querystring';
 
 // ==================== UPDATED HASH FUNCTIONS ====================
-// Generate PayU hash
 const generateHash = (data) => {
   const {
     key,
@@ -13,19 +12,26 @@ const generateHash = (data) => {
     amount,
     productinfo,
     firstname,
-    email
+    email,
+    udf1 = "",
+    udf2 = "",
+    udf3 = "",
+    udf4 = "",
+    udf5 = ""
   } = data;
 
-  console.log("obj-> in has function: ",  {
-    key,
-    txnid,
-    amount,
-    productinfo,
-    firstname,
-    email
-  })
-  const hashString = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${process.env.PAYU_SALT}`;
-  return crypto.createHash('sha512').update(hashString).digest('hex');
+  const formattedAmount = parseFloat(amount).toFixed(2);
+
+  const hashString =
+    `${key}|${txnid}|${formattedAmount}|${productinfo}|${firstname}|${email}|` +
+    `${udf1}|${udf2}|${udf3}|${udf4}|${udf5}||||||${process.env.PAYU_SALT}`;
+
+  console.log("Generate Hash String:", hashString);
+
+  return crypto
+    .createHash("sha512")
+    .update(hashString)
+    .digest("hex");
 };
 
 // For callback verification (what PayU sends back)
@@ -45,18 +51,21 @@ const generateCallbackHash = (response) => {
     udf5 = "",
   } = response;
 
+  const formattedAmount = parseFloat(amount).toFixed(2);
+
   const hashString =
     `${process.env.PAYU_SALT}|${status}||||||` +
     `${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|` +
-    `${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
+    `${email}|${firstname}|${productinfo}|${formattedAmount}|${txnid}|${key}`;
 
   const calculatedHash = crypto
     .createHash("sha512")
     .update(hashString)
     .digest("hex");
 
-  return calculatedHash;
+  return calculatedHash === hash;
 };
+
 
 // ==================== CALLBACK FUNCTIONS ====================
 
@@ -75,22 +84,13 @@ export const paymentSuccessCallback = async (req, res) => {
     firstname,
     email, hash } = paymentData;
 
-    const amt = (String(amount)).split(".")[0];
-    // Verify hash with correct format
-    const generatedHash = generateCallbackHash({ ...paymentData, amount: amt});
+    const generatedHash = generateCallbackHash({ ...paymentData });
 
-    console.log("amt", amt);
-
-    console.log("obj-> ", {  key: key.trim(),
-    txnid: txnid.trim(),
-    amount: amt.trim(),
-    productinfo: productinfo.trim(),
-    firstname: firstname.trim(),
-    email: email.trim() })
+    console.log("obj-> ", paymentData)
 
 
-    console.log("before-->> ", hash)
-    console.log("after-->>", generatedHash)
+    console.log("PayU Has-->> ", hash)
+    console.log("Re- Gen Hash-->>", generatedHash)
     
     if (generatedHash !== paymentData.hash) {
       console.error('Hash verification failed in callback');
