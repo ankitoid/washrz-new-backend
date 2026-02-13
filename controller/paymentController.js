@@ -15,6 +15,13 @@ const generateHash = (data) => {
     firstname,
     email
   } = data;
+
+  console.log("this is the values",   key,
+    txnid,
+    amount,
+    productinfo,
+    firstname,
+    email)
   const hashString = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${process.env.PAYU_SALT}`;
   return crypto.createHash('sha512').update(hashString).digest('hex');
 };
@@ -40,7 +47,12 @@ export const paymentSuccessCallback = async (req, res) => {
     firstname,
     email });
 
-    console.log("payment data", paymentData)
+    console.log("payment data", "Key: ",  key, "txnid: ",
+    txnid, "amount: ",
+    amount, "productinfo: ",
+    productinfo, "firstname: ", 
+    firstname, "email: ", 
+    email)
 
 
     console.log("before-->> ", hash)
