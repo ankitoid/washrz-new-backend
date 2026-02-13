@@ -7,6 +7,7 @@ import {
   checkPaymentStatus,
   markAsPaid,
   initiateRefund,
+  autoTestPayU,
 //   markAsPaid,
 } from '../controller/paymentController.js';
 
@@ -27,6 +28,7 @@ router.post('/webhook', paymentWebhook);                   // WEBHOOK
 
 // === OTHER PAYMENT APIS ===
 router.post('/initiate', initiatePayment);
+router.get('/test', autoTestPayU);
 router.get('/status/:orderId', checkPaymentStatus);
 router.post('/:orderId/mark-paid', markAsPaid);
 router.post('/:orderId/refund', initiateRefund);
