@@ -4,6 +4,8 @@ import Order from '../models/orderSchema.js';
 import axios from 'axios';
 import querystring from 'querystring';
 
+// ==================== UPDATED HASH FUNCTIONS ====================
+// Generate PayU hash
 const generateHash = (data) => {
   const {
     key,
@@ -11,36 +13,23 @@ const generateHash = (data) => {
     amount,
     productinfo,
     firstname,
-    email,
-    udf1 = "",
-    udf2 = "",
-    udf3 = "",
-    udf4 = "",
-    udf5 = "",
-    udf6 = "",
-    udf7 = "",
-    udf8 = "",
-    udf9 = "",
-    udf10 = ""
+    email
   } = data;
 
-  const hashString =
-    `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|` +
-    `${udf1}|${udf2}|${udf3}|${udf4}|${udf5}|` +
-    `${udf6}|${udf7}|${udf8}|${udf9}|${udf10}|${process.env.PAYU_SALT}`;
-
-  console.log("Generate Hash String:", hashString);
-
-  return crypto
-    .createHash("sha512")
-    .update(hashString)
-    .digest("hex");
+  console.log("obj-> in has function: ",  {
+    key,
+    txnid,
+    amount,
+    productinfo,
+    firstname,
+    email
+  })
+  const hashString = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${process.env.PAYU_SALT}`;
+  return crypto.createHash('sha512').update(hashString).digest('hex');
 };
 
-
-
 // For callback verification (what PayU sends back)
-const generateCallbackHash = (response) => {
+const generateCallbackHash = (data) => {
   const {
     key,
     txnid,
@@ -49,26 +38,22 @@ const generateCallbackHash = (response) => {
     firstname,
     email,
     status,
-    udf1 = "",
-    udf2 = "",
-    udf3 = "",
-    udf4 = "",
-    udf5 = "",
-  } = response;
+    udf1 = '',
+    udf2 = '',
+    udf3 = '',
+    udf4 = '',
+    udf5 = '',
+  } = data;
 
-  const hashString =
-    `${process.env.PAYU_SALT}|${status}||||||` +
-    `${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|` +
-    `${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
 
-  const calculatedHash = crypto
-    .createHash("sha512")
-    .update(hashString)
-    .digest("hex");
-
-  return calculatedHash;
+  // WORKING FORMAT: salt|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key
+  const hashString = `${process.env.PAYU_SALT}|${status}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
+    
+  const hash = crypto.createHash('sha512').update(hashString).digest('hex');
+  console.log("Generated callback hash:", hash);
+  
+  return hash;
 };
-
 
 // ==================== CALLBACK FUNCTIONS ====================
 
@@ -87,13 +72,23 @@ export const paymentSuccessCallback = async (req, res) => {
     firstname,
     email, hash } = paymentData;
 
-    const generatedHash = generateCallbackHash({ ...paymentData });
+    const amt = (String(amount)).split(".")[0];
+    // Verify hash with correct format
+    const generatedHash = generateCallbackHash({ ...paymentData, amount: amt});
 
-    console.log("obj-> ", paymentData)
-
-
-    console.log("PayU Has-->> ", hash)
+       onsole.log("PayU Has-->> ", hash)
     console.log("Re- Gen Hash-->>", generatedHash)
+
+    console.log("obj-> ", {  key: key.trim(),
+    txnid: txnid.trim(),
+    amount: amt.trim(),
+    productinfo: productinfo.trim(),
+    firstname: firstname.trim(),
+    email: email.trim() })
+
+
+    console.log("before-->> ", hash)
+    console.log("after-->>", generatedHash)
     
     if (generatedHash !== paymentData.hash) {
       console.error('Hash verification failed in callback');
