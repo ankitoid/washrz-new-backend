@@ -15,12 +15,12 @@ const router = express.Router();
 
 // === CALLBACK ROUTES (for user redirect) ===
 // These are what you configure in PayU dashboard as return URLs
-router.post('/success-callback', paymentSuccessCallback);  // CALLBACK
-router.post('/failure-callback', paymentFailureCallback);  // CALLBACK
+router.post('/success-callback', express.urlencoded({ extended: true }), paymentSuccessCallback);
+router.post('/failure-callback', express.urlencoded({ extended: true }), paymentFailureCallback);
 
 // Also support GET for older PayU configurations
-router.get('/success-callback', paymentSuccessCallback);   // CALLBACK
-router.get('/failure-callback', paymentFailureCallback);   // CALLBACK
+router.get('/success-callback', paymentSuccessCallback);   // No urlencoded needed for GET
+router.get('/failure-callback', paymentFailureCallback);   // No urlencoded needed for GET
 
 // === WEBHOOK ROUTE (for backend processing) ===
 // This is configured in PayU dashboard as webhook URL

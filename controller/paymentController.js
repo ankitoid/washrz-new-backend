@@ -19,15 +19,20 @@ const generateHash = (data) => {
   return crypto.createHash('sha512').update(hashString).digest('hex');
 };
 
-
 // ==================== CALLBACK FUNCTIONS ====================
 
 // PayU Success Callback - User redirected here after successful payment
 export const paymentSuccessCallback = async (req, res) => {
   try {
+    console.log("called------------------------>> paymentSuccessCallback")
     const paymentData = req.method === 'POST' ? req.body : req.query;
     
-    console.log('Success callback received:', paymentData);
+    console.log('Request method:', req.method);
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('Content-Length:', req.headers['content-length']);
+    console.log('Body (raw):', req.body);
+    console.log('Body keys:', Object.keys(req.body));
+    console.log('Query params:', req.query);
     
     // Verify hash with correct format
     const generatedHash = generateHash(paymentData);
@@ -103,6 +108,7 @@ export const paymentSuccessCallback = async (req, res) => {
 // PayU Failure Callback - User redirected here after failed payment
 export const paymentFailureCallback = async (req, res) => {
   try {
+    console.log("called------------------------>> paymentFailureCallback")
     const paymentData = req.method === 'POST' ? req.body : req.query;
     
     console.log('Failure callback received:', paymentData);
