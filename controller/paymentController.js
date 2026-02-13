@@ -35,6 +35,8 @@ export const paymentSuccessCallback = async (req, res) => {
   try {
     const paymentData = req.method === 'POST' ? req.body : req.query;
 
+    console.log("this is the body data:: ", req.body)
+
 
     const {  key,
     txnid,
