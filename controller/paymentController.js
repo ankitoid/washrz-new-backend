@@ -76,7 +76,7 @@ export const paymentSuccessCallback = async (req, res) => {
     // Verify hash with correct format
     const generatedHash = generateCallbackHash({ ...paymentData, amount: amt});
 
-       onsole.log("PayU Has-->> ", hash)
+    console.log("PayU Has-->> ", hash)
     console.log("Re- Gen Hash-->>", generatedHash)
 
     console.log("obj-> ", {  key: key.trim(),
