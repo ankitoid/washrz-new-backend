@@ -32,9 +32,7 @@ const generateHash = (data) => {
 export const paymentSuccessCallback = async (req, res) => {
   try {
     const paymentData = req.method === 'POST' ? req.body : req.query;
-    const amt = (String(amount)).split(".")[0];
 
-    console.log("amt", amt);
 
     const {  key,
     txnid,
@@ -49,6 +47,10 @@ export const paymentSuccessCallback = async (req, res) => {
     productinfo,
     firstname,
     email });
+
+        const amt = (String(amount)).split(".")[0];
+
+    console.log("amt", amt);
 
     console.log("payment data", "Key: ",  key, "txnid: ",
     txnid, "amount: ",
