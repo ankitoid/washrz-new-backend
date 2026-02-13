@@ -343,9 +343,10 @@ export const initiatePayment = async (req, res) => {
     // Generate payment ID
     const paymentId = `PAY${Date.now()}${Math.floor(Math.random() * 1000)}`;
     
+    // Use totalAmount if available, otherwise use price
     const amount = order.totalAmount || order.price || 0;
     
-    // Prepare payment data
+    // Prepare payment data for PayU with UDF fields
     const paymentData = {
       key: process.env.PAYU_KEY,
       txnid: paymentId,
@@ -359,19 +360,14 @@ export const initiatePayment = async (req, res) => {
       surl: `${process.env.BACKEND_URL}/api/v1/payments/success-callback`,
       furl: `${process.env.BACKEND_URL}/api/v1/payments/failure-callback`,
       
-      // UDF fields
+      // UDF fields for tracking
       udf1: order.order_id,
       udf2: 'ONLINE_PAYMENT',
       udf3: paymentMode.toUpperCase(),
       udf4: '',
       udf5: '',
       
-      // Payment method
-      pg: paymentMode === 'card' ? 'CC' : 
-          paymentMode === 'netbanking' ? 'NB' : 
-          paymentMode === 'wallet' ? 'WL' : 'UPI',
-      
-      // Optional
+      // Additional info
       address1: order.address || '',
       city: order.city || '',
       state: order.state || '',
@@ -380,10 +376,12 @@ export const initiatePayment = async (req, res) => {
       service_provider: 'payu_paisa'
     };
     
-    // Generate hash
+    // Generate hash with correct format
     paymentData.hash = generateHash(paymentData);
     
-    // Save payment info
+    console.log('Payment hash generated:', paymentData.hash.substring(0, 32) + '...');
+    
+    // Save payment info to order
     order.payment = {
       paymentId,
       amount: amount,
@@ -397,106 +395,28 @@ export const initiatePayment = async (req, res) => {
     
     await order.save();
     
-    // PayU endpoints
+    // Determine PayU URL based on environment
     const payuBaseUrl = process.env.PAYU_MODE === 'production' 
       ? 'https://secure.payu.in'
       : 'https://test.payu.in';
     
-    const payuPaymentUrl = `${payuBaseUrl}/_payment`;
-    
-    // ===== CRITICAL FOR REACT NATIVE WEBVIEW =====
-    // Generate HTML page with auto-submitting form
-    const htmlPage = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Redirecting to PayU...</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            background: #f5f5f5;
-          }
-          .loader {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #3498db;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-          }
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          p {
-            color: #666;
-            font-size: 16px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="loader"></div>
-        <p>Redirecting to PayU payment gateway...</p>
-        <p>Please do not close or go back.</p>
-        
-        <form id="payuForm" method="POST" action="${payuPaymentUrl}">
-          ${Object.entries(paymentData).map(([key, value]) => 
-            `<input type="hidden" name="${key}" value="${value}" />`
-          ).join('')}
-        </form>
-        
-        <script>
-          // Auto-submit after 1 second
-          setTimeout(function() {
-            document.getElementById('payuForm').submit();
-          }, 1000);
-          
-          // Fallback manual submit
-          document.body.addEventListener('click', function() {
-            document.getElementById('payuForm').submit();
-          });
-        </script>
-      </body>
-      </html>
-    `;
+    const payuUrl = `${payuBaseUrl}/_payment`;
     
     res.status(200).json({
       success: true,
       message: 'Payment initiated successfully',
-      
-      // For React Native WebView - THESE ARE THE IMPORTANT FIELDS
-      webviewData: {
-        htmlContent: htmlPage,  // HTML page with auto-submit form
-        base64HTML: Buffer.from(htmlPage).toString('base64'), // For WebView loading
-        
-        // Alternative: URL with parameters (might not work due to POST requirement)
-        paymentUrl: payuPaymentUrl,
-        paymentParameters: paymentData,
-        
-        // For in-app browser
-        urlWithParams: `${payuPaymentUrl}?${new URLSearchParams(paymentData).toString()}`,
-        
-        // Payment details
-        paymentId: paymentId,
-        amount: amount,
-        orderId: order.order_id
+      paymentData: {
+        ...paymentData,
+        key: paymentData.key.substring(0, 6) + '...', // Hide full key
+        hash: paymentData.hash.substring(0, 32) + '...' // Hide full hash
       },
-      
-      // For debugging
-      paymentDetails: {
-        paymentId: paymentId,
-        amount: amount,
-        orderId: order.order_id,
-        customerName: order.customerName,
-        paymentMode: paymentMode
+      payuUrl: payuUrl,
+      orderId: order.order_id,
+      amount: amount,
+      webhookUrl: `${process.env.BACKEND_URL}/api/v1/payments/webhook`,
+      callbackUrls: {
+        success: paymentData.surl,
+        failure: paymentData.furl
       }
     });
     
@@ -505,7 +425,12 @@ export const initiatePayment = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to initiate payment',
-      error: error.message
+      error: error.message,
+      debug: {
+        payuKeySet: !!process.env.PAYU_KEY,
+        payuSaltSet: !!process.env.PAYU_SALT,
+        backendUrl: process.env.BACKEND_URL
+      }
     });
   }
 };
