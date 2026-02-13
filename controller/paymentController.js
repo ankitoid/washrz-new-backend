@@ -16,12 +16,14 @@ const generateHash = (data) => {
     email
   } = data;
 
-  console.log("this is the values",   key,
+  console.log("obj-> in has function: ",  {
+    key,
     txnid,
     amount,
     productinfo,
     firstname,
-    email)
+    email
+  })
   const hashString = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${process.env.PAYU_SALT}`;
   return crypto.createHash('sha512').update(hashString).digest('hex');
 };
@@ -41,23 +43,23 @@ export const paymentSuccessCallback = async (req, res) => {
     firstname,
     email, hash } = paymentData;
 
-            const amt = (String(amount)).split(".")[0];
+    const amt = (String(amount)).split(".")[0];
     // Verify hash with correct format
-    const generatedHash = generateHash({  key,
-    txnid,
-    amount: amt,
-    productinfo,
-    firstname,
-    email });
+    const generatedHash = generateHash({  key: key.trim(),
+    txnid: txnid.trim(),
+    amount: amt.trim(),
+    productinfo: productinfo.trim(),
+    firstname: firstname.trim(),
+    email: email.trim() });
 
     console.log("amt", amt);
 
-    console.log("payment data", "Key: ",  key, "txnid: ",
-    txnid, "amount: ",
-    amt, "productinfo: ",
-    productinfo, "firstname: ", 
-    firstname, "email: ", 
-    email)
+    console.log("obj-> ", {  key: key.trim(),
+    txnid: txnid.trim(),
+    amount: amt.trim(),
+    productinfo: productinfo.trim(),
+    firstname: firstname.trim(),
+    email: email.trim() })
 
 
     console.log("before-->> ", hash)
