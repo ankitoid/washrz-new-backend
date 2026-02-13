@@ -1,25 +1,32 @@
 import express from 'express';
 import {
-  generateQR,
+  generatePayUQR,
+  generateSimpleQR,  // Add this
+  testPayUConnection,
+  checkQRStatus,
   getQRForOrder,
-  verifyQRPayment,
-  getRiderQROrders,
   cancelQR,
-  qrPaymentWebhook
+  handlePayUCallback
 } from '../controller/qrController.js';
 
 const router = express.Router();
 
-// QR routes
-router.post('/:orderId/generate', generateQR);
-router.get('/:orderId', getQRForOrder);
-router.post('/:orderId/verify', verifyQRPayment);
-router.post('/:orderId/cancel', cancelQR);
+// Test endpoints
+router.get('/test/connection', testPayUConnection);
 
-// Rider specific
-router.get('/rider/:riderId/orders', getRiderQROrders);
+// Generate PayU Dynamic QR (tries multiple methods)
+router.post('/:orderId/generate-payu', generatePayUQR);
 
-// Webhook (for automatic payment confirmation)
-router.post('/webhook', qrPaymentWebhook);
+// Generate Simple QR (fallback method)
+router.post('/:orderId/generate-simple', generateSimpleQR);
+
+// QR Management
+router.get('/:qrId/status', checkQRStatus);
+router.get('/order/:orderId', getQRForOrder);
+router.post('/:qrId/cancel', cancelQR);
+
+// PayU Callback
+router.post('/payu-callback', handlePayUCallback);
+router.get('/payu-callback', handlePayUCallback);
 
 export default router;
