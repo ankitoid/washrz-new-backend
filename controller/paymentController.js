@@ -27,6 +27,8 @@ const generateHash = (data) => {
     return String(val).trim();
   };
   
+  // Correct PayU hash format: 
+  // sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT)
   const hashString = [
     clean(key),
     clean(txnid),
@@ -39,42 +41,35 @@ const generateHash = (data) => {
     clean(udf3),
     clean(udf4),
     clean(udf5),
-    '', '', '', '', '', // 5 EMPTY FIELDS - CRITICAL for PayU request hash
+    '', '', '', '', '', // 5 empty fields
     clean(process.env.PAYU_SALT)
   ].join('|');
   
-  console.log('Request Hash String:', hashString);
+  console.log('Hash String Generated:', hashString);
   return crypto.createHash('sha512').update(hashString).digest('hex');
 };
 
-/**
- * Generate hash for PayU callback verification (RECEIVE from PayU)
- * Format: sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5|status|resphash|SALT)
- */
+// Generate callback verification hash
 const generateCallbackHash = (callbackData) => {
-  const clean = (val) => {
-    if (val === null || val === undefined) return '';
-    return String(val).trim();
-  };
-  
+  // For callback verification: 
+  // sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5|status|resphash|SALT)
   const hashString = [
-    clean(callbackData.key),
-    clean(callbackData.txnid),
-    clean(callbackData.amount),
-    clean(callbackData.productinfo),
-    clean(callbackData.firstname),
-    clean(callbackData.email),
-    clean(callbackData.udf1 || ''),
-    clean(callbackData.udf2 || ''),
-    clean(callbackData.udf3 || ''),
-    clean(callbackData.udf4 || ''),
-    clean(callbackData.udf5 || ''),
-    clean(callbackData.status),      // Status field (success/failure)
-    clean(callbackData.resphash),    // Response hash from PayU
-    clean(process.env.PAYU_SALT)
+    callbackData.key || '',
+    callbackData.txnid || '',
+    callbackData.amount || '',
+    callbackData.productinfo || '',
+    callbackData.firstname || '',
+    callbackData.email || '',
+    callbackData.udf1 || '',
+    callbackData.udf2 || '',
+    callbackData.udf3 || '',
+    callbackData.udf4 || '',
+    callbackData.udf5 || '',
+    callbackData.status || '',
+    callbackData.resphash || '',
+    process.env.PAYU_SALT || ''
   ].join('|');
   
-  console.log('Callback Hash String:', hashString);
   return crypto.createHash('sha512').update(hashString).digest('hex');
 };
 
@@ -85,7 +80,7 @@ export const paymentSuccessCallback = async (req, res) => {
   try {
     const paymentData = req.method === 'POST' ? req.body : req.query;
     
-    console.log('Success callback received:', paymentData, req.method);
+    console.log('Success callback received:', paymentData);
     
     // Verify hash with correct format
     const generatedHash = generateCallbackHash(paymentData);
