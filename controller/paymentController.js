@@ -4,7 +4,6 @@ import Order from '../models/orderSchema.js';
 import axios from 'axios';
 import querystring from 'querystring';
 
-// ==================== UPDATED HASH FUNCTIONS ====================
 const generateHash = (data) => {
   const {
     key,
@@ -20,10 +19,8 @@ const generateHash = (data) => {
     udf5 = ""
   } = data;
 
-  const formattedAmount = parseFloat(amount).toFixed(2);
-
   const hashString =
-    `${key}|${txnid}|${formattedAmount}|${productinfo}|${firstname}|${email}|` +
+    `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|` +
     `${udf1}|${udf2}|${udf3}|${udf4}|${udf5}||||||${process.env.PAYU_SALT}`;
 
   console.log("Generate Hash String:", hashString);
@@ -33,6 +30,7 @@ const generateHash = (data) => {
     .update(hashString)
     .digest("hex");
 };
+
 
 // For callback verification (what PayU sends back)
 const generateCallbackHash = (response) => {
@@ -51,19 +49,17 @@ const generateCallbackHash = (response) => {
     udf5 = "",
   } = response;
 
-  const formattedAmount = parseFloat(amount).toFixed(2);
-
   const hashString =
     `${process.env.PAYU_SALT}|${status}||||||` +
     `${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|` +
-    `${email}|${firstname}|${productinfo}|${formattedAmount}|${txnid}|${key}`;
+    `${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
 
   const calculatedHash = crypto
     .createHash("sha512")
     .update(hashString)
     .digest("hex");
 
-  return calculatedHash === hash;
+  return calculatedHash;
 };
 
 
