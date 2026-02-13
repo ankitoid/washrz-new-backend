@@ -5,7 +5,7 @@ import axios from 'axios';
 import querystring from 'querystring';
 
 // ==================== UPDATED HASH FUNCTIONS ====================
-// Generate PayU hash for payment request
+// Generate PayU hash
 const generateHash = (data) => {
   const {
     key,
@@ -13,120 +13,12 @@ const generateHash = (data) => {
     amount,
     productinfo,
     firstname,
-    email,
-    udf1 = '',
-    udf2 = '',
-    udf3 = '',
-    udf4 = '',
-    udf5 = ''
+    email
   } = data;
-  
-  const clean = (val) => {
-    if (val === null || val === undefined) return '';
-    return String(val).trim();
-  };
-  
-  // Correct PayU hash format for payment request:
-  // sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT)
-  // Note: There are 6 empty fields after udf5 (not 5)
-  const hashString = [
-    clean(key),
-    clean(txnid),
-    clean(amount),
-    clean(productinfo),
-    clean(firstname),
-    clean(email),
-    clean(udf1),
-    clean(udf2),
-    clean(udf3),
-    clean(udf4),
-    clean(udf5),
-    '', '', '', '', '', // 6 empty fields (||||||)
-    clean(process.env.PAYU_SALT)
-  ].join('|');
-  
-  console.log('Payment Hash String:', hashString);
+  const hashString = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${process.env.PAYU_SALT}`;
   return crypto.createHash('sha512').update(hashString).digest('hex');
 };
 
-// Generate callback verification hash (for both success and failure)
-const generateCallbackHash = (callbackData) => {
-  const {
-    key,
-    txnid,
-    amount,
-    productinfo,
-    firstname,
-    email,
-    status,
-    udf1 = '',
-    udf2 = '',
-    udf3 = '',
-    udf4 = '',
-    udf5 = ''
-  } = callbackData;
-  
-  const clean = (val) => {
-    if (val === null || val === undefined) return '';
-    return String(val).trim();
-  };
-  
-  let hashString;
-  
-  // PayU uses different hash formats for success and failure
-  if (status === 'success') {
-    // Success hash format (reverse order with SALT first):
-    // sha512(SALT|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key)
-    hashString = [
-      clean(process.env.PAYU_SALT),
-      clean(status),
-      '', '', '', '', '', // 6 empty fields (||||||)
-      clean(udf5),
-      clean(udf4),
-      clean(udf3),
-      clean(udf2),
-      clean(udf1),
-      clean(email),
-      clean(firstname),
-      clean(productinfo),
-      clean(amount),
-      clean(txnid),
-      clean(key)
-    ].join('|');
-  } else {
-    // Failure hash format (same as initial payment):
-    // sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT)
-    hashString = [
-      clean(key),
-      clean(txnid),
-      clean(amount),
-      clean(productinfo),
-      clean(firstname),
-      clean(email),
-      clean(udf1),
-      clean(udf2),
-      clean(udf3),
-      clean(udf4),
-      clean(udf5),
-      '', '', '', '', '', // 6 empty fields (||||||)
-      clean(process.env.PAYU_SALT)
-    ].join('|');
-  }
-  
-  console.log('Callback Hash String:', hashString);
-  return crypto.createHash('sha512').update(hashString).digest('hex');
-};
-
-// Optional: Helper function to verify callback hash
-const verifyCallbackHash = (callbackData) => {
-  const receivedHash = callbackData.hash;
-  const calculatedHash = generateCallbackHash(callbackData);
-  
-  console.log('Received Hash:', receivedHash);
-  console.log('Calculated Hash:', calculatedHash);
-  
-  return calculatedHash === receivedHash;
-};
 
 // ==================== CALLBACK FUNCTIONS ====================
 
@@ -138,7 +30,7 @@ export const paymentSuccessCallback = async (req, res) => {
     console.log('Success callback received:', paymentData);
     
     // Verify hash with correct format
-    const generatedHash = generateCallbackHash(paymentData);
+    const generatedHash = generateHash(paymentData);
     
     if (generatedHash !== paymentData.hash) {
       console.error('Hash verification failed in callback');
