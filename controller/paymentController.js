@@ -407,8 +407,8 @@ export const initiatePayment = async (req, res) => {
       message: 'Payment initiated successfully',
       paymentData: {
         ...paymentData,
-        key: paymentData.key.substring(0, 6) + '...', // Hide full key
-        hash: paymentData.hash.substring(0, 32) + '...' // Hide full hash
+        key: paymentData.key,
+        hash: paymentData.hash,
       },
       payuUrl: payuUrl,
       orderId: order.order_id,
