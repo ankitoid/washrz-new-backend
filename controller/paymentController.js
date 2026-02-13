@@ -31,7 +31,7 @@ export const paymentSuccessCallback = async (req, res) => {
     amount,
     productinfo,
     firstname,
-    email } = paymentData;
+    email, hash } = paymentData;
     // Verify hash with correct format
     const generatedHash = generateHash({  key,
     txnid,
@@ -43,12 +43,8 @@ export const paymentSuccessCallback = async (req, res) => {
     console.log("payment data", paymentData)
 
 
-    console.log("these ate the adaat::", {  key,
-    txnid,
-    amount,
-    productinfo,
-    firstname,
-    email, cardhash })
+    console.log("before-->> ", hash)
+    console.log("after-->>", generatedHash)
     
     if (generatedHash !== paymentData.hash) {
       console.error('Hash verification failed in callback');
