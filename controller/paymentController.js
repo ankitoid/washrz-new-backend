@@ -28,6 +28,46 @@ const generateHash = (data) => {
   return crypto.createHash('sha512').update(hashString).digest('hex');
 };
 
+// For callback verification (what PayU sends back)
+const generateCallbackHash = (data) => {
+  const {
+    // Salt comes from env, but can also be in data for testing
+    salt = process.env.PAYU_SALT,
+    status,                    // This is the key difference - status is included!
+    // UDF fields (User Defined Fields) - all 5 of them
+    udf5 = '', 
+    udf4 = '', 
+    udf3 = '', 
+    udf2 = '', 
+    udf1 = '',
+    email,
+    firstname,
+    productinfo,
+    amount,
+    txnid,
+    key
+  } = data;
+
+  console.log("obj-> in callback hash function: ", {
+    salt,
+    status,
+    udf5, udf4, udf3, udf2, udf1,
+    email,
+    firstname,
+    productinfo,
+    amount,
+    txnid,
+    key
+  });
+
+  // IMPORTANT: PayU callback hash format is completely different!
+  // Format: salt|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key
+  const hashString = `${salt}|${status}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
+  
+  console.log("Callback hash string:", hashString);
+  return crypto.createHash('sha512').update(hashString).digest('hex');
+};
+
 // ==================== CALLBACK FUNCTIONS ====================
 
 // PayU Success Callback - User redirected here after successful payment
@@ -47,12 +87,7 @@ export const paymentSuccessCallback = async (req, res) => {
 
     const amt = (String(amount)).split(".")[0];
     // Verify hash with correct format
-    const generatedHash = generateHash({  key: key.trim(),
-    txnid: txnid.trim(),
-    amount: amt.trim(),
-    productinfo: productinfo.trim(),
-    firstname: firstname.trim(),
-    email: email.trim() });
+    const generatedHash = generateCallbackHash({ ...paymentData, amount: amt});
 
     console.log("amt", amt);
 
