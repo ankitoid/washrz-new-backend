@@ -30,19 +30,31 @@ const generateHash = (data) => {
 
 // For callback verification (what PayU sends back)
 const generateCallbackHash = (data) => {
-  console.log("data", data)
-    const {
+  console.log("data", data);
+  
+  const {
     key,
     txnid,
     amount,
     productinfo,
     firstname,
     email,
-    status
+    status,
+    // Include UDF fields - they might be empty strings but need to be included
+    udf1 = '',
+    udf2 = '',
+    udf3 = '',
+    udf4 = '',
+    udf5 = ''
   } = data;
-  const hashStringSalt = `${process.env.PAYU_SALT}|${status}|||||||||||${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
+
+  // CORRECT FORMAT: SALT|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key
+  const hashStringSalt = `${process.env.PAYU_SALT}|${status}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
+  
+  // console.log("Verification string:", hashStringSalt);
+  
   return crypto.createHash('sha512').update(hashStringSalt).digest('hex');
-}
+};
 
 // ==================== CALLBACK FUNCTIONS ====================
 
@@ -61,9 +73,8 @@ export const paymentSuccessCallback = async (req, res) => {
     firstname,
     email, hash } = paymentData;
 
-    const amt = (String(amount)).split(".")[0];
     // Verify hash with correct format
-    const generatedHash = generateCallbackHash({ ...paymentData, amount: amt});
+    const generatedHash = generateCallbackHash({ ...paymentData});
 
     console.log("PayU Has-->> ", hash)
     console.log("Re- Gen Hash-->>", generatedHash)
@@ -81,8 +92,8 @@ export const paymentSuccessCallback = async (req, res) => {
     
     if (generatedHash !== paymentData.hash) {
       console.error('Hash verification failed in callback');
-      console.log('Generated hash:', generatedHash.substring(0, 32) + '...');
-      console.log('Received hash:', paymentData.hash?.substring(0, 32) + '...');
+      console.log('Generated hash:', generatedHash);
+      console.log('Received hash:', paymentData.hash);
       return res.redirect(`${process.env.FRONTEND_URL}/payment/status?status=failed&reason=hash_mismatch`);
     }
     
@@ -126,10 +137,10 @@ export const paymentSuccessCallback = async (req, res) => {
       // Send confirmation
       if (order.contactNo) {
         try {
-          await sendSMS(
-            order.contactNo,
-            `Payment of ₹${order.totalAmount || order.price} successful. Order: ${order.order_id}, Txn: ${order.payment.transactionId}`
-          );
+          // await sendSMS(
+          //   order.contactNo,
+          //   `Payment of ₹${order.totalAmount || order.price} successful. Order: ${order.order_id}, Txn: ${order.payment.transactionId}`
+          // );
         } catch (smsError) {
           console.error('Failed to send SMS:', smsError.message);
         }
