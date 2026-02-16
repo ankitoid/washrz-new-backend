@@ -29,40 +29,20 @@ const generateHash = (data) => {
 };
 
 // For callback verification (what PayU sends back)
-const generateCallbackHash = (response) => {
-  const {
+const generateCallbackHash = (data) => {
+  console.log("data", data)
+    const {
     key,
     txnid,
     amount,
     productinfo,
     firstname,
     email,
-    status,
-  } = response;
-
-  const hashString =
-    process.env.PAYU_SALT + "|" +
-    status + "||||||" +   // ONLY 6 pipes here
-    "|" +                 // udf5
-    "|" +                 // udf4
-    "|" +                 // udf3
-    "|" +                 // udf2
-    "|" +                 // udf1
-    email + "|" +
-    firstname + "|" +
-    productinfo + "|" +
-    amount + "|" +
-    txnid + "|" +
-    key;
-
-  const calculatedHash = crypto
-    .createHash("sha512")
-    .update(hashString)
-    .digest("hex");
-
-
-  return calculatedHash
-};
+    status
+  } = data;
+  const hashStringSalt = `${process.env.PAYU_SALT}|${status}|||||||||||${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
+  return crypto.createHash('sha512').update(hashStringSalt).digest('hex');
+}
 
 // ==================== CALLBACK FUNCTIONS ====================
 
