@@ -79,14 +79,6 @@ export const paymentSuccessCallback = async (req, res) => {
     console.log("PayU Has-->> ", hash)
     console.log("Re- Gen Hash-->>", generatedHash)
 
-    console.log("obj-> ", {  key: key.trim(),
-    txnid: txnid.trim(),
-    amount: amt.trim(),
-    productinfo: productinfo.trim(),
-    firstname: firstname.trim(),
-    email: email.trim() })
-
-
     console.log("before-->> ", hash)
     console.log("after-->>", generatedHash)
     
