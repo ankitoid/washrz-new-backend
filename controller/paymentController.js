@@ -373,8 +373,10 @@ export const initiatePayment = async (req, res) => {
     
     // Generate hash with correct format
     paymentData.hash = generateHash(paymentData);
+
+    console.log("here is the paymentData", paymentData)
     
-    console.log('Payment hash generated:', paymentData.hash.substring(0, 32) + '...');
+    console.log('Payment hash generated:', paymentData.hash);
     
     // Save payment info to order
     order.payment = {
