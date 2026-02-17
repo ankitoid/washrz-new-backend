@@ -1014,3 +1014,50 @@ export const deleteOrderById = catchAsync(async (req, res, next) => {
     });
   }
 });
+
+export const getOrdersByEmailAndDate = catchAsync(async (req, res, next) => {
+  const { email, date } = req.query;
+
+  if (!email) return next(new AppError("Email is required", 400));
+  if (!date) return next(new AppError("Date is required (YYYY-MM-DD)", 400));
+
+  const user = await User.findOne({ email });
+  if (!user || !user.plant) {
+    return next(new AppError("User or Plant not found", 404));
+  }
+
+  const plantName = user.plant;
+
+  const startDate = new Date(date);
+  startDate.setHours(0, 0, 0, 0);
+
+  const endDate = new Date(date);
+  endDate.setHours(23, 59, 59, 999);
+
+  // ✅ Match if ANY statusHistory field falls in date range
+  const filter = {
+    plantName,
+    $or: [
+      { createdAt: { $gte: startDate, $lte: endDate } },
+      // { "statusHistory.processing": { $gte: startDate, $lte: endDate } },
+      // { "statusHistory.intransit": { $gte: startDate, $lte: endDate } },
+      // { "statusHistory.readyForDelivery": { $gte: startDate, $lte: endDate } },
+      // { "statusHistory.deliveryriderassigned": { $gte: startDate, $lte: endDate } },
+      // { "statusHistory.delivered": { $gte: startDate, $lte: endDate } },
+    ],
+  };
+
+  const features = new APIFeatures(order.find(filter), req.query)
+    .sort()
+    .paginate();
+
+  const orders = await features.query;
+
+  const total = await order.countDocuments(filter);
+
+  res.status(200).json({
+    orders,
+    total,
+    message: "Orders Retrieved Successfully",
+  });
+});
