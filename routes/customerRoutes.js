@@ -15,6 +15,7 @@ import {
   getOrderByOrderId,
   getOrderTotalBill,
   getOrders,
+  getOrdersByEmailAndDate,
   getOrdersByFilter,
   getPickupById,
   getPickups,
@@ -47,5 +48,6 @@ router.put("/changeOrderStatus/:id", changeOrderStatus);
 router.post("/get_order_by_id", getOrderByOrderId);
 router.put("/update_order_by_id/:id", updateOrderById);
 router.delete("/delete_order_by_id/:id", deleteOrderById);
+router.get("/getOrdersByEmailAndDate", getOrdersByEmailAndDate);
 
 export { router as default };
