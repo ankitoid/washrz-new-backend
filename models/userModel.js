@@ -47,6 +47,16 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, "Please Select your plant"],
   },
+
+  totalKm: {
+    type: Number,
+    default: 0,
+  },
+  lastResetAt: {
+    type: Date,
+    default: null,
+  },
+
   password: {
     type: String,
     required: [true, "Please provide a password"],

@@ -656,6 +656,77 @@ export const getRiderPickups = async (req, res) => {
   }
 };
 
+export const getRiderTasksById = async (req, res) => {
+  try {
+    const { riderId } = req.params;
+    const { date } = req.query; // optional: YYYY-MM-DD
+    console.log("Rider ID:", riderId, "Date:", date);
 
+    if (!riderId) {
+      return res.status(400).json({ message: "Rider ID is required" });
+    }
 
+    // 1️⃣ Get Rider Details
+    const rider = await User.findById(riderId).select(
+      "name email phone role plant"
+    );
 
+    if (!rider || rider.role !== "rider") {
+      return res.status(404).json({ message: "Rider not found" });
+    }
+
+    const riderName = rider.name;
+
+    // 2️⃣ Build filters
+    const pickupFilter = {
+      riderName,
+      isDeleted: false,
+    };
+
+    const orderFilter = {
+      riderName,
+    };
+
+    if (date) {
+      pickupFilter.riderDate = date;
+      orderFilter.riderDate = date;
+    }
+
+    // 3️⃣ Fetch data in parallel
+    const [pickups, deliveries] = await Promise.all([
+      Pickup.find(pickupFilter).sort({ createdAt: -1 }),
+      Order.find(orderFilter).sort({ createdAt: -1 }),
+    ]);
+
+    const totalCompletedPickups = pickups.filter(
+      (pickup) => pickup.PickupStatus === "complete"
+    ).length;
+
+    const totalCompletedDeliveries = deliveries.filter(
+      (delivery) => delivery.status === "delivered" 
+    ).length;
+
+    // 4️⃣ Response
+    res.status(200).json({
+      rider: {
+        id: rider._id,
+        name: rider.name,
+        email: rider.email,
+        phone: rider.phone,
+        plant: rider.plant,
+      },
+      summary: {
+        
+        totalPickups: pickups.length,
+        totalDeliveries: deliveries.length,
+        totalCompletedPickups,
+        totalCompletedDeliveries,
+      },
+      pickups,
+      deliveries,
+    });
+  } catch (error) {
+    console.error("Error fetching rider tasks:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};

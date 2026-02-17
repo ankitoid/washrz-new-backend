@@ -6,6 +6,7 @@ import {
   getRescheduledPickups,
   getRiderDashboardData,
   getRiderPickups,
+  getRiderTasksById,
   rescheduleOrder,
   reschedulePickup,
   uploadCancelInfo,
@@ -27,5 +28,6 @@ router.get("/rescheduled-Orders", getRescheduledOrders);
 router.get("/getCancelMedia/:pickupId", getCancelMedia);
 router.post("/uploadDeliverImage/:id", uploadDeliverImage);
 router.get("/rider-dashboard", getRiderDashboardData);
+router.get("/rider-tasks/:riderId", getRiderTasksById);
 
 export { router as default };
