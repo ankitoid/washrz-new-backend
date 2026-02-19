@@ -21,6 +21,7 @@ import {
   getSchedulePickups,
   updateOrderById,
   updatePickupById,
+  getOrdersByEmailAndDateRange
 } from "../controller/customerController.js";
 const router = express.Router();
 
@@ -47,5 +48,6 @@ router.post("/get_order_by_id", getOrderByOrderId);
 router.put("/update_order_by_id/:id", updateOrderById);
 router.delete("/delete_order_by_id/:id", deleteOrderById);
 router.get("/getOrdersByEmailAndDate", getOrdersByEmailAndDate);
+router.get("/getOrdersByEmailAndDateRange", getOrdersByEmailAndDateRange);
 
 export { router as default };

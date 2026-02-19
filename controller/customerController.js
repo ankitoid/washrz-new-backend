@@ -1058,3 +1058,61 @@ export const getOrdersByEmailAndDate = catchAsync(async (req, res, next) => {
     message: "Orders Retrieved Successfully",
   });
 });
+
+export const getOrdersByEmailAndDateRange = catchAsync(
+  async (req, res, next) => {
+    const {
+      email,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    if (!email) return next(new AppError("Email is required", 400));
+
+    const user = await User.findOne({ email });
+    if (!user || !user.plant) {
+      return next(new AppError("User or Plant not found", 404));
+    }
+
+    const plantName = user.plant;
+
+    let filter = { plantName };
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+
+      filter.$or = [
+        { createdAt: { $gte: start, $lte: end } },
+      ];
+    }
+
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const total = await order.countDocuments(filter);
+
+    const orders = await order
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNumber)
+      .lean();
+
+    res.status(200).json({
+      status: "success",
+      total,
+      page: pageNumber,
+      limit: limitNumber,
+      totalPages: Math.ceil(total / limitNumber),
+      results: orders.length,
+      orders,
+    });
+  }
+);
