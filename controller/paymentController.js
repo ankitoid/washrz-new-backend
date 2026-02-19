@@ -123,6 +123,20 @@ export const paymentSuccessCallback = async (req, res) => {
       }
       
       await order.save();
+
+// socket for real time update of the payment
+if (req.socket) {
+  req.socket.to("admin-dashboard").emit("paymentUpdate", {
+    orderId: order.order_id,
+    paymentStatus: order.payment.status,
+    isPaid: order.isPaid,
+    orderStatus: order.status,
+    amount: order.totalAmount || order.price,
+    transactionId: order.payment.transactionId,
+    time: new Date()
+  });
+}
+
       
       console.log(`✅ Payment successful for order ${order.order_id}`);
       
@@ -263,6 +277,21 @@ export const paymentWebhook = async (req, res) => {
       if (udf3) order.payment.udf3 = udf3;
       
       await order.save();
+
+
+//  REALTIME PAYMENT UPDATE TO ADMIN
+if (req.socket) {
+  req.socket.to("admin-dashboard").emit("paymentUpdate", {
+    orderId: order.order_id,
+    paymentStatus: order.payment.status,
+    isPaid: order.isPaid,
+    orderStatus: order.status,
+    amount: order.totalAmount || order.price,
+    transactionId: order.payment.transactionId,
+    time: new Date()
+  });
+}
+
       
       console.log(`✅ Webhook: Order ${order.order_id} marked as paid via webhook`);
       
@@ -522,6 +551,20 @@ export const markAsPaid = async (req, res) => {
     }
     
     await order.save();
+
+if (req.socket) {
+  req.socket.to("admin-dashboard").emit("paymentUpdate", {
+    orderId: order.order_id,
+    paymentStatus: "success",
+    isPaid: true,
+    orderStatus: order.status,
+    amount: order.totalAmount || order.price,
+    transactionId: order.payment.transactionId,
+    manual: true,
+    time: new Date()
+  });
+}
+
     
     res.status(200).json({
       success: true,
