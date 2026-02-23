@@ -1059,12 +1059,15 @@ export const getOrdersByEmailAndDate = catchAsync(async (req, res, next) => {
   });
 });
 
+
 export const getOrdersByEmailAndDateRange = catchAsync(
   async (req, res, next) => {
     const {
       email,
       startDate,
       endDate,
+      status,
+      search,
       page = 1,
       limit = 10,
     } = req.query;
@@ -1080,6 +1083,7 @@ export const getOrdersByEmailAndDateRange = catchAsync(
 
     let filter = { plantName };
 
+
     if (startDate && endDate) {
       const start = new Date(startDate);
       start.setHours(0, 0, 0, 0);
@@ -1087,8 +1091,21 @@ export const getOrdersByEmailAndDateRange = catchAsync(
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
 
+      filter.createdAt = { $gte: start, $lte: end };
+    }
+
+
+    if (status && status !== "All Orders") {
+      filter.status = status;
+    }
+
+
+    if (search) {
       filter.$or = [
-        { createdAt: { $gte: start, $lte: end } },
+        { order_id: { $regex: search, $options: "i" } },
+        { customerName: { $regex: search, $options: "i" } },
+        { contactNo: { $regex: search, $options: "i" } },
+        { address: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -1105,6 +1122,19 @@ export const getOrdersByEmailAndDateRange = catchAsync(
       .limit(limitNumber)
       .lean();
 
+    const revenueData = await order.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$price" },
+        },
+      },
+    ]);
+
+    const totalRevenue =
+      revenueData.length > 0 ? revenueData[0].totalRevenue : 0;
+
     res.status(200).json({
       status: "success",
       total,
@@ -1112,6 +1142,7 @@ export const getOrdersByEmailAndDateRange = catchAsync(
       limit: limitNumber,
       totalPages: Math.ceil(total / limitNumber),
       results: orders.length,
+      totalRevenue,
       orders,
     });
   }
