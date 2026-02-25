@@ -4,6 +4,7 @@ import Plant from "../models/plantSchema.js";
 import User from "../models/userModel.js";
 import cron from "node-cron";
 import fcmService from "../services/fcmService.js";
+import RiderLocation from "../models/riderLocationSchema.js";
 
 // Create a new plant
 export const addPlant = async (req, res) => {
@@ -85,10 +86,113 @@ export const assignPlant = async (req, res) => {
 
 export const getRiders = async (req, res) => {
   try {
-    // Fetch all users with role 'rider'
-    const riders = await User.find({ role: "rider" });
-    res.status(200).json(riders);
+    const riders = await User.find({ role: "rider" }).lean();
+    const riderIds = riders.map(r => r._id);
+    const riderNames = riders.map(r => r.name);
+
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "Asia/Kolkata"
+    });
+
+    const latestLocations = await RiderLocation.aggregate([
+      { $match: { riderId: { $in: riderIds } } },
+      { $sort: { lastUpdate: -1 } },
+      {
+        $group: {
+          _id: "$riderId",
+          latestLocation: { $first: "$$ROOT" }
+        }
+      }
+    ]);
+
+    const locationMap = {};
+    latestLocations.forEach(loc => {
+      locationMap[loc._id.toString()] = loc.latestLocation;
+    });
+
+    const pickupMatch = {
+      riderName: { $in: riderNames },
+      isDeleted: false,
+      riderDate: today
+    };
+
+    const orderMatch = {
+      riderName: { $in: riderNames },
+      riderDate: today
+    };
+
+    const pickupSummary = await Pickup.aggregate([
+      { $match: pickupMatch },
+      {
+        $group: {
+          _id: "$riderName",
+          totalPickups: { $sum: 1 },
+          totalCompletedPickups: {
+            $sum: {
+              $cond: [{ $eq: ["$PickupStatus", "complete"] }, 1, 0]
+            }
+          }
+        }
+      }
+    ]);
+
+    const pickupMap = {};
+    pickupSummary.forEach(p => {
+      pickupMap[p._id] = p;
+    });
+
+    const deliverySummary = await Order.aggregate([
+      { $match: orderMatch },
+      {
+        $group: {
+          _id: "$riderName",
+          totalDeliveries: { $sum: 1 },
+          totalCompletedDeliveries: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "delivered"] }, 1, 0]
+            }
+          }
+        }
+      }
+    ]);
+
+    const deliveryMap = {};
+    deliverySummary.forEach(d => {
+      deliveryMap[d._id] = d;
+    });
+
+    const ridersWithLocation = riders.map(rider => {
+      const location = locationMap[rider._id.toString()];
+      const pickupData = pickupMap[rider.name] || {};
+      const deliveryData = deliveryMap[rider.name] || {};
+
+      return {
+        ...rider,
+
+        currentLocation: location?.location
+          ? {
+              lat: location.location.coordinates[1],
+              lng: location.location.coordinates[0],
+            }
+          : null,
+
+        lastUpdate: location?.lastUpdate || null,
+
+        summary: {
+          totalPickups: pickupData.totalPickups || 0,
+          totalDeliveries: deliveryData.totalDeliveries || 0,
+          totalCompletedPickups:
+            pickupData.totalCompletedPickups || 0,
+          totalCompletedDeliveries:
+            deliveryData.totalCompletedDeliveries || 0,
+        }
+      };
+    });
+
+    res.status(200).json(ridersWithLocation);
+
   } catch (error) {
+    console.error("Error in getRiders:", error);
     res.status(500).json({
       status: "error",
       message: error.message,
