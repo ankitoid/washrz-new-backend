@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "aws-sdk": "^2.1687.0",
+    "axios": "^1.13.5",
     "bcryptjs": "^2.4.3",
     "body-parser": "^2.2.0",
     "cookie-parser": "^1.4.6",
