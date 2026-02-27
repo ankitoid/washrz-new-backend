@@ -8,6 +8,30 @@ import cron from "node-cron";
 import User from "./../models/userModel.js";
 import mongoose from "mongoose";
 import ErrorHandler from "../utills/errorHandler.js";
+import AWS from "aws-sdk";
+import multer from "multer";
+
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_S3_SECRET_ACCESS_KEY,
+  region: process.env.AWS_S3_REGION,
+});
+
+const uploadVoice = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+}).single("voice");
+
+const uploadToS3 = (file, folder = "pickupCancelVoices") => {
+  const params = {
+    Bucket: process.env.AWS_S3_BUCKET_NAME,
+    Key: `${folder}/${Date.now()}_${file.originalname}`,
+    Body: file.buffer,
+    ContentType: file.mimetype,
+    ContentDisposition: 'inline', 
+  };
+  return s3.upload(params).promise();
+};
 
 export const addCustomer = catchAsync(async (req, res, next) => {
   const { name, address, mobile, date } = req.body;
@@ -104,14 +128,12 @@ export const addPickup = catchAsync(async (req, res, next) => {
 //   });
 // });
 export const getPickups = catchAsync(async (req, res, next) => {
-  const { date,status} = req.query; // Date filter from query and status filter
+  const { date, status } = req.query; // Date filter from query and status filter
   const startDate = date ? new Date(date) : new Date(); // Default to current date
   startDate.setHours(0, 0, 0, 0);
   const endDate = new Date();
 
-  console.log('this is status==>>',status,startDate,endDate)
-
-    // ✅ Base filter
+  // ✅ Base filter
   const baseFilter = {
     PickupStatus: status,
     type: "live",
@@ -123,13 +145,12 @@ export const getPickups = catchAsync(async (req, res, next) => {
     baseFilter.pickup_date = { $gte: startDate, $lte: endDate };
   }
 
-  if(status === "deleted")
-  {
+  if (status === "deleted") {
     baseFilter.type = "",
-    baseFilter.isDeleted = true
+      baseFilter.isDeleted = true
   }
 
-  
+
   const [pickups, countTotal] = await Promise.all([
     new APIFeatures(
       pickup.find(baseFilter),
@@ -145,7 +166,7 @@ export const getPickups = catchAsync(async (req, res, next) => {
       isRescheduled: false,
       pickup_date: { $gte: startDate, $lte: endDate },
     }),
-  ]);  
+  ]);
 
   res.status(200).json({
     Pickups: pickups,
@@ -154,46 +175,44 @@ export const getPickups = catchAsync(async (req, res, next) => {
   });
 });
 
-export const getPickupById = catchAsync(async (req,res,next) =>
-{
- try {
-   const {id} = req.params;
+export const getPickupById = catchAsync(async (req, res, next) => {
+  try {
+    const { id } = req.params;
 
-  const requiredPickup = await pickup.findById(id);
+    const requiredPickup = await pickup.findById(id);
 
-  if(!requiredPickup){
-    return res.status(404).json({ message: "Pickup not found" });
+    if (!requiredPickup) {
+      return res.status(404).json({ message: "Pickup not found" });
+    }
+
+    res.status(200).json({ message: "Pickup retrived successfully!", data: requiredPickup });
+  } catch (error) {
+    console.log("this is the error==>>", error)
   }
-
-  res.status(200).json({ message: "Pickup retrived successfully!" ,data:requiredPickup });
- } catch (error) {
-  console.log("this is the error==>>",error)
- }
 });
 
 
-export const updatePickupById = catchAsync(async (req,res,next) =>
-{
- try {
-   const {id} = req.params;
+export const updatePickupById = catchAsync(async (req, res, next) => {
+  try {
+    const { id } = req.params;
 
-   const {name,address} = req.body
+    const { name, address } = req.body
 
-   console.log("this is the resss-->>>",id,name,address)
+    console.log("this is the resss-->>>", id, name, address)
 
-  const requiredPickup = await pickup.findByIdAndUpdate(id,{
-    Name : name,
-    Address : address
-  });
+    const requiredPickup = await pickup.findByIdAndUpdate(id, {
+      Name: name,
+      Address: address
+    });
 
-  if(!requiredPickup){
-    return res.status(404).json({ message: "no data found to edit!" });
+    if (!requiredPickup) {
+      return res.status(404).json({ message: "no data found to edit!" });
+    }
+
+    res.status(200).json({ message: "Address Edited Sucessfully !", data: requiredPickup });
+  } catch (error) {
+    console.log("this is the error==>>", error)
   }
-
-  res.status(200).json({ message: "Address Edited Sucessfully !" ,data:requiredPickup });
- } catch (error) {
-  console.log("this is the error==>>",error)
- }
 });
 
 export const getAssignedPickups = catchAsync(async (req, res, next) => {
@@ -309,30 +328,81 @@ export const getAssignedPickups = catchAsync(async (req, res, next) => {
 });
 
 export const deletePickup = catchAsync(async (req, res, next) => {
-  const pickupData = await pickup.findByIdAndUpdate(req.params.id, {
-    isDeleted: true,
-    PickupStatus: "deleted",
-    type: "",
-  });
-  if (!pickupData) {
-    return next(new AppError("No pickup found with that ID", 404));
-  }
-  res.status(200).json({
-    message: "Pickup Deleted Sucessfully",
+  uploadVoice(req, res, async (multerErr) => {
+    try {
+      if (multerErr) {
+        console.error("multer error", multerErr);
+        return next(new AppError("Error uploading voice file", 400));
+      }
+      const { id } = req.params;
+      const note = (req.body.note || "").trim();
+      const { userName, userRole } = req.body;
+      if (!userName || !userRole) {
+        return next(new AppError("User information (userName, userRole) is required", 400));
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(String(id || "").trim())) {
+        return next(new AppError("Invalid pickup id provided.", 400));
+      }
+
+      let voiceUrl = null;
+      if (req.file) {
+        const voiceUploadResult = await uploadToS3(req.file, "pickupCancelVoices");
+        voiceUrl = voiceUploadResult.Location;
+      } else if (Array.isArray(req.files) && req.files.length > 0) {
+        const voiceUploadResult = await uploadToS3(req.files[0], "pickupCancelVoices");
+        voiceUrl = voiceUploadResult.Location;
+      }
+      if (!note && !voiceUrl) {
+        return next(
+          new AppError("Either cancellation note or voice note is required.", 400)
+        );
+      }
+      const updated = await pickup.findByIdAndUpdate(
+        id,
+        {
+          isDeleted: true,
+          PickupStatus: "deleted",
+          type: "",
+          cancelNote: note || null,
+          cancelVoice: voiceUrl || null,
+          cancelledBy: {
+            name: userName,
+            role: userRole,
+          },
+          cancelledAt: new Date(),
+        },
+        { new: true }
+      );
+
+      if (!updated) {
+        return next(new AppError("No pickup found with that ID", 404));
+      }
+
+      if (req.socket) {
+        req.socket.emit("pickupCancelled", { pickupId: id, cancelledBy: userName });
+      }
+
+      return res.status(200).json({
+        message: "Pickup cancelled successfully",
+        pickup: updated,
+      });
+    } catch (err) {
+      console.error("deletePickup error:", err);
+      return next(new AppError("Internal server error", 500));
+    }
   });
 });
 
 export const completePickup = catchAsync(async (req, res, next) => {
   const pickupData = await pickup.findByIdAndUpdate(req.params.id, {
-    // isDeleted: true,
     PickupStatus: "complete",
-    // type: "",
   });
   if (!pickupData) {
     return next(new AppError("No pickup found with that ID", 404));
   }
   res.status(200).json({
-    message: "Pickup Deleted Sucessfully",
+    message: "Pickup Completed Sucessfully",
   });
 });
 
@@ -351,7 +421,7 @@ export const addSchedulePickup = catchAsync(async (req, res, next) => {
   req.socket.emit("addSchedulePickup", schedulePickupData);
   res.status(200).json({
     message: "SchedulePickup Added Sucessfully",
-    data:schedulePickupData
+    data: schedulePickupData
   });
 });
 
@@ -635,52 +705,52 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
   }
 
   // delivery rider assigned
-if (req.query.status === "delivery rider assigned") {
-  const status = req.query.status;
-  if (user.role === "admin" || user.role === "plant-manager") {
-    const [orders, countTotal] = await Promise.all([
-      new APIFeatures(
-        order.find({ status, plantName }),
-        req.query
-      ).sort().limitFields().paginate().query,
-      order.countDocuments({ status, plantName }),
-    ]);
- 
-    return res.status(200).json({
-      orders,
-      total: countTotal,
-      message: "Orders retrieved successfully",
-    });
-  }
- 
-  if (user.role === "rider") {
-    const riderName = user.name;
- 
-    const [orders, countTotal] = await Promise.all([
-      new APIFeatures(
-        order.find({
+  if (req.query.status === "delivery rider assigned") {
+    const status = req.query.status;
+    if (user.role === "admin" || user.role === "plant-manager") {
+      const [orders, countTotal] = await Promise.all([
+        new APIFeatures(
+          order.find({ status, plantName }),
+          req.query
+        ).sort().limitFields().paginate().query,
+        order.countDocuments({ status, plantName }),
+      ]);
+
+      return res.status(200).json({
+        orders,
+        total: countTotal,
+        message: "Orders retrieved successfully",
+      });
+    }
+
+    if (user.role === "rider") {
+      const riderName = user.name;
+
+      const [orders, countTotal] = await Promise.all([
+        new APIFeatures(
+          order.find({
+            status,
+            // plantName,
+            riderName,
+          }),
+          req.query
+        ).sort().limitFields().paginate().query,
+        order.countDocuments({
           status,
           // plantName,
           riderName,
         }),
-        req.query
-      ).sort().limitFields().paginate().query,
-      order.countDocuments({
-        status,
-        // plantName,
-        riderName,
-      }),
-    ]);
- 
-    return res.status(200).json({
-      orders,
-      total: countTotal,
-      message: "Orders retrieved successfully",
-    });
-  }
-}
+      ]);
 
-if (req.query.status === "cancelled") {
+      return res.status(200).json({
+        orders,
+        total: countTotal,
+        message: "Orders retrieved successfully",
+      });
+    }
+  }
+
+  if (req.query.status === "cancelled") {
     if (user.role === "admin" || user.role === "plant-manager") {
       const status = req.query.status;
       const [orders, countTotal] = await Promise.all([
@@ -690,19 +760,19 @@ if (req.query.status === "cancelled") {
           .paginate().query,
         order.countDocuments({ status, plantName: plantName }),
       ]);
- 
+
       return res.status(200).json({
         orders,
         total: countTotal,
         message: "Orders retrieved successfully",
       });
     }
- 
+
     return res
       .status(403)
       .json({ message: "Not authorized to view cancelled orders" });
   }
- 
+
 
   if (req.query.status === "delivered") {
     const dateStr = req.query.date || new Date().toISOString().split("T")[0];
@@ -710,7 +780,7 @@ if (req.query.status === "cancelled") {
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
- 
+
     const deliveredDateFilter = {
       "statusHistory.delivered": { $gte: start, $lt: end },
     };
@@ -728,7 +798,7 @@ if (req.query.status === "cancelled") {
           .paginate().query,
         order.countDocuments(baseFilter),
       ]);
- 
+
       return res.status(200).json({
         orders,
         total: countTotal,
@@ -739,8 +809,8 @@ if (req.query.status === "cancelled") {
       .status(403)
       .json({ message: "Not authorized to view delivered orders" });
   }
- 
- 
+
+
   // delivered
   // if (req.query.status === "delivered") {
   //   if (user.role === "admin" || user.role === "plant-manager") {

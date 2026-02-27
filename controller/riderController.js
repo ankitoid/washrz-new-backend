@@ -111,6 +111,15 @@ export const uploadFiles = (req, res, next) => {
         order_id = "WZ" + order_id;
       }
 
+      let statusHistory = {
+        intransit: null,
+        processing: new Date(),
+        readyForDelivery: null,
+        deliveryriderassigned: null,
+        delivered: null,
+        cancelled: null
+      }
+
       // Create a new order in the database
       await Order.create({
         contactNo: parsedCurrObj.contactNo,
@@ -122,7 +131,8 @@ export const uploadFiles = (req, res, next) => {
         intransitVoice: voiceUpload?.Location || null,
         intransitImage: imageUrls, // Save array of image URLs
         plantName: parsedCurrObj.plantName,
-        orderLocation: parsedLocation, // Optional location
+        orderLocation: parsedLocation,
+        statusHistory,
       });
 
       res.status(200).json({
@@ -703,7 +713,7 @@ export const getRiderTasksById = async (req, res) => {
     ).length;
 
     const totalCompletedDeliveries = deliveries.filter(
-      (delivery) => delivery.status === "delivered" 
+      (delivery) => delivery.status === "delivered"
     ).length;
 
     // 4️⃣ Response
@@ -716,7 +726,7 @@ export const getRiderTasksById = async (req, res) => {
         plant: rider.plant,
       },
       summary: {
-        
+
         totalPickups: pickups.length,
         totalDeliveries: deliveries.length,
         totalCompletedPickups,
