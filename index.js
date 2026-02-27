@@ -20,6 +20,7 @@ import pushTokenRoutes from "./routes/pushTokenRoutes.js";
 import User from "./models/userModel.js";
 import fcmService from "./services/fcmService.js";
 import debugRoutes from "./routes/debugRoutes.js";
+import osrmRoutes from "./routes/osrmRoutes.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -463,6 +464,7 @@ app.use("/api/v1/rider", riderRoutes);
 app.use("/api/v1/location", riderLocationRoutes);
 app.use("/api/v1/plant", plantRoutes);
 app.use("/api/v1", revenueRoutes);
+app.use("/api/v1/osrm", osrmRoutes);
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
