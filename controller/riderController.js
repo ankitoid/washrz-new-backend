@@ -76,16 +76,42 @@ export const uploadFiles = (req, res, next) => {
       // Parse the stringified currObj
       const parsedCurrObj = JSON.parse(currObj);
 
+
+      const pickup_details_arr = await Pickup.find({_id : parsedCurrObj.id})
+
+
+      const pickup_details = pickup_details_arr[0]
+
+      if(pickup_details?.appCustomerId || pickup_details?.platform_type === 'app')
+      {
+        parsedCurrObj.address = pickup_details?.deliveryAddress
+      }
+
       // Parse location only if it exists
       let parsedLocation = null;
+
+      if(pickup_details?.appCustomerId || pickup_details?.platform_type === 'app')
+      {
+        let app_del_location =  {
+        latitude : pickup_details?.deliveryLocation?.latitude,
+        longitude : pickup_details?.deliveryLocation?.longitude
+      }
+
+       parsedLocation = app_del_location
+      }
+       
+
+
+
       if (location) {
         parsedLocation = JSON.parse(location);
       }
 
+
       // Ensure parsedCurrObj is an object
       if (!parsedCurrObj || typeof parsedCurrObj !== "object") {
         return res.status(400).json({ message: "Invalid currObj format." });
-      }
+      } 
 
       // Upload multiple images to S3
       const imageUploads = await Promise.all(

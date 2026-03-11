@@ -4,8 +4,11 @@ import "./database.js";
 import authRoutes from "./routes/authRoutes.js";
 import riderRoutes from "./routes/riderRoutes.js";
 import plantRoutes from "./routes/plantRoutes.js";
+import customerAppRoutes from "./routes/customerAppRoutes.js"
 import customerRoutes from "./routes/customerRoutes.js";
 import revenueRoutes from "./routes/revenueRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
+import qrRoutes from "./routes/qrRoutes.js";
 import AppError from "./utills/appError.js";
 import tripRoutes from "./routes/tripRoutes.js";
 import http from "http";
@@ -25,7 +28,7 @@ import osrmRoutes from "./routes/osrmRoutes.js";
 const app = express();
 const server = http.createServer(app);
 app.use(cookies());
-
+console.log("changed--------------------------")
 app.use(
   cors({
     origin: [
@@ -41,12 +44,6 @@ app.use(
       "http://localhost:5173",
       "https://new.drydash.in",
       "http://localhost:8081",
-      "http://localhost:5174", // Your React admin dev server
-      "https://admin.drydash.in", // Your admin production URL
-      "https://drydash-admin.vercel.app", // If using Vercel
-      // ADD FOR RIDER APP
-      "exp://192.168.10.215:8081", // Expo local development
-      "http://192.168.10.215:8081", // Expo web
     ],
     methods: "GET, POST, PUT, DELETE, PATCH",
     credentials: true, // Allow credentials (cookies) to be sent with the request
@@ -131,7 +128,7 @@ app.use(express.json({ limit: '100mb' }));
 app.use(addSocketToRequest(io));
 app.post("/send", (req, res) => {
   const message = req.body.message;
-  console.log("testing", req.body.message);
+  // console.log("testing", req.body.message);
 
   io.emit("pushNotification", {
     message,
@@ -140,12 +137,12 @@ app.post("/send", (req, res) => {
     message: "Sent Successfully",
   });
 
-  // io.on("connection", (socket) => {
-  //   console.log("Connected");
-  //   socket.on("disconnect", () => {
-  //     console.log("Client disconnected");
-  //   });
-  // });
+  io.on("connection", (socket) => {
+    // console.log("Connected");
+    socket.on("disconnect", () => {
+      // console.log("Client disconnected");
+    });
+  });
 });
 
 // In-memory fast-access store for active riders
@@ -154,6 +151,7 @@ io.sockets.activeRiderLocations = activeRiderLocations;
 const adminRooms = new Set();
 
 io.on("connection", (socket) => {
+  // console.log("hii this is the socket id--->> ", socket.id);
   socket.emit("backendMessage", { message: "a new client connected" });
 
   // Rider joins its room
@@ -319,7 +317,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    if (adminRooms.has(socket.id)) adminRooms.delete(socket.id);
+    // console.log("Client disconnected:", socket.id);
   });
 });
 
@@ -459,11 +457,14 @@ app.use("/api/v1/debug", debugRoutes);
 app.use("/api/v1/rider/push-tokens", pushTokenRoutes);
 app.use("/api/v1/trips", tripRoutes);
 app.use("/api/v1", customerRoutes);
+app.use("/api/app",customerAppRoutes)
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/rider", riderRoutes);
 app.use("/api/v1/location", riderLocationRoutes);
 app.use("/api/v1/plant", plantRoutes);
 app.use("/api/v1", revenueRoutes);
+app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/qr', qrRoutes);
 app.use("/api/v1/osrm", osrmRoutes);
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
@@ -475,6 +476,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-server.listen(process.env.PORT || 5000, () => {
+server.listen(process.env.PORT || 5002, () => {
   console.log(`Server is running on port: ${process.env.PORT}`);
 });
