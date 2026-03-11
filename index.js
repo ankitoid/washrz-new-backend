@@ -26,6 +26,8 @@ import debugRoutes from "./routes/debugRoutes.js";
 import osrmRoutes from "./routes/osrmRoutes.js";
 
 const app = express();
+
+console.log("just changed")
 const server = http.createServer(app);
 app.use(cookies());
 
