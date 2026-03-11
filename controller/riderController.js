@@ -137,36 +137,29 @@ export const uploadFiles = (req, res, next) => {
         order_id = "WZ" + order_id;
       }
 
-
-  const order_Obj = {
-                   contactNo: parsedCurrObj.contactNo,
-                   customerName: parsedCurrObj.customerName,
-                   address: parsedCurrObj.address,
-                   items: parsedCurrObj.items,
-                   price: price, // From req.body
-                   order_id,
-                   intransitVoice: voiceUpload?.Location || null,
-                   intransitImage: imageUrls, // Save array of image URLs
-                   plantName: parsedCurrObj.plantName,
-                   orderLocation: parsedLocation, // Optional location
-                   appCustomerId : pickup_details?.appCustomerId
-                 }
-
-      if(pickup_details?.appCustomerId || pickup_details?.platform_type === 'app')
-      {
-        order_Obj.platform_type = "app"
-        order_Obj.note = pickup_details?.note
-        order_Obj.appCustomerId = pickup_details?.appCustomerId
-        order_Obj.tempPickupAdresssId = pickup_details?.tempPickupAdresssId
-        order_Obj.tempDeliveryAddressId = pickup_details?.tempDeliveryAddressId
+      let statusHistory = {
+        intransit: null,
+        processing: new Date(),
+        readyForDelivery: null,
+        deliveryriderassigned: null,
+        delivered: null,
+        cancelled: null
       }
 
-      console.log('this is the order_Obj',order_Obj)
-
-      // return
-
       // Create a new order in the database
-      await Order.create(order_Obj);
+      await Order.create({
+        contactNo: parsedCurrObj.contactNo,
+        customerName: parsedCurrObj.customerName,
+        address: parsedCurrObj.address,
+        items: parsedCurrObj.items,
+        price: price, // From req.body
+        order_id,
+        intransitVoice: voiceUpload?.Location || null,
+        intransitImage: imageUrls, // Save array of image URLs
+        plantName: parsedCurrObj.plantName,
+        orderLocation: parsedLocation,
+        statusHistory,
+      });
 
       res.status(200).json({
         message: "Files uploaded and order status updated to processing.",
@@ -746,7 +739,7 @@ export const getRiderTasksById = async (req, res) => {
     ).length;
 
     const totalCompletedDeliveries = deliveries.filter(
-      (delivery) => delivery.status === "delivered" 
+      (delivery) => delivery.status === "delivered"
     ).length;
 
     // 4️⃣ Response
@@ -759,7 +752,7 @@ export const getRiderTasksById = async (req, res) => {
         plant: rider.plant,
       },
       summary: {
-        
+
         totalPickups: pickups.length,
         totalDeliveries: deliveries.length,
         totalCompletedPickups,
