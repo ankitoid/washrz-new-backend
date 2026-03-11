@@ -166,17 +166,18 @@ const orderSchema = new Schema(
     // ========== ORDER STATUS ==========
     status: {
       type: String,
-      enum: [
-        "pending", 
-        "confirmed", 
-        "processing", 
-        "ready_for_delivery",
-        "out_for_delivery", 
-        "delivered", 
-        "cancelled", 
-        "refunded"
-      ],
-      default: "pending"
+      // enum: [
+      //   "pending", 
+      //   "confirmed", 
+      //   "processing", 
+      //   "ready_for_delivery",
+      //   "out_for_delivery", 
+      //   "delivered", 
+      //   "cancelled", 
+      //   "refunded"
+      // ],
+      enum: ["intransit", "processing", "ready for delivery","delivery rider assigned", "delivered","cancelled"],
+      default: "processing"
     },
     
     statusHistory: statusHistorySchema,
