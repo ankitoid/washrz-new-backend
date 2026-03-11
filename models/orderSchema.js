@@ -11,7 +11,7 @@ const itemSchema = new Schema({
   quantity: { type: Number, default: 1 },
   price: { type: Number, required: true },
   newQtyPrice: { type: Number, default: 0 },
-  type: String
+  type: {type: String, default: ''}
 }, { _id: false });
 
 const paymentMethodDetailsSchema = new Schema({
