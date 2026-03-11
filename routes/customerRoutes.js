@@ -3,6 +3,7 @@ import {
   addCustomer,
   addOrder,
   addPickup,
+  addPickupthroughApp,
   addSchedulePickup,
   changeOrderStatus,
   completePickup,
@@ -26,6 +27,7 @@ import {
 const router = express.Router();
 
 router.post("/addPickup", addPickup);
+router.post("/addPickupThroughApp",addPickupthroughApp)
 router.get("/getPickups", getPickups);
 router.get("/getAssignedPickups", getAssignedPickups);
 router.post("/addSchedulePickup", addSchedulePickup);
