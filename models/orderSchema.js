@@ -10,7 +10,8 @@ const itemSchema = new Schema({
   viewPrice: String,
   quantity: { type: Number, default: 1 },
   price: { type: Number, required: true },
-  newQtyPrice: { type: Number, default: 0 }
+  newQtyPrice: { type: Number, default: 0 },
+  type: String
 }, { _id: false });
 
 const paymentMethodDetailsSchema = new Schema({
