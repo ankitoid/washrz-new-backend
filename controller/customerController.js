@@ -578,70 +578,84 @@ export const getAssignedPickups = catchAsync(async (req, res, next) => {
   }
 });
 
+// export const deletePickup = catchAsync(async (req, res, next) => {
+//   uploadVoice(req, res, async (multerErr) => {
+//     try {
+//       if (multerErr) {
+//         console.error("multer error", multerErr);
+//         return next(new AppError("Error uploading voice file", 400));
+//       }
+//       const { id } = req.params;
+//       const note = (req.body.note || "").trim();
+//       const { userName, userRole } = req.body;
+//       if (!userName || !userRole) {
+//         return next(new AppError("User information (userName, userRole) is required", 400));
+//       }
+
+//       if (!mongoose.Types.ObjectId.isValid(String(id || "").trim())) {
+//         return next(new AppError("Invalid pickup id provided.", 400));
+//       }
+
+//       let voiceUrl = null;
+//       if (req.file) {
+//         const voiceUploadResult = await uploadToS3(req.file, "pickupCancelVoices");
+//         voiceUrl = voiceUploadResult.Location;
+//       } else if (Array.isArray(req.files) && req.files.length > 0) {
+//         const voiceUploadResult = await uploadToS3(req.files[0], "pickupCancelVoices");
+//         voiceUrl = voiceUploadResult.Location;
+//       }
+//       if (!note && !voiceUrl) {
+//         return next(
+//           new AppError("Either cancellation note or voice note is required.", 400)
+//         );
+//       }
+//       const updated = await pickup.findByIdAndUpdate(
+//         id,
+//         {
+//           isDeleted: true,
+//           PickupStatus: "deleted",
+//           type: "",
+//           cancelNote: note || null,
+//           cancelVoice: voiceUrl || null,
+//           cancelledBy: {
+//             name: userName,
+//             role: userRole,
+//           },
+//           cancelledAt: new Date(),
+//         },
+//         { new: true }
+//       );
+
+//       if (!updated) {
+//         return next(new AppError("No pickup found with that ID", 404));
+//       }
+
+//       if (req.socket) {
+//         req.socket.emit("pickupCancelled", { pickupId: id, cancelledBy: userName });
+//       }
+
+//       return res.status(200).json({
+//         message: "Pickup cancelled successfully",
+//         pickup: updated,
+//       });
+//     } catch (err) {
+//       console.error("deletePickup error:", err);
+//       return next(new AppError("Internal server error", 500));
+//     }
+//   });
+// });
+
 export const deletePickup = catchAsync(async (req, res, next) => {
-  uploadVoice(req, res, async (multerErr) => {
-    try {
-      if (multerErr) {
-        console.error("multer error", multerErr);
-        return next(new AppError("Error uploading voice file", 400));
-      }
-      const { id } = req.params;
-      const note = (req.body.note || "").trim();
-      const { userName, userRole } = req.body;
-      if (!userName || !userRole) {
-        return next(new AppError("User information (userName, userRole) is required", 400));
-      }
-
-      if (!mongoose.Types.ObjectId.isValid(String(id || "").trim())) {
-        return next(new AppError("Invalid pickup id provided.", 400));
-      }
-
-      let voiceUrl = null;
-      if (req.file) {
-        const voiceUploadResult = await uploadToS3(req.file, "pickupCancelVoices");
-        voiceUrl = voiceUploadResult.Location;
-      } else if (Array.isArray(req.files) && req.files.length > 0) {
-        const voiceUploadResult = await uploadToS3(req.files[0], "pickupCancelVoices");
-        voiceUrl = voiceUploadResult.Location;
-      }
-      if (!note && !voiceUrl) {
-        return next(
-          new AppError("Either cancellation note or voice note is required.", 400)
-        );
-      }
-      const updated = await pickup.findByIdAndUpdate(
-        id,
-        {
-          isDeleted: true,
-          PickupStatus: "deleted",
-          type: "",
-          cancelNote: note || null,
-          cancelVoice: voiceUrl || null,
-          cancelledBy: {
-            name: userName,
-            role: userRole,
-          },
-          cancelledAt: new Date(),
-        },
-        { new: true }
-      );
-
-      if (!updated) {
-        return next(new AppError("No pickup found with that ID", 404));
-      }
-
-      if (req.socket) {
-        req.socket.emit("pickupCancelled", { pickupId: id, cancelledBy: userName });
-      }
-
-      return res.status(200).json({
-        message: "Pickup cancelled successfully",
-        pickup: updated,
-      });
-    } catch (err) {
-      console.error("deletePickup error:", err);
-      return next(new AppError("Internal server error", 500));
-    }
+  const pickupData = await pickup.findByIdAndUpdate(req.params.id, {
+    isDeleted: true,
+    PickupStatus: "deleted",
+    type: "",
+  });
+  if (!pickupData) {
+    return next(new AppError("No pickup found with that ID", 404));
+  }
+  res.status(200).json({
+    message: "Pickup Deleted Sucessfully",
   });
 });
 
