@@ -27,60 +27,39 @@ const paymentMethodDetailsSchema = new Schema({
 }, { _id: false });
 
 const paymentSchema = new Schema({
-  // Payment Identification
-  paymentId: { type: String }, // Your internal payment ID
-  transactionId: String, // PayU transaction ID (mihpayid)
-  bankRefNum: String, // Bank reference number
-  
-  // Payment Details
+  paymentId: { type: String },
+  transactionId: String,
+  bankRefNum: String,
+
+  // Razorpay fields (NEW - safe addition)
+  razorpayOrderId: { type: String },
+  razorpayPaymentId: { type: String },
+  razorpaySignature: { type: String },
+
   amount: { type: Number },
   currency: { type: String, default: "INR" },
+
   paymentMode: {
     type: String,
     enum: [
-      "credit_card", "debit_card", "netbanking", "upi", 
-      "wallet", "emi", "cash", "upi_qr", "unknown"
+      "credit_card","debit_card","netbanking","upi",
+      "wallet","emi","cash","upi_qr","unknown"
     ],
     default: "unknown"
   },
+
   paymentGateway: {
     type: String,
-    enum: ["payu", "razorpay", "cash", "upi_qr"],
+    enum: ["payu","razorpay","cash","upi_qr"],
     default: "payu"
   },
+
   status: {
     type: String,
-    enum: ["pending", "processing", "success", "failed", "cancelled", "refunded"],
+    enum: ["pending","processing","success","failed","cancelled","refunded"],
     default: "pending"
-  },
-  
-  // Method Details
-  methodDetails: paymentMethodDetailsSchema,
-  
-  // Timestamps
-  initiatedAt: { type: Date, default: Date.now },
-  completedAt: Date,
-  
-  // Gateway Response
-  gatewayResponse: Schema.Types.Mixed,
-  hash: String,
-  
-  // Error Details
-  errorCode: String,
-  errorMessage: String,
-  
-  // Additional Info
-  discount: Number,
-  netAmountDebited: Number,
-  
-  // Refund Info
-  refundId: String,
-  refundAmount: Number,
-  refundDate: Date,
-  refundStatus: String,
-  refundResponse: Schema.Types.Mixed,
-  refundReason: String
-}, { _id: false });
+  }
+});
 
 const qrPaymentSchema = new Schema({
   qrId: { type: String },
@@ -254,7 +233,7 @@ const orderSchema = new Schema(
 );
 
 // ========== INDEXES ==========
-
+orderSchema.index({ 'payment.razorpayPaymentId': 1 });
 orderSchema.index({ order_id: 1 }, { unique: true });
 orderSchema.index({ contactNo: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });

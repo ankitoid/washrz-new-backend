@@ -28,7 +28,6 @@ import osrmRoutes from "./routes/osrmRoutes.js";
 const app = express();
 const server = http.createServer(app);
 app.use(cookies());
-console.log("changed--------------------------")
 app.use(
   cors({
     origin: [
