@@ -106,13 +106,21 @@ export const verifyRazorpayPayment = async (req, res) => {
       });
     }
 
+
+    // console.log("this is the order is paid option:: ",order.isPaid )
+
+
     if (!order.isPaid) {
+
+      console.log("i ma herere")
       order.payment.razorpayPaymentId = razorpay_payment_id;
       order.payment.razorpaySignature = razorpay_signature;
       order.payment.status = "success";
       order.payment.completedAt = new Date();
 
       order.isPaid = true;
+
+      console.log("final order:: ", order)
 
       if (order.status === "pending" || order.status === "confirmed") {
         order.status = "processing";
