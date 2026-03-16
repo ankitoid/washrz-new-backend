@@ -319,15 +319,13 @@ export const razorpayWebhook = async (req, res) => {
       .digest("hex");
 
     if (signature !== expectedSignature) {
-      console.log("Webhook signature mismatch");
+      console.log("❌ Razorpay Webhook signature mismatch");
       return res.status(400).json({ success: false });
     }
 
     const event = req.body.event;
 
-    console.log("Razorpay webhook event:", event);
-
-
+    console.log("✅ Razorpay webhook event:", event);
 
     // ================= PAYMENT CAPTURED =================
 
@@ -335,10 +333,12 @@ export const razorpayWebhook = async (req, res) => {
 
       const payment = req.body.payload.payment.entity;
 
+      console.log("Webhook payment object:", payment);
+
       const razorpayOrderId = payment.order_id;
       const razorpayPaymentId = payment.id;
 
-      let order;
+      let order = null;
 
       // ---------- CASE 1 : NORMAL CHECKOUT PAYMENT ----------
 
@@ -361,63 +361,77 @@ export const razorpayWebhook = async (req, res) => {
       }
 
       if (!order) {
-        console.log("Order not found for webhook");
-        return res.status(200).json({ success: true });
+
+        console.log("⚠️ Order not found for webhook");
+
+        return res.status(200).json({
+          success: true,
+          message: "Order not found"
+        });
+
       }
 
-      // ================= UPDATE ORDER =================
+      console.log("Order found:", order.order_id);
 
-      if (!order.isPaid) {
+      // ================= PREVENT DUPLICATE WEBHOOK =================
 
-        order.payment = {
-          ...order.payment,
-          razorpayPaymentId: razorpayPaymentId,
-          status: "success",
-          paymentGateway: "razorpay",
-          amount: payment.amount / 100,
-          completedAt: new Date()
-        };
+      if (order.isPaid) {
 
-        console.log("order before something:: ", order.payment)
+        console.log("Webhook ignored, order already paid:", order.order_id);
 
-        order.isPaid = true;
+        return res.status(200).json({
+          success: true,
+          message: "Already processed"
+        });
 
-        // ---------- UPDATE QR PAYMENT IF EXISTS ----------
-
-        const qrPayment = order.qrPayments?.find(
-          (q) => q.status !== "paid"
-        );
-
-        if (qrPayment) {
-
-          qrPayment.status = "paid";
-          qrPayment.paymentId = razorpayPaymentId;
-          qrPayment.paidAt = new Date();
-
-        }
-
-        if (order.status === "pending" || order.status === "confirmed") {
-          order.status = "processing";
-        }
-
-        const updtaedVal = await order.save();
-
-        console.log("Webhook updated order:", updtaedVal,  order.order_id, order);
-
-        // ================= REALTIME SOCKET =================
-
-        if (req.socket) {
-          req.socket.to("admin-dashboard").emit("paymentUpdate", {
-            orderId: order.order_id,
-            paymentStatus: "success",
-            isPaid: true,
-            orderStatus: order.status,
-            amount: order.totalAmount || order.price,
-            transactionId: razorpayPaymentId,
-            time: new Date()
-          });
-        }
       }
+
+      // ================= UPDATE PAYMENT =================
+
+      order.payment.paymentId = razorpayPaymentId;
+      order.payment.razorpayPaymentId = razorpayPaymentId;
+      order.payment.status = "success";
+      order.payment.paymentGateway = "razorpay";
+      order.payment.amount = payment.amount / 100;
+
+      order.isPaid = true;
+
+      // ---------- UPDATE QR PAYMENT IF EXISTS ----------
+
+      const qrPayment = order.qrPayments?.find(
+        (q) => q.status !== "paid"
+      );
+
+      if (qrPayment) {
+
+        qrPayment.status = "paid";
+        qrPayment.paymentId = razorpayPaymentId;
+        qrPayment.paidAt = new Date();
+
+      }
+
+      order.markModified("payment");
+
+      const updatedOrder = await order.save();
+
+      console.log("✅ Webhook updated order:", updatedOrder.order_id);
+
+      // ================= REALTIME SOCKET =================
+
+      if (req.socket) {
+
+        req.socket.to("admin-dashboard").emit("paymentUpdate", {
+          orderId: order.order_id,
+          paymentStatus: "success",
+          isPaid: true,
+          orderStatus: order.status,
+          amount: order.totalAmount || order.price,
+          transactionId: razorpayPaymentId,
+          time: new Date()
+        });
+
+      }
+
     }
 
     // ================= PAYMENT FAILED =================
@@ -426,7 +440,7 @@ export const razorpayWebhook = async (req, res) => {
 
       const payment = req.body.payload.payment.entity;
 
-      let order;
+      let order = null;
 
       if (payment.order_id) {
 
@@ -448,14 +462,17 @@ export const razorpayWebhook = async (req, res) => {
 
         order.payment.status = "failed";
 
+        order.markModified("payment");
+
         await order.save();
 
-        console.log("Payment failed for order:", order.order_id);
+        console.log("❌ Payment failed for order:", order.order_id);
 
       }
+
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Webhook processed"
     });
@@ -464,7 +481,7 @@ export const razorpayWebhook = async (req, res) => {
 
     console.error("Webhook error:", error);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: false,
       error: error.message
     });
