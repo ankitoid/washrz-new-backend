@@ -327,6 +327,8 @@ export const razorpayWebhook = async (req, res) => {
 
     console.log("Razorpay webhook event:", event);
 
+
+
     // ================= PAYMENT CAPTURED =================
 
     if (event === "payment.captured") {
@@ -376,6 +378,8 @@ export const razorpayWebhook = async (req, res) => {
           completedAt: new Date()
         };
 
+        console.log("order before something:: ", order.payment)
+
         order.isPaid = true;
 
         // ---------- UPDATE QR PAYMENT IF EXISTS ----------
@@ -396,9 +400,9 @@ export const razorpayWebhook = async (req, res) => {
           order.status = "processing";
         }
 
-        await order.save();
+        const updtaedVal = await order.save();
 
-        console.log("Webhook updated order:", order.order_id);
+        console.log("Webhook updated order:", updtaedVal,  order.order_id, order);
 
         // ================= REALTIME SOCKET =================
 
