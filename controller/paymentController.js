@@ -300,6 +300,7 @@ export const initiateRefund = async (req, res) => {
 // Webhook
 export const razorpayWebhook = async (req, res) => {
   try {
+
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
     const signature = req.headers["x-razorpay-signature"];
@@ -315,31 +316,73 @@ export const razorpayWebhook = async (req, res) => {
     }
 
     const event = req.body.event;
-    const payment = req.body.payload.payment.entity;
 
     console.log("Razorpay webhook event:", event);
 
+    // ================= PAYMENT CAPTURED =================
+
     if (event === "payment.captured") {
+
+      const payment = req.body.payload.payment.entity;
 
       const razorpayOrderId = payment.order_id;
       const razorpayPaymentId = payment.id;
 
-      const order = await Order.findOne({
-        "payment.razorpayOrderId": razorpayOrderId
-      });
+      let order;
+
+      // ---------- CASE 1 : NORMAL CHECKOUT PAYMENT ----------
+
+      if (razorpayOrderId) {
+
+        order = await Order.findOne({
+          "payment.razorpayOrderId": razorpayOrderId
+        });
+
+      }
+
+      // ---------- CASE 2 : QR PAYMENT ----------
+
+      if (!order && payment.notes?.orderId) {
+
+        order = await Order.findOne({
+          order_id: payment.notes.orderId
+        });
+
+      }
 
       if (!order) {
-        console.log("Order not found for webhook:", razorpayOrderId);
+        console.log("Order not found for webhook");
         return res.status(200).json({ success: true });
       }
 
+      // ================= UPDATE ORDER =================
+
       if (!order.isPaid) {
 
-        order.payment.razorpayPaymentId = razorpayPaymentId;
-        order.payment.status = "success";
-        order.payment.completedAt = new Date();
+        order.payment = {
+          ...order.payment,
+          razorpayPaymentId: razorpayPaymentId,
+          status: "success",
+          paymentGateway: "razorpay",
+          amount: payment.amount / 100,
+          completedAt: new Date()
+        };
 
         order.isPaid = true;
+
+        // ---------- UPDATE QR PAYMENT IF EXISTS ----------
+
+        const qrPayment = order.qrPayments?.find(
+          (q) => q.status !== "paid"
+        );
+
+        if (qrPayment) {
+
+          qrPayment.status = "paid";
+          qrPayment.paymentId = razorpayPaymentId;
+          qrPayment.paidAt = new Date();
+
+        }
 
         if (order.status === "pending" || order.status === "confirmed") {
           order.status = "processing";
@@ -349,7 +392,8 @@ export const razorpayWebhook = async (req, res) => {
 
         console.log("Webhook updated order:", order.order_id);
 
-        // realtime admin update
+        // ================= REALTIME SOCKET =================
+
         if (req.socket) {
           req.socket.to("admin-dashboard").emit("paymentUpdate", {
             orderId: order.order_id,
@@ -364,16 +408,38 @@ export const razorpayWebhook = async (req, res) => {
       }
     }
 
-    if (event === "payment.failed") {
-      const razorpayOrderId = req.body.payload.payment.entity.order_id;
+    // ================= PAYMENT FAILED =================
 
-      const order = await Order.findOne({
-        "payment.razorpayOrderId": razorpayOrderId
-      });
+    if (event === "payment.failed") {
+
+      const payment = req.body.payload.payment.entity;
+
+      let order;
+
+      if (payment.order_id) {
+
+        order = await Order.findOne({
+          "payment.razorpayOrderId": payment.order_id
+        });
+
+      }
+
+      if (!order && payment.notes?.orderId) {
+
+        order = await Order.findOne({
+          order_id: payment.notes.orderId
+        });
+
+      }
 
       if (order) {
+
         order.payment.status = "failed";
+
         await order.save();
+
+        console.log("Payment failed for order:", order.order_id);
+
       }
     }
 
@@ -383,11 +449,13 @@ export const razorpayWebhook = async (req, res) => {
     });
 
   } catch (error) {
+
     console.error("Webhook error:", error);
 
     res.status(200).json({
       success: false,
       error: error.message
     });
+
   }
 };
