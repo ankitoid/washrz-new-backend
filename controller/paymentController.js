@@ -74,12 +74,16 @@ export const initiatePayment = async (req, res) => {
 // ================= VERIFY PAYMENT =================
 
 export const verifyRazorpayPayment = async (req, res) => {
+
   try {
+
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature
     } = req.body;
+
+    // ================= VERIFY SIGNATURE =================
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
@@ -89,73 +93,89 @@ export const verifyRazorpayPayment = async (req, res) => {
       .digest("hex");
 
     if (expectedSignature !== razorpay_signature) {
+
       return res.status(400).json({
         success: false,
         message: "Payment verification failed"
       });
+
     }
+
+    // ================= FIND ORDER =================
 
     const order = await Order.findOne({
       "payment.razorpayOrderId": razorpay_order_id
     });
 
     if (!order) {
+
       return res.status(404).json({
         success: false,
         message: "Order not found"
       });
+
     }
 
+    // ================= PREVENT DUPLICATE =================
 
-    // console.log("this is the order is paid option:: ",order.isPaid )
+    if (order.isPaid) {
 
+      return res.json({
+        success: true,
+        message: "Payment already verified",
+        orderId: order.order_id
+      });
 
-    if (!order.isPaid) {
-
-      console.log("i ma herere")
-      order.payment.razorpayPaymentId = razorpay_payment_id;
-      order.payment.razorpaySignature = razorpay_signature;
-      order.payment.status = "success";
-      order.payment.completedAt = new Date();
-
-      order.isPaid = true;
-
-      console.log("final order:: ", order)
-
-      if (order.status === "pending" || order.status === "confirmed") {
-        order.status = "processing";
-      }
-
-      await order.save();
-
-      // ================= SOCKET EVENT =================
-      if (req.socket) {
-        req.socket.to("admin-dashboard").emit("paymentUpdate", {
-          orderId: order.order_id,
-          paymentStatus: order.payment.status,
-          isPaid: order.isPaid,
-          orderStatus: order.status,
-          amount: order.totalAmount || order.price,
-          transactionId: razorpay_payment_id,
-          time: new Date()
-        });
-      }
     }
 
-    res.json({
+    // ================= UPDATE PAYMENT =================
+
+    order.payment.paymentId = razorpay_payment_id;
+    order.payment.razorpayPaymentId = razorpay_payment_id;
+    order.payment.razorpaySignature = razorpay_signature;
+    order.payment.paymentGateway = "razorpay";
+    order.payment.status = "success";
+
+    order.isPaid = true;
+
+    order.markModified("payment");
+
+    await order.save();
+
+    console.log("Payment verified:", order.order_id);
+
+    // ================= SOCKET =================
+
+    if (req.socket) {
+
+      req.socket.to("admin-dashboard").emit("paymentUpdate", {
+        orderId: order.order_id,
+        paymentStatus: "success",
+        isPaid: true,
+        orderStatus: order.status,
+        amount: order.totalAmount || order.price,
+        transactionId: razorpay_payment_id,
+        time: new Date()
+      });
+
+    }
+
+    return res.json({
       success: true,
       message: "Payment verified successfully",
       orderId: order.order_id
     });
 
   } catch (error) {
+
     console.error("Payment verification error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Payment verification failed",
       error: error.message
     });
+
   }
 };
 
@@ -319,13 +339,13 @@ export const razorpayWebhook = async (req, res) => {
       .digest("hex");
 
     if (signature !== expectedSignature) {
-      console.log("❌ Razorpay Webhook signature mismatch");
+      console.log("Webhook signature mismatch");
       return res.status(400).json({ success: false });
     }
 
     const event = req.body.event;
 
-    console.log("✅ Razorpay webhook event:", event);
+    console.log("Razorpay webhook event:", event);
 
     // ================= PAYMENT CAPTURED =================
 
@@ -333,14 +353,12 @@ export const razorpayWebhook = async (req, res) => {
 
       const payment = req.body.payload.payment.entity;
 
-      console.log("Webhook payment object:", payment);
-
       const razorpayOrderId = payment.order_id;
       const razorpayPaymentId = payment.id;
 
       let order = null;
 
-      // ---------- CASE 1 : NORMAL CHECKOUT PAYMENT ----------
+      // ---------- NORMAL PAYMENT ----------
 
       if (razorpayOrderId) {
 
@@ -350,7 +368,7 @@ export const razorpayWebhook = async (req, res) => {
 
       }
 
-      // ---------- CASE 2 : QR PAYMENT ----------
+      // ---------- QR PAYMENT ----------
 
       if (!order && payment.notes?.orderId) {
 
@@ -361,46 +379,47 @@ export const razorpayWebhook = async (req, res) => {
       }
 
       if (!order) {
-
-        console.log("⚠️ Order not found for webhook");
-
-        return res.status(200).json({
-          success: true,
-          message: "Order not found"
-        });
-
+        console.log("Order not found for webhook");
+        return res.status(200).json({ success: true });
       }
 
-      console.log("Order found:", order.order_id);
-
-      // ================= PREVENT DUPLICATE WEBHOOK =================
+      // ---------- DUPLICATE SAFETY ----------
 
       if (order.isPaid) {
-
-        console.log("Webhook ignored, order already paid:", order.order_id);
-
-        return res.status(200).json({
-          success: true,
-          message: "Already processed"
-        });
-
+        console.log("Payment already processed:", order.order_id);
+        return res.status(200).json({ success: true });
       }
 
-      // ================= UPDATE PAYMENT =================
+      // ================= PAYMENT MODE =================
+
+      let paymentMode = "unknown";
+
+      console.log("===========>  >> payment.method", payment.method)
+
+      if (payment.method === "upi") paymentMode = "upi";
+      if (payment.method === "netbanking") paymentMode = "netbanking";
+      if (payment.method === "wallet") paymentMode = "wallet";
+      if (payment.method === "emi") paymentMode = "emi";
+
+      if (payment.method === "card") {
+        if (payment.card?.type === "credit") paymentMode = "credit_card";
+        else if (payment.card?.type === "debit") paymentMode = "debit_card";
+      }
+
+      // ================= UPDATE ORDER =================
 
       order.payment.paymentId = razorpayPaymentId;
       order.payment.razorpayPaymentId = razorpayPaymentId;
       order.payment.status = "success";
       order.payment.paymentGateway = "razorpay";
+      order.payment.paymentMode = paymentMode;
       order.payment.amount = payment.amount / 100;
 
       order.isPaid = true;
 
-      // ---------- UPDATE QR PAYMENT IF EXISTS ----------
+      // ---------- UPDATE QR IF EXISTS ----------
 
-      const qrPayment = order.qrPayments?.find(
-        (q) => q.status !== "paid"
-      );
+      const qrPayment = order.qrPayments?.find(q => q.status !== "paid");
 
       if (qrPayment) {
 
@@ -412,11 +431,11 @@ export const razorpayWebhook = async (req, res) => {
 
       order.markModified("payment");
 
-      const updatedOrder = await order.save();
+      await order.save();
 
-      console.log("✅ Webhook updated order:", updatedOrder.order_id);
+      console.log("Webhook updated order:", order.order_id);
 
-      // ================= REALTIME SOCKET =================
+      // ================= SOCKET =================
 
       if (req.socket) {
 
@@ -440,15 +459,9 @@ export const razorpayWebhook = async (req, res) => {
 
       const payment = req.body.payload.payment.entity;
 
-      let order = null;
-
-      if (payment.order_id) {
-
-        order = await Order.findOne({
-          "payment.razorpayOrderId": payment.order_id
-        });
-
-      }
+      let order = await Order.findOne({
+        "payment.razorpayOrderId": payment.order_id
+      });
 
       if (!order && payment.notes?.orderId) {
 
@@ -466,7 +479,7 @@ export const razorpayWebhook = async (req, res) => {
 
         await order.save();
 
-        console.log("❌ Payment failed for order:", order.order_id);
+        console.log("Payment failed for order:", order.order_id);
 
       }
 
