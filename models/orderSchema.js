@@ -62,26 +62,23 @@ const paymentSchema = new Schema({
 });
 
 const qrPaymentSchema = new Schema({
-  qrId: { type: String },
+  qrId: { type: String }, // Razorpay QR ID
   qrImageUrl: String,
   qrString: String,
+
   status: {
     type: String,
-    enum: ["generated", "active", "scanned", "paid", "expired", "cancelled"],
+    enum: ["generated","active","scanned","paid","expired","cancelled"],
     default: "generated"
   },
+
   amount: Number,
-  upiId: String,
-  upiName: String,
-  generatedBy: String,
+
+  paymentId: String, // Razorpay payment id
+  orderId: String,
+
   generatedAt: { type: Date, default: Date.now },
-  expiresAt: Date,
-  scannedAt: Date,
-  paidAt: Date,
-  transactionId: String,
-  payerUpiId: String,
-  payerName: String,
-  paymentMethod: String
+  paidAt: Date
 }, { _id: false });
 
 const orderLocationSchema = new Schema({
