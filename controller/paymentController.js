@@ -325,9 +325,6 @@ export const initiateRefund = async (req, res) => {
 };
 
 
-// Webhook
-import crypto from "crypto";
-import Order from "../models/orderModel.js";
 
 export const razorpayWebhook = async (req, res) => {
   try {
