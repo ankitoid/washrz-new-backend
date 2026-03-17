@@ -326,11 +326,12 @@ export const initiateRefund = async (req, res) => {
 
 
 // Webhook
+import crypto from "crypto";
+import Order from "../models/orderModel.js";
+
 export const razorpayWebhook = async (req, res) => {
   try {
-
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
     const signature = req.headers["x-razorpay-signature"];
 
     const expectedSignature = crypto
@@ -339,74 +340,87 @@ export const razorpayWebhook = async (req, res) => {
       .digest("hex");
 
     if (signature !== expectedSignature) {
-      console.log("Webhook signature mismatch");
+      console.log("❌ Webhook signature mismatch");
       return res.status(400).json({ success: false });
     }
 
     const event = req.body.event;
+    console.log("✅ Razorpay webhook event:", event);
 
-    console.log("Razorpay webhook event:", event);
-
-    // ================= PAYMENT CAPTURED =================
+    // =====================================================
+    // ================= PAYMENT CAPTURED ===================
+    // =====================================================
 
     if (event === "payment.captured") {
-
       const payment = req.body.payload.payment.entity;
 
       const razorpayOrderId = payment.order_id;
       const razorpayPaymentId = payment.id;
 
+      console.log("🔍 PAYMENT DEBUG:", {
+        order_id: payment.order_id,
+        reference_id: payment.reference_id,
+        notes: payment.notes,
+        method: payment.method,
+      });
+
       let order = null;
 
-      // ---------- NORMAL PAYMENT ----------
-
+      // ---------- 1. NORMAL PAYMENT ----------
       if (razorpayOrderId) {
-
         order = await Order.findOne({
-          "payment.razorpayOrderId": razorpayOrderId
+          "payment.razorpayOrderId": razorpayOrderId,
         });
-
       }
 
-      // ---------- QR PAYMENT ----------
-
-      if (!order && payment.notes?.orderId) {
-
+      // ---------- 2. QR PAYMENT (BEST WAY) ----------
+      if (!order && payment.reference_id) {
         order = await Order.findOne({
-          order_id: payment.notes.orderId
+          order_id: payment.reference_id,
         });
+      }
 
+      // ---------- 3. FALLBACK ----------
+      if (!order && payment.notes?.orderId) {
+        order = await Order.findOne({
+          order_id: payment.notes.orderId,
+        });
       }
 
       if (!order) {
-        console.log("Order not found for webhook");
+        console.log("⚠️ Order not found for webhook");
         return res.status(200).json({ success: true });
       }
 
       // ---------- DUPLICATE SAFETY ----------
-
       if (order.isPaid) {
-        console.log("Payment already processed:", order.order_id);
+        console.log("⚠️ Payment already processed:", order.order_id);
         return res.status(200).json({ success: true });
       }
 
-      // ================= PAYMENT MODE =================
+      // =====================================================
+      // ================= PAYMENT MODE =======================
+      // =====================================================
 
       let paymentMode = "unknown";
 
-      console.log("===========>  >> payment.method", payment.method)
-
       if (payment.method === "upi") paymentMode = "upi";
-      if (payment.method === "netbanking") paymentMode = "netbanking";
-      if (payment.method === "wallet") paymentMode = "wallet";
-      if (payment.method === "emi") paymentMode = "emi";
-
-      if (payment.method === "card") {
+      else if (payment.method === "netbanking") paymentMode = "netbanking";
+      else if (payment.method === "wallet") paymentMode = "wallet";
+      else if (payment.method === "emi") paymentMode = "emi";
+      else if (payment.method === "card") {
         if (payment.card?.type === "credit") paymentMode = "credit_card";
         else if (payment.card?.type === "debit") paymentMode = "debit_card";
       }
 
-      // ================= UPDATE ORDER =================
+      // =====================================================
+      // ================= UPDATE ORDER ======================
+      // =====================================================
+
+      // ✅ FIX: ensure payment object exists
+      if (!order.payment) {
+        order.payment = {};
+      }
 
       order.payment.paymentId = razorpayPaymentId;
       order.payment.razorpayPaymentId = razorpayPaymentId;
@@ -417,28 +431,31 @@ export const razorpayWebhook = async (req, res) => {
 
       order.isPaid = true;
 
-      // ---------- UPDATE QR IF EXISTS ----------
+      // ---------- UPDATE QR PAYMENT IF EXISTS ----------
+      if (order.qrPayments && order.qrPayments.length > 0) {
+        const qrPayment = order.qrPayments.find(
+          (q) => q.status !== "paid"
+        );
 
-      const qrPayment = order.qrPayments?.find(q => q.status !== "paid");
-
-      if (qrPayment) {
-
-        qrPayment.status = "paid";
-        qrPayment.paymentId = razorpayPaymentId;
-        qrPayment.paidAt = new Date();
-
+        if (qrPayment) {
+          qrPayment.status = "paid";
+          qrPayment.paymentId = razorpayPaymentId;
+          qrPayment.paidAt = new Date();
+        }
       }
 
       order.markModified("payment");
+      order.markModified("qrPayments");
 
       await order.save();
 
-      console.log("Webhook updated order:", order.order_id);
+      console.log("✅ Webhook updated order:", order.order_id);
 
-      // ================= SOCKET =================
+      // =====================================================
+      // ================= SOCKET ============================
+      // =====================================================
 
       if (req.socket) {
-
         req.socket.to("admin-dashboard").emit("paymentUpdate", {
           orderId: order.order_id,
           paymentStatus: "success",
@@ -446,32 +463,42 @@ export const razorpayWebhook = async (req, res) => {
           orderStatus: order.status,
           amount: order.totalAmount || order.price,
           transactionId: razorpayPaymentId,
-          time: new Date()
+          time: new Date(),
         });
-
       }
-
     }
 
-    // ================= PAYMENT FAILED =================
+    // =====================================================
+    // ================= PAYMENT FAILED =====================
+    // =====================================================
 
     if (event === "payment.failed") {
-
       const payment = req.body.payload.payment.entity;
 
-      let order = await Order.findOne({
-        "payment.razorpayOrderId": payment.order_id
-      });
+      let order = null;
+
+      if (payment.order_id) {
+        order = await Order.findOne({
+          "payment.razorpayOrderId": payment.order_id,
+        });
+      }
+
+      if (!order && payment.reference_id) {
+        order = await Order.findOne({
+          order_id: payment.reference_id,
+        });
+      }
 
       if (!order && payment.notes?.orderId) {
-
         order = await Order.findOne({
-          order_id: payment.notes.orderId
+          order_id: payment.notes.orderId,
         });
-
       }
 
       if (order) {
+        if (!order.payment) {
+          order.payment = {};
+        }
 
         order.payment.status = "failed";
 
@@ -479,25 +506,20 @@ export const razorpayWebhook = async (req, res) => {
 
         await order.save();
 
-        console.log("Payment failed for order:", order.order_id);
-
+        console.log("❌ Payment failed for order:", order.order_id);
       }
-
     }
 
     return res.status(200).json({
       success: true,
-      message: "Webhook processed"
+      message: "Webhook processed",
     });
-
   } catch (error) {
-
-    console.error("Webhook error:", error);
+    console.error("🔥 Webhook error:", error);
 
     return res.status(200).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
-
   }
 };
