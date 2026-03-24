@@ -5,6 +5,7 @@ import User from "../models/userModel.js";
 import cron from "node-cron";
 import fcmService from "../services/fcmService.js";
 import RiderLocation from "../models/riderLocationSchema.js";
+import { createNotification } from "../controller/notificationController.js";
 
 // Create a new plant
 export const addPlant = async (req, res) => {
@@ -245,6 +246,17 @@ export const assignRider = async (req, res) => {
       }
     );
 
+    await createNotification({
+      riderId,
+      title: "🎯 New Delivery Assigned",
+      message: "Tap to view order",
+      type: "delivery_assigned",
+      data: {
+        orderId: String(order._id),
+        screen: "OrderDetails",
+      },
+    });
+
     console.log(`📊 FCM Result:`, {
       success: fcmResult.success,
       sentTo: fcmResult.successCount,
@@ -320,6 +332,16 @@ export const assignPickupRider = async (req, res) => {
         }
       );
     }
+    await createNotification({
+      riderId,
+      title: "📦 New Pickup Assigned",
+      message: "Pickup ready for collection",
+      type: "pickup_assigned",
+      data: {
+        pickupId: String(pickup._id),
+        screen: "pickup_details",
+      },
+    });
 
     res.status(200).json({
       status: "success",
