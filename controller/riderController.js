@@ -160,6 +160,8 @@ export const uploadFiles = (req, res, next) => {
         orderLocation: parsedLocation,
         statusHistory,
       });
+      
+      await Pickup.findByIdAndUpdate(id, { PickupStatus: "complete" });
 
       res.status(200).json({
         message: "Files uploaded and order status updated to processing.",
