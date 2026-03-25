@@ -205,16 +205,42 @@ router.post("/update", async (req, res) => {
       }
     );
 
-    // Also keep history in a separate collection if needed
-    await LocationHistory.create({
-      riderId,
-      location,
-      speed: parseFloat(speed),
-      bearing: parseFloat(bearing),
-      batteryLevel: parseInt(batteryLevel),
-      status,
-      timestamp: new Date()
-    });
+ 
+    // Update in-memory map (same map used by socket handler)
+    const activeRiderLocations = req.app.locals.activeRiderLocations;
+    if (activeRiderLocations) {
+      activeRiderLocations.set(riderId, {
+        location,
+        lat: parseFloat(lat),
+        lng: parseFloat(lng),
+        speed: parseFloat(speed),
+        bearing: parseFloat(bearing),
+        batteryLevel: parseInt(batteryLevel),
+        lastUpdate: new Date(),
+        status,
+      });
+    }
+
+    // Broadcast to admin dashboard so HTTP updates appear in real-time
+    const io = req.app.locals.io;
+    if (io) {
+      io.to("admin-dashboard").emit("riderLocationUpdate", {
+        riderId,
+        location,
+        lat: parseFloat(lat),
+        lng: parseFloat(lng),
+        speed: parseFloat(speed),
+        bearing: parseFloat(bearing),
+        batteryLevel: parseInt(batteryLevel),
+        lastUpdate: new Date(),
+        status,
+        name: user.name || "Unknown Rider",
+        phone: user.phone || "N/A",
+      });
+    }
+
+    console.log(`📍 HTTP location update: rider ${riderId} at ${lat}, ${lng}`);
+
 
     res.status(200).json({
       success: true,
