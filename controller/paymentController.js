@@ -462,6 +462,13 @@ export const razorpayWebhook = async (req, res) => {
           transactionId: razorpayPaymentId,
           time: new Date(),
         });
+
+        // hariom codes here
+        req.socket.to(`order:${order.order_id}`).emit("paymentUpdate", {
+          orderId: order.order_id,
+          paymentStatus: "success",
+          isPaid: true,
+        });
       }
     }
 
