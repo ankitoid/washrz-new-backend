@@ -26,6 +26,7 @@ import debugRoutes from "./routes/debugRoutes.js";
 import osrmRoutes from "./routes/osrmRoutes.js";
 import adminCoupons from "./routes/adminCouponRoutes.js"
 import customerCoupons from "./routes/customerCouponRoutes.js"
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 const app = express();
 
@@ -152,6 +153,10 @@ app.post("/send", (req, res) => {
 const activeRiderLocations = new Map();
 io.sockets.activeRiderLocations = activeRiderLocations;
 const adminRooms = new Set();
+
+// Expose to HTTP routes so they can update the same in-memory map + broadcast
+app.locals.activeRiderLocations = activeRiderLocations;
+app.locals.io = io;
 
 io.on("connection", (socket) => {
   // console.log("hii this is the socket id--->> ", socket.id);
@@ -471,6 +476,7 @@ app.use('/api/v1/qr', qrRoutes);
 app.use("/api/v1/osrm", osrmRoutes);
 app.use("/api/v1/admincoupons",adminCoupons)
 app.use("/api/v1/customercoupons",customerCoupons)
+app.use("/api/v1/notifications", notificationRoutes);
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
