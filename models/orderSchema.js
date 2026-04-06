@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, { mongo } from "mongoose";
 
 const { Schema } = mongoose;
 
@@ -100,6 +100,17 @@ const statusHistorySchema = new Schema({
   refunded: { type: Date, default: null }
 }, { _id: false });
 
+const CouponManageSchema = new Schema({
+ coupon : {
+  couponId : mongoose.Schema.Types.ObjectId,
+  code : String,
+  discount : Number,
+  type : String
+ },
+ reservationId: mongoose.Schema.ObjectId
+},
+)
+
 // ========== MAIN ORDER SCHEMA ==========
 
 const orderSchema = new Schema(
@@ -138,6 +149,10 @@ const orderSchema = new Schema(
     qrPayments: [qrPaymentSchema],
     isPaid: { type: Boolean, default: false },
     paymentAttempts: { type: Number, default: 0 },
+
+
+    //==========COUPON MANAGEMENT==========
+    Coupon :  CouponManageSchema,
     
     // ========== ORDER STATUS ==========
     status: {

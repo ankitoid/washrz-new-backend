@@ -24,6 +24,8 @@ import User from "./models/userModel.js";
 import fcmService from "./services/fcmService.js";
 import debugRoutes from "./routes/debugRoutes.js";
 import osrmRoutes from "./routes/osrmRoutes.js";
+import adminCoupons from "./routes/adminCouponRoutes.js"
+import customerCoupons from "./routes/customerCouponRoutes.js"
 
 const app = express();
 
@@ -467,6 +469,8 @@ app.use("/api/v1", revenueRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/qr', qrRoutes);
 app.use("/api/v1/osrm", osrmRoutes);
+app.use("/api/v1/admincoupons",adminCoupons)
+app.use("/api/v1/customercoupons",customerCoupons)
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
