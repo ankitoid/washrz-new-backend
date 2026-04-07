@@ -10,6 +10,7 @@ import mongoose from "mongoose";
 import ErrorHandler from "../utills/errorHandler.js";
 import AWS from "aws-sdk";
 import multer from "multer";
+import customerFcmService from "../services/customerFcmService.js";
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
@@ -354,16 +355,30 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     // -------------------------
     // Save pickup
     // -------------------------
-    const pickupData = await pickup.create(pickupPayload);
+      const pickupData = await pickup.create(pickupPayload);
 
     // -------------------------
     // Emit socket event
     // -------------------------
     req.socket.emit("addPickup", pickupData);
 
+    const pushResult = await customerFcmService.sendToCustomer(
+      String(appCustomerId),
+      {
+        title: "Pickup Created",
+        body: "Your pickup request has been created successfully.",
+      },
+      {
+        type: "pickup_created",
+        pickupId: String(pickupData._id),
+        screen: "PickupDetails",
+      }
+    );
+
     return res.status(200).json({
       message: "Pickup added successfully",
       data: pickupData,
+      push: pushResult,
     });
   } catch (error) {
     console.error("addPickupthroughApp ERROR ❌", error);
