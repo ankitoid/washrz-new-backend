@@ -27,6 +27,8 @@ import osrmRoutes from "./routes/osrmRoutes.js";
 import adminCoupons from "./routes/adminCouponRoutes.js"
 import customerCoupons from "./routes/customerCouponRoutes.js"
 import notificationRoutes from "./routes/notificationRoutes.js";
+import customerNotificationRoutes from "./routes/customerNotificationRoutes.js";
+import customerPushTokenRoutes from "./routes/customerPushTokenRoutes.js";
 
 const app = express();
 
@@ -477,6 +479,8 @@ app.use("/api/v1/osrm", osrmRoutes);
 app.use("/api/v1/admincoupons",adminCoupons)
 app.use("/api/v1/customercoupons",customerCoupons)
 app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/customer/notifications", customerNotificationRoutes);
+app.use("/api/v1/customer/push-tokens", customerPushTokenRoutes);
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
