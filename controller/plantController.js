@@ -345,22 +345,12 @@ export const assignPickupRider = async (req, res) => {
     });
 
     if (pickup.appCustomerId) {
-      await createCustomerNotification({
-        customerId: String(pickup.appCustomerId),
-        title: "Pickup Assigned",
-        message: "Your pickup has been assigned to a rider.",
-        type: "pickup_assigned",
-        data: {
-          pickupId: String(pickup._id),
-          screen: "PickupDetails",
-        },
-      });
 
       await customerFcmService.sendToCustomer(
         String(pickup.appCustomerId),
         {
-          title: "Pickup Assigned",
-          body: "Your pickup has been assigned to a rider.",
+          title: "Rider Assigned",
+          body: "Keep items bagged & ready. Your laundry's escape plan is in motion!",
         },
         {
           type: "pickup_assigned",

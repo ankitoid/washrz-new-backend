@@ -1,9 +1,9 @@
-import admin from "../config/Customer-firebaseAdmin.js";
+import customerApp from "../config/Customer-firebaseAdmin.js";
 import CustomerPushToken from "../models/customerPushTokenModel.js";
 
 class CustomerFCMService {
   constructor() {
-    this.admin = admin;
+    this.admin = customerApp;
   }
 
   isAvailable() {

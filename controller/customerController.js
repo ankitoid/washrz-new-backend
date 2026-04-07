@@ -365,8 +365,8 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     const pushResult = await customerFcmService.sendToCustomer(
       String(appCustomerId),
       {
-        title: "Pickup Created",
-        body: "Your pickup request has been created successfully.",
+        title: "Woo!, Pickup booked 🧺",
+        body: "We’ll be there soon to collect your laundry.",
       },
       {
         type: "pickup_created",
