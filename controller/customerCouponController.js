@@ -27,13 +27,17 @@ customerCoupons.applyCouponToOrder = catchAsync(async (req, res) => {
 
 // CONFIRM COUPON
 customerCoupons.confirmCouponAfterPayment = catchAsync(async (req, res) => {
-  const result = await coupons_service.confirmAfterPayment(req.user.id, req.body);
+
+  console.log("this is the req body",req.body)
+
+  const result = await coupons_service.confirmAfterPayment(req.body);
   res.send(result);
 });
 
 // RELEASE COUPON
 customerCoupons.removeCouponFromOrder = catchAsync(async (req, res) => {
-  const result = await coupons_service.removeFromOrder(req.user.id, req.body);
+  console.log("this is the req body-->>",req.body)
+  const result = await coupons_service.removeFromOrder(req.body);
   res.send(result);
 })
 

@@ -261,8 +261,9 @@ if (usedByUser >= coupon.perUser) {
 
 
 // CONFIRM COUPON (ON PAYMENT)
-coupons_service.confirmAfterPayment = async (userId, body) => {
-  const { orderId } = body;
+coupons_service.confirmAfterPayment = async (body) => {
+  try {
+    const { orderId } = body;
 
   const order = await Order.findOne({ order_id: orderId });
 
@@ -280,12 +281,16 @@ coupons_service.confirmAfterPayment = async (userId, body) => {
   });
 
   return { success: true };
+  } catch (error) {
+    console.log("this is the error--->>",error)
+  }
 };
 
 
 // RELEASE COUPON (CANCEL)
-coupons_service.removeFromOrder = async (userId, body) => {
-  const { orderId } = body;
+coupons_service.removeFromOrder = async (body) => {
+try {
+    const { orderId } = body;
 
   const order = await Order.findOne({ order_id: orderId });
   if (!order || !order.Coupon) return { success: true };
@@ -305,16 +310,19 @@ coupons_service.removeFromOrder = async (userId, body) => {
   // order.Coupon = null;
   // order.Coupon.reservationId = null;
 
-  await CouponReservation.findByIdAndUpdate(
-  order.Coupon.reservationId,
-  { status: "expired" }
-);
+//   await CouponReservation.findByIdAndUpdate(
+//   order.Coupon.reservationId,
+//   { status: "expired" }
+// );
 
 order.Coupon = null;
 
   await order.save();
 
   return { success: true };
+} catch (error) {
+  console.error("this is the error--->>",error)
+}
 };
 
 
