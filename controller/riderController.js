@@ -8,6 +8,7 @@ import catchAsync from "../utills/catchAsync.js";
 import User from "../models/userModel.js";
 import pickup from "../models/pickupSchema.js";
 import APIFeatures from "../utills/apiFeatures.js";
+import customerFcmService from "../services/customerFcmService.js";
 
 // upload audio and voice
 // Configure AWS S3
@@ -46,10 +47,10 @@ export const uploadFiles = (req, res, next) => {
 
     console.log("req.files?", req.files);
     const { id } = req.params;
-    const { image } = req.files; // Array of image files
+    const { image } = req.files;
     const voice = req.files?.voice || [];
-    req.app.use(express.json({ limit: '100mb' }));
-    const location = req.body?.location || null; // Location optional bana diya
+    req.app.use(express.json({ limit: "100mb" }));
+    const location = req.body?.location || null;
     const { currObj, price } = req.body;
 
     console.log(
@@ -73,53 +74,37 @@ export const uploadFiles = (req, res, next) => {
     }
 
     try {
-      // Parse the stringified currObj
       const parsedCurrObj = JSON.parse(currObj);
 
+      const pickup_details_arr = await Pickup.find({ _id : parsedCurrObj.id });
+      const pickup_details = pickup_details_arr[0];
 
-      const pickup_details_arr = await Pickup.find({_id : parsedCurrObj.id})
-
-
-      const pickup_details = pickup_details_arr[0]
-
-      if(pickup_details?.appCustomerId || pickup_details?.platform_type === 'app')
-      {
-        parsedCurrObj.address = pickup_details?.deliveryAddress
+      if (pickup_details?.appCustomerId || pickup_details?.platform_type === "app") {
+        parsedCurrObj.address = pickup_details?.deliveryAddress;
       }
 
-      // Parse location only if it exists
       let parsedLocation = null;
 
-      if(pickup_details?.appCustomerId || pickup_details?.platform_type === 'app')
-      {
-        let app_del_location =  {
-        latitude : pickup_details?.deliveryLocation?.latitude,
-        longitude : pickup_details?.deliveryLocation?.longitude
+      if (pickup_details?.appCustomerId || pickup_details?.platform_type === "app") {
+        parsedLocation = {
+          latitude: pickup_details?.deliveryLocation?.latitude,
+          longitude: pickup_details?.deliveryLocation?.longitude,
+        };
       }
-
-       parsedLocation = app_del_location
-      }
-       
-
-
 
       if (location) {
         parsedLocation = JSON.parse(location);
       }
 
-
-      // Ensure parsedCurrObj is an object
       if (!parsedCurrObj || typeof parsedCurrObj !== "object") {
         return res.status(400).json({ message: "Invalid currObj format." });
-      } 
+      }
 
-      // Upload multiple images to S3
       const imageUploads = await Promise.all(
         image.map((img) => uploadToS3(img, process.env.AWS_S3_BUCKET_NAME))
       );
       const imageUrls = imageUploads.map((upload) => upload.Location);
 
-      // Upload voice to S3 if it exists
       let voiceUpload = null;
       if (voice.length > 0) {
         voiceUpload = await uploadToS3(
@@ -129,7 +114,6 @@ export const uploadFiles = (req, res, next) => {
         );
       }
 
-      // Get the latest order and calculate order ID
       const latestOrder = await Order.find().sort({ _id: -1 });
       let order_id = `WZ1001`;
       if (latestOrder.length > 0) {
@@ -143,25 +127,43 @@ export const uploadFiles = (req, res, next) => {
         readyForDelivery: null,
         deliveryriderassigned: null,
         delivered: null,
-        cancelled: null
-      }
+        cancelled: null,
+      };
 
-      // Create a new order in the database
       await Order.create({
         contactNo: parsedCurrObj.contactNo,
         customerName: parsedCurrObj.customerName,
         address: parsedCurrObj.address,
         items: parsedCurrObj.items,
-        price: price, // From req.body
+        price: price,
         order_id,
         intransitVoice: voiceUpload?.Location || null,
-        intransitImage: imageUrls, // Save array of image URLs
+        intransitImage: imageUrls,
         plantName: parsedCurrObj.plantName,
         orderLocation: parsedLocation,
         statusHistory,
       });
-      
+
       await Pickup.findByIdAndUpdate(id, { PickupStatus: "complete" });
+
+      const customerId = pickup_details?.appCustomerId
+        ? String(pickup_details.appCustomerId)
+        : null;
+
+      if (customerId) {
+        await customerFcmService.sendToCustomer(
+          customerId,
+          {
+            title: "✅ Item's = secured",
+            body: "Your laundry's escape plan is in motion. Sit tight, we’ll handle the rest!",
+          },
+          {
+            type: "pickup_completed",
+            pickupId: String(id),
+            screen: "PickupDetails",
+          }
+        );
+      }
 
       res.status(200).json({
         message: "Files uploaded and order status updated to processing.",
@@ -190,6 +192,21 @@ export const reschedulePickup = async (req, res) => {
     pickup.isRescheduled = true;
     pickup.type = "reschdule";
     await pickup.save();
+
+    if (pickup.appCustomerId) {
+      await customerFcmService.sendToCustomer(
+        String(pickup.appCustomerId),
+        {
+          title: "Plans changed 👀",
+          body: "Your pickup’s been rescheduled. Sit back, we’ve got it.",
+        },
+        {
+          type: "Pickup_Rescheduled",
+          pickupId: String(pickup._id),
+          screen: "PickupDetails",
+        }
+      );
+    }
 
     res.status(200).json({ message: "Pickup rescheduled successfully" });
   } catch (error) {

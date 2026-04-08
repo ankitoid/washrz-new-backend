@@ -1,11 +1,11 @@
 // services/fcmService.js
-import admin from "../config/firebaseAdmin.js";
+import riderApp from "../config/firebaseAdmin.js";
 import RiderPushToken from "../models/riderPushTokenModel.js";
 import mongoose from "mongoose";
 
 class FCMService {
   constructor() {
-    this.admin = admin;
+    this.admin = riderApp;
   }
 
   // Check if FCM is available
