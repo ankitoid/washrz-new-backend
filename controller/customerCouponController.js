@@ -14,7 +14,11 @@ customerCoupons.getAvailableCoupons = catchAsync(async (req, res) => {
 
 // APPLY COUPON
 customerCoupons.applyCouponToOrder = catchAsync(async (req, res) => {
-  const result = await coupons_service.applyToOrder(req.user.id, req.body);
+
+   const userId = req.body?.data?.userId
+   if (!userId) throw new Error("User not found");
+
+  const result = await coupons_service.applyToOrder(userId, req.body?.data);
   res.send(result);
 });
 
