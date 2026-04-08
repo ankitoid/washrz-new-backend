@@ -15,6 +15,9 @@ customerCoupons.getAvailableCoupons = catchAsync(async (req, res) => {
 // APPLY COUPON
 customerCoupons.applyCouponToOrder = catchAsync(async (req, res) => {
 
+
+  console.log("this is the req body",req.body)
+
    const userId = req.body?.data?.userId
    if (!userId) throw new Error("User not found");
 
