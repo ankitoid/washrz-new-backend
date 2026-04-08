@@ -1,6 +1,7 @@
 import CouponReservation from "../models/couponReservationSchema.js";
 import Coupon from "../models/couponSchema.js";
 import Order from "../models/orderSchema.js";
+import catchAsync from "../utills/catchAsync.js";
 
 
 
@@ -169,7 +170,8 @@ coupons_service.getAvailable = async (query) => {
 
 // APPLY COUPON (RESERVE)
 coupons_service.applyToOrder = async (userId, body) => {
-  const { orderId, code } = body;
+  try {
+    const { orderId, code } = body;
 
   const order = await Order.findOne({ order_id: orderId });
   if (!order) throw new Error("Order not found");
@@ -251,6 +253,9 @@ if (usedByUser >= coupon.perUser) {
   await order.save();
 
   return { success: true, order };
+  } catch (error) {
+    console.log("this is the error==>>",error)
+  }
 };
 
 
