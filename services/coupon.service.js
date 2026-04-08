@@ -1,3 +1,4 @@
+import CouponReservation from "../models/couponReservationSchema.js";
 import Coupon from "../models/couponSchema.js";
 import Order from "../models/orderSchema.js";
 
@@ -154,7 +155,7 @@ coupons_service.getAvailable = async (query) => {
     startDate: { $lte: now },
     expiryDate: { $gte: now },
     minOrder: { $lte: Number(cartAmount) },
-    ...(category && { categories: category }),
+   ...(category && { categories: category.toUpperCase() }),
     $expr: {
       $lt: [
         { $add: ["$usedCount", "$reservedCount"] },
@@ -183,7 +184,7 @@ coupons_service.applyToOrder = async (userId, body) => {
       isActive: true,
       startDate: { $lte: now },
       expiryDate: { $gte: now },
-      minOrder: { $lte: order.totalAmount },
+      minOrder: { $lte: order.price },
       $expr: {
         $lt: [
           { $add: ["$usedCount", "$reservedCount"] },
@@ -197,35 +198,55 @@ coupons_service.applyToOrder = async (userId, body) => {
 
   if (!coupon) throw new Error("Invalid coupon");
 
+  const usedByUser = await CouponReservation.countDocuments({
+  userId,
+  couponId: coupon._id,
+  status: "confirmed",
+});
+
+if (usedByUser >= coupon.perUser) {
+  throw new Error("Coupon usage limit exceeded for user");
+}
+
   let discount = 0;
+
+  const baseAmount = order.price;
 
   if (coupon.type === "flat") {
     discount = coupon.discount;
   } else {
-    discount = (order.price * coupon.discount) / 100;
+    discount = (baseAmount * coupon.discount) / 100;
+
     if (coupon.maxCap) {
       discount = Math.min(discount, coupon.maxCap);
     }
   }
 
+  // ✅ FINAL CALCULATION (ONLY THIS SHOULD EXIST)
+  order.discountAmount = discount;
+
+  order.totalAmount = Math.max(
+    0,
+    baseAmount + order.deliveryCharges + order.taxAmount - discount
+  );
+
+  // ✅ CREATE RESERVATION
   const reservation = await CouponReservation.create({
     couponId: coupon._id,
     userId,
     expiresAt: new Date(Date.now() + 5 * 60 * 1000)
   });
 
-  order.discountAmount = discount;
-  order.totalAmount =
-    order.price  - discount;
-
-  order.Coupon.coupon = {
-    couponId: coupon._id,
-    code: coupon.code,
-    discount,
-    type: coupon.type
+  // ✅ SAFE ASSIGNMENT
+  order.Coupon = {
+    coupon: {
+      couponId: coupon._id,
+      code: coupon.code,
+      discount,
+      type: coupon.type
+    },
+    reservationId: reservation._id
   };
-
-  order.Coupon.reservationId = reservation._id;
 
   await order.save();
 
@@ -249,7 +270,7 @@ coupons_service.confirmAfterPayment = async (userId, body) => {
     }
   });
 
-  await CouponReservation.findByIdAndUpdate(order.reservationId, {
+  await CouponReservation.findByIdAndUpdate(order.Coupon.reservationId, {
     status: "confirmed"
   });
 
@@ -268,7 +289,7 @@ coupons_service.removeFromOrder = async (userId, body) => {
     $inc: { reservedCount: -1 }
   });
 
-  await CouponReservation.findByIdAndUpdate(order.reservationId, {
+  await CouponReservation.findByIdAndUpdate(order.Coupon.reservationId, {
     status: "expired"
   });
 
@@ -276,8 +297,15 @@ coupons_service.removeFromOrder = async (userId, body) => {
   order.totalAmount =
     order.price + order.deliveryCharges + order.taxAmount;
 
-  order.Coupon = null;
-  order.reservationId = null;
+  // order.Coupon = null;
+  // order.Coupon.reservationId = null;
+
+  await CouponReservation.findByIdAndUpdate(
+  order.Coupon.reservationId,
+  { status: "expired" }
+);
+
+order.Coupon = null;
 
   await order.save();
 

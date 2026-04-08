@@ -29,6 +29,7 @@ import customerCoupons from "./routes/customerCouponRoutes.js"
 import notificationRoutes from "./routes/notificationRoutes.js";
 import customerNotificationRoutes from "./routes/customerNotificationRoutes.js";
 import customerPushTokenRoutes from "./routes/customerPushTokenRoutes.js";
+import { cleanupExpiredCoupons } from "./jobs/couponCleanup.js";
 
 const app = express();
 
@@ -330,6 +331,22 @@ io.on("connection", (socket) => {
     // console.log("Client disconnected:", socket.id);
   });
 });
+
+let isRunning = false;
+
+setInterval(async () => {
+  if (isRunning) return;
+
+  try {
+    isRunning = true;
+    await cleanupExpiredCoupons();
+  } catch (err) {
+    console.error("Coupon cleanup error:", err);
+  } finally {
+    isRunning = false;
+  }
+}, 30000);
+
 
 // Periodic cleanup: mark riders offline if no update for 2 minutes
 setInterval(async () => {

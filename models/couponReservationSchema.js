@@ -38,10 +38,10 @@ couponReservationSchema.index({ status: 1 });
 couponReservationSchema.index({ expiresAt: 1 });
 
 
-couponReservationSchema.index(
-  { expiresAt: 1 },
-  { expireAfterSeconds: 0 }
-);
+// couponReservationSchema.index(
+//   { expiresAt: 1 },
+//   { expireAfterSeconds: 0 }
+// );
 
 const CouponReservation = mongoose.model(
   "CouponReservation",
