@@ -18,10 +18,10 @@ customerCoupons.applyCouponToOrder = catchAsync(async (req, res) => {
 
   console.log("this is the req body",req.body)
 
-   const userId = req.body?.data?.userId
+   const userId = req.body?.userId
    if (!userId) throw new Error("User not found");
 
-  const result = await coupons_service.applyToOrder(userId, req.body?.data);
+  const result = await coupons_service.applyToOrder(userId, req.body);
   res.send(result);
 });
 
