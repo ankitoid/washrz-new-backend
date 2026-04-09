@@ -214,22 +214,27 @@ if (usedByUser >= coupon.perUser) {
   throw new Error("Coupon usage limit exceeded for user");
 }
 
-  let discount = 0;
+let discount = 0;
 
-  const baseAmount = order.price;
+const baseAmount = order.price;
 
-  if (coupon.type === "flat") {
-    discount = coupon.discount;
-  } else {
-    discount = (baseAmount * coupon.discount) / 100;
+if (coupon.type === "flat") {
+  discount = Math.floor(coupon.discount);
+} else {
+  discount = Math.floor((baseAmount * coupon.discount) / 100);
 
-    if (coupon.maxCap) {
-      discount = Math.min(discount, coupon.maxCap);
-    }
+  if (coupon.maxCap) {
+    discount = Math.min(discount, coupon.maxCap);
   }
+}
 
-  // ✅ FINAL CALCULATION (ONLY THIS SHOULD EXIST)
-  order.discountAmount = discount;
+// ✅ safety
+discount = Math.min(discount, baseAmount);
+
+// ✅ final integer
+discount = Math.floor(discount);
+
+order.discountAmount = discount;
 
   order.totalAmount = Math.max(
     0,
