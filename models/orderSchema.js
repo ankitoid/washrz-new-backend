@@ -266,7 +266,10 @@ orderSchema.pre("save", function (next) {
   const tax = this.taxAmount || 0;
   const discount = this.discountAmount || 0;
 
-  this.totalAmount = Math.max(0, price + delivery + tax - discount);
+  this.totalAmount = Math.max(
+  0,
+  Number((price + delivery + tax - discount).toFixed(2))
+);
 
   next();
 });

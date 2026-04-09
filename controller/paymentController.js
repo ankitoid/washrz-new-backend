@@ -31,10 +31,10 @@ export const initiatePayment = async (req, res) => {
       });
     }
 
-    const amount = order.totalAmount || order.price || 0;
+    const amount = Number(order.totalAmount.toFixed(2));
 
     const razorpayOrder = await razorpay.orders.create({
-      amount: amount * 100,
+      amount: Math.round(amount * 100),
       currency: "INR",
       receipt: order.order_id
     });
