@@ -148,15 +148,19 @@ coupons_service.remove = async (id) => {
 
 // GET AVAILABLE COUPONS
 coupons_service.getAvailable = async (query) => {
-  const { cartAmount , category } = query;
+  const { cartAmount, category } = query;
   const now = new Date();
+
+
+  console.log("NOW:", now);
+
 
   const coupons = await Coupon.find({
     isActive: true,
     startDate: { $lte: now },
     expiryDate: { $gte: now },
     minOrder: { $lte: Number(cartAmount) },
-   ...(category && { categories: category.toUpperCase() }),
+    ...(category && { categories: { $in: [category.toUpperCase()] } }),
     $expr: {
       $lt: [
         { $add: ["$usedCount", "$reservedCount"] },
@@ -302,6 +306,11 @@ try {
   await CouponReservation.findByIdAndUpdate(order.Coupon.reservationId, {
     status: "expired"
   });
+
+  if (order.isPaid) {
+  return { success: false, message: "Cannot remove coupon after payment" };
+}
+
 
   order.discountAmount = 0;
   order.totalAmount =

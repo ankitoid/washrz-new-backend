@@ -140,6 +140,11 @@ export const verifyRazorpayPayment = async (req, res) => {
 
     order.markModified("payment");
 
+    // ✅ CONFIRM COUPON AFTER PAYMENT
+await coupons_service.confirmAfterPayment({
+  orderId: order.order_id,
+})
+
     await order.save();
 
     console.log("Payment verified:", order.order_id);
@@ -445,6 +450,10 @@ export const razorpayWebhook = async (req, res) => {
       order.markModified("qrPayments");
 
       await order.save();
+
+      await coupons_service.confirmAfterPayment({
+  orderId: order.order_id,
+});
 
       console.log("✅ Webhook updated order:", order.order_id);
 

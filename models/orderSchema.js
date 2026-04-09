@@ -258,6 +258,19 @@ const CouponManageSchema = new Schema(
     }
   );
 
+
+// ========== AUTO CALCULATE TOTAL ==========
+orderSchema.pre("save", function (next) {
+  const price = this.price || 0;
+  const delivery = this.deliveryCharges || 0;
+  const tax = this.taxAmount || 0;
+  const discount = this.discountAmount || 0;
+
+  this.totalAmount = Math.max(0, price + delivery + tax - discount);
+
+  next();
+});
+
   // ========== INDEXES ==========
   orderSchema.index({ 'payment.razorpayPaymentId': 1 });
   orderSchema.index({ order_id: 1 }, { unique: true });
