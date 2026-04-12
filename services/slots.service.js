@@ -67,7 +67,12 @@ export const checkService = async (req, res) => {
     const currentTime = now.format("HH:mm");
     const today = now.format("YYYY-MM-DD");
 
+
+    console.log("this is the currentTime and today",currentTime,today)
+
     const config = await SlotConfig.findOne({ date: today });
+
+    console.log('this is the config-->>',config)
 
     if (!config || !config.serviceEnabled) {
       return res.json({ 
@@ -77,6 +82,8 @@ export const checkService = async (req, res) => {
     }
 
     const zone = config.zones.find((z) => z.zoneId === zoneId);
+
+    console.log("this is the zone",zone)
 
     if (!zone || !zone.enabled) {
       return res.json({ 
