@@ -18,11 +18,11 @@ const customerNotificationSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: [
-        "pickup_created",
-        "pickup_updated",
-        "pickup_cancelled",
-        "order_created",
-        "order_updated",
+        "pickup_Created",
+        "pickup_Rescheduled",
+        "pickup_Completed",
+        "out_for_Delivery",
+        "order_Delivered",
         "system",
       ],
       required: true,
@@ -42,12 +42,12 @@ const customerNotificationSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 customerNotificationSchema.index({ customerId: 1, createdAt: -1 });
 
 export default mongoose.model(
   "CustomerNotification",
-  customerNotificationSchema
+  customerNotificationSchema,
 );

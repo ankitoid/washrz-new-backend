@@ -576,7 +576,7 @@ export const updateOrderStatus = async (req, res) => {
           body: "Freshly cleaned and delivered with care.",
         },
         {
-          type: "Delivered",
+          type: "order_Delivered",
           orderId: String(updatedOrder._id),
           screen: "OrderDetails",
         }

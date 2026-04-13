@@ -6,7 +6,6 @@ import cron from "node-cron";
 import fcmService from "../services/fcmService.js";
 import RiderLocation from "../models/riderLocationSchema.js";
 import { createNotification } from "../controller/notificationController.js";
-import { createCustomerNotification } from "../controller/customerNotificationController.js";
 import customerFcmService from "../services/customerFcmService.js";
 
 // Create a new plant
@@ -345,6 +344,7 @@ export const assignPickupRider = async (req, res) => {
     });
 
     if (pickup.appCustomerId) {
+
 
       await customerFcmService.sendToCustomer(
         String(pickup.appCustomerId),

@@ -1,4 +1,5 @@
 import CustomerNotification from "../models/customerNotificationSchema.js";
+import { emitToUser } from "../utills/socket.js";
 
 export const createCustomerNotification = async ({
   customerId,
@@ -10,13 +11,25 @@ export const createCustomerNotification = async ({
   try {
     if (!customerId) return null;
 
-    return await CustomerNotification.create({
+    const notification = await CustomerNotification.create({
       customerId: String(customerId),
       title,
       message,
       type,
       data,
     });
+
+    const unreadCount = await CustomerNotification.countDocuments({
+      customerId: String(customerId),
+      isRead: false,
+    });
+
+    emitToUser(String(customerId), "CUSTOMER_NOTIFICATION", {
+      notification,
+      unreadCount,
+    });
+
+    return notification;
   } catch (error) {
     console.error("Customer notification create error:", error);
     return null;
@@ -27,6 +40,10 @@ export const getCustomerNotifications = async (req, res) => {
   try {
     const { customerId } = req.params;
 
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
     if (!customerId) {
       return res.status(400).json({
         status: "error",
@@ -34,16 +51,26 @@ export const getCustomerNotifications = async (req, res) => {
       });
     }
 
-    const notifications = await CustomerNotification.find({
-      customerId: String(customerId),
-    }).sort({ createdAt: -1 });
+    const [notifications, total] = await Promise.all([
+      CustomerNotification.find({
+        customerId: String(customerId),
+        isRead: false,
+      })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
 
-    const unreadCount = notifications.filter((n) => !n.isRead).length;
+      CustomerNotification.countDocuments({
+        customerId: String(customerId),
+        isRead: false,
+      }),
+    ]);
 
     return res.status(200).json({
       status: "success",
-      unreadCount,
-      total: notifications.length,
+      total,
+      page,
+      limit,
       data: notifications,
     });
   } catch (error) {
@@ -58,14 +85,25 @@ export const getCustomerNotifications = async (req, res) => {
 export const markCustomerNotificationAsRead = async (req, res) => {
   try {
     const { id } = req.params;
+    const { customerId } = req.body;
 
-    const notification = await CustomerNotification.findByIdAndUpdate(
-      id,
+    if (!customerId) {
+      return res.status(400).json({
+        status: "error",
+        message: "customerId is required",
+      });
+    }
+
+    const notification = await CustomerNotification.findOneAndUpdate(
+      {
+        _id: id,
+        customerId: String(customerId),
+      },
       {
         isRead: true,
         readAt: new Date(),
       },
-      { new: true }
+      { new: true },
     );
 
     if (!notification) {
@@ -74,6 +112,16 @@ export const markCustomerNotificationAsRead = async (req, res) => {
         message: "Notification not found",
       });
     }
+
+    const unreadCount = await CustomerNotification.countDocuments({
+      customerId: String(customerId),
+      isRead: false,
+    });
+
+    emitToUser(String(customerId), "CUSTOMER_NOTIFICATION_READ", {
+      id,
+      unreadCount,
+    });
 
     return res.status(200).json({
       status: "success",
@@ -99,17 +147,25 @@ export const markAllCustomerNotificationsAsRead = async (req, res) => {
       });
     }
 
-    await CustomerNotification.updateMany(
-      { customerId: String(customerId), isRead: false },
+    const result = await CustomerNotification.updateMany(
+      {
+        customerId: String(customerId),
+        isRead: false,
+      },
       {
         isRead: true,
         readAt: new Date(),
-      }
+      },
     );
+
+    emitToUser(String(customerId), "CUSTOMER_NOTIFICATION_READ_ALL", {
+      unreadCount: 0,
+    });
 
     return res.status(200).json({
       status: "success",
-      message: "All customer notifications marked as read",
+      message: "All unread notifications marked as read",
+      updatedCount: result.modifiedCount,
     });
   } catch (error) {
     console.error("markAllCustomerNotificationsAsRead error:", error);
@@ -123,8 +179,18 @@ export const markAllCustomerNotificationsAsRead = async (req, res) => {
 export const deleteCustomerNotification = async (req, res) => {
   try {
     const { id } = req.params;
+    const { customerId } = req.body;
+    if (!customerId) {
+      return res.status(400).json({
+        status: "error",
+        message: "customerId is required",
+      });
+    }
 
-    const notification = await CustomerNotification.findByIdAndDelete(id);
+    const notification = await CustomerNotification.findOneAndDelete({
+      _id: id,
+      customerId: String(customerId),
+    });
 
     if (!notification) {
       return res.status(404).json({

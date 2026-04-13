@@ -1,4 +1,4 @@
-import express from "express"
+import express from "express";
 import AWS from "aws-sdk";
 import multer from "multer";
 import cron from "node-cron";
@@ -9,6 +9,7 @@ import User from "../models/userModel.js";
 import pickup from "../models/pickupSchema.js";
 import APIFeatures from "../utills/apiFeatures.js";
 import customerFcmService from "../services/customerFcmService.js";
+import { createCustomerNotification } from "./customerNotificationController.js";
 
 // upload audio and voice
 // Configure AWS S3
@@ -60,7 +61,7 @@ export const uploadFiles = (req, res, next) => {
       voice,
       location,
       currObj,
-      price
+      price,
     );
 
     if (!id || !image || !price) {
@@ -76,16 +77,22 @@ export const uploadFiles = (req, res, next) => {
     try {
       const parsedCurrObj = JSON.parse(currObj);
 
-      const pickup_details_arr = await Pickup.find({ _id : parsedCurrObj.id });
+      const pickup_details_arr = await Pickup.find({ _id: parsedCurrObj.id });
       const pickup_details = pickup_details_arr[0];
 
-      if (pickup_details?.appCustomerId || pickup_details?.platform_type === "app") {
+      if (
+        pickup_details?.appCustomerId ||
+        pickup_details?.platform_type === "app"
+      ) {
         parsedCurrObj.address = pickup_details?.deliveryAddress;
       }
 
       let parsedLocation = null;
 
-      if (pickup_details?.appCustomerId || pickup_details?.platform_type === "app") {
+      if (
+        pickup_details?.appCustomerId ||
+        pickup_details?.platform_type === "app"
+      ) {
         parsedLocation = {
           latitude: pickup_details?.deliveryLocation?.latitude,
           longitude: pickup_details?.deliveryLocation?.longitude,
@@ -101,7 +108,7 @@ export const uploadFiles = (req, res, next) => {
       }
 
       const imageUploads = await Promise.all(
-        image.map((img) => uploadToS3(img, process.env.AWS_S3_BUCKET_NAME))
+        image.map((img) => uploadToS3(img, process.env.AWS_S3_BUCKET_NAME)),
       );
       const imageUrls = imageUploads.map((upload) => upload.Location);
 
@@ -110,7 +117,7 @@ export const uploadFiles = (req, res, next) => {
         voiceUpload = await uploadToS3(
           voice[0],
           process.env.AWS_S3_BUCKET_NAME,
-          "intransiteOrderVoice"
+          "intransiteOrderVoice",
         );
       }
 
@@ -151,6 +158,17 @@ export const uploadFiles = (req, res, next) => {
         : null;
 
       if (customerId) {
+        await createCustomerNotification({
+          customerId: customerId,
+          title: "Pickup Completed",
+          message: "Your pickup has been completed successfully.",
+          type: "pickup_Completed",
+          data: {
+            pickupId: String(id),
+            screen: "PickupDetails",
+          },
+        });
+
         await customerFcmService.sendToCustomer(
           customerId,
           {
@@ -158,10 +176,10 @@ export const uploadFiles = (req, res, next) => {
             body: "Your laundry's escape plan is in motion. Sit tight, we’ll handle the rest!",
           },
           {
-            type: "pickup_completed",
+            type: "pickup_Completed",
             pickupId: String(id),
             screen: "PickupDetails",
-          }
+          },
         );
       }
 
@@ -194,6 +212,16 @@ export const reschedulePickup = async (req, res) => {
     await pickup.save();
 
     if (pickup.appCustomerId) {
+      await createCustomerNotification({
+        customerId: pickup.appCustomerId,
+        title: "Pickup Updated",
+        message: "Your pickup timing has been updated.",
+        type: "pickup_Rescheduled",
+        data: {
+          pickupId: pickup._id,
+        },
+      });
+
       await customerFcmService.sendToCustomer(
         String(pickup.appCustomerId),
         {
@@ -201,10 +229,10 @@ export const reschedulePickup = async (req, res) => {
           body: "Your pickup’s been rescheduled. Sit back, we’ve got it.",
         },
         {
-          type: "Pickup_Rescheduled",
+          type: "pickup_Rescheduled",
           pickupId: String(pickup._id),
           screen: "PickupDetails",
-        }
+        },
       );
     }
 
@@ -375,7 +403,7 @@ export const uploadCancelInfo = catchAsync(async (req, res, next) => {
         voiceUpload = await uploadNoteToS3(
           voice[0],
           process.env.AWS_S3_BUCKET_NAME,
-          "pickupCancelVoices"
+          "pickupCancelVoices",
         );
       }
 
@@ -388,7 +416,7 @@ export const uploadCancelInfo = catchAsync(async (req, res, next) => {
           PickupStatus: "deleted",
           type: "",
         },
-        { new: true }
+        { new: true },
       );
 
       if (!updatedPickup) {
@@ -437,7 +465,7 @@ export const uploadDeliverImage = catchAsync(async (req, res) => {
       const imageUpload = await uploadNoteToS3(
         image[0],
         process.env.AWS_S3_BUCKET_NAME,
-        "CompleteOrderImage"
+        "CompleteOrderImage",
       );
 
       // Update the pickup in the database with the note and voice URLs
@@ -665,7 +693,6 @@ export const getRiderDashboardData = async (req, res) => {
   }
 };
 
-
 //get all rider pickups
 
 export const getRiderPickups = async (req, res) => {
@@ -687,7 +714,7 @@ export const getRiderPickups = async (req, res) => {
           isRescheduled: false,
           riderName: riderName,
         }),
-        req.query
+        req.query,
       )
         .sort()
         .limitFields()
@@ -723,7 +750,7 @@ export const getRiderTasksById = async (req, res) => {
 
     // 1️⃣ Get Rider Details
     const rider = await User.findById(riderId).select(
-      "name email phone role plant"
+      "name email phone role plant",
     );
 
     if (!rider || rider.role !== "rider") {
@@ -754,11 +781,11 @@ export const getRiderTasksById = async (req, res) => {
     ]);
 
     const totalCompletedPickups = pickups.filter(
-      (pickup) => pickup.PickupStatus === "complete"
+      (pickup) => pickup.PickupStatus === "complete",
     ).length;
 
     const totalCompletedDeliveries = deliveries.filter(
-      (delivery) => delivery.status === "delivered"
+      (delivery) => delivery.status === "delivered",
     ).length;
 
     // 4️⃣ Response
@@ -771,7 +798,6 @@ export const getRiderTasksById = async (req, res) => {
         plant: rider.plant,
       },
       summary: {
-
         totalPickups: pickups.length,
         totalDeliveries: deliveries.length,
         totalCompletedPickups,
