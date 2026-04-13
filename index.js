@@ -28,6 +28,7 @@ import customerCoupons from "./routes/customerCouponRoutes.js"
 import notificationRoutes from "./routes/notificationRoutes.js";
 import customerNotificationRoutes from "./routes/customerNotificationRoutes.js";
 import customerPushTokenRoutes from "./routes/customerPushTokenRoutes.js";
+import slotRoutes from "./routes/slotsRoutes.js";
 import { cleanupExpiredCoupons } from "./jobs/couponCleanup.js";
 
 const app = express();
@@ -409,6 +410,7 @@ app.use('/api/v1/qr', qrRoutes);
 app.use("/api/v1/osrm", osrmRoutes);
 app.use("/api/v1/admincoupons",adminCoupons)
 app.use("/api/v1/customercoupons",customerCoupons)
+app.use("/api/v1/slots",slotRoutes)
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/customer/notifications", customerNotificationRoutes);
 app.use("/api/v1/customer/push-tokens", customerPushTokenRoutes);
