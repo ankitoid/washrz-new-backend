@@ -203,7 +203,8 @@ export const logoutUser = async (req, res) => {
 };
 
 export const protect = catchAsync(async (req, res, next) => {
-  // 1) Getting token and check of it's there
+  try {
+      // 1) Getting token and check of it's there
   let token;
   if (
     req.headers.authorization &&
@@ -213,6 +214,7 @@ export const protect = catchAsync(async (req, res, next) => {
   } else if (req.cookies.jwt) {
     token = req.cookies.jwt;
   }
+  console.log("this is the token:: ", token)
   if (!token) {
     return next(
       new AppError("You are not logged in! Please log in to get access.", 401)
@@ -245,6 +247,10 @@ export const protect = catchAsync(async (req, res, next) => {
   req.user = currentUser;
   res.locals.user = currentUser;
   next();
+  } catch (error) {
+     console.log("this is the error in protect:  :", error)
+  }
+
 });
 
 // Only for rendered pages, no errors!

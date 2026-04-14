@@ -25,6 +25,7 @@ import fcmService from "./services/fcmService.js";
 import debugRoutes from "./routes/debugRoutes.js";
 import osrmRoutes from "./routes/osrmRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import catalogRoutes from "./routes/catalogRoutes.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -472,6 +473,7 @@ app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/qr', qrRoutes);
 app.use("/api/v1/osrm", osrmRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/catalog", catalogRoutes);
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
