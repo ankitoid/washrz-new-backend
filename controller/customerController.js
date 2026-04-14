@@ -10,6 +10,8 @@ import mongoose from "mongoose";
 import ErrorHandler from "../utills/errorHandler.js";
 import AWS from "aws-sdk";
 import multer from "multer";
+import customerFcmService from "../services/customerFcmService.js";
+import  { createCustomerNotification } from "./customerNotificationController.js";
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
@@ -356,14 +358,39 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     // -------------------------
     const pickupData = await pickup.create(pickupPayload);
 
+    await createCustomerNotification({
+      customerId: pickupData.appCustomerId,
+      title: "Pickup Scheduled",
+      message: "Your pickup has been scheduled successfully.",
+      type: "pickup_Created",
+      data: {
+        pickupId: pickupData._id,
+        screen: "PickupDetails",
+      },
+    });
+
     // -------------------------
     // Emit socket event
     // -------------------------
     req.socket.emit("addPickup", pickupData);
 
+    const pushResult = await customerFcmService.sendToCustomer(
+      String(appCustomerId),
+      {
+        title: "Woo!, Pickup booked 🧺",
+        body: "We’ll be there soon to collect your laundry.",
+      },
+      {
+        type: "pickup_Created",
+        pickupId: String(pickupData._id),
+        screen: "PickupDetails",
+      }
+    );
+
     return res.status(200).json({
       message: "Pickup added successfully",
       data: pickupData,
+      push: pushResult,
     });
   } catch (error) {
     console.error("addPickupthroughApp ERROR ❌", error);
@@ -990,8 +1017,6 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
 
   // Use the user's plant name to filter pickups
   const plantName = user.plant;
-
-  // Check if 'status' is provided in the query, otherwise default to 'processing'
 
   if (req.query.status === "processing") {
     const status = req.query.status;

@@ -21,16 +21,22 @@ import riderLocationRoutes from "./routes/riderLocationRoutes.js";
 import RiderLocation from "./models/riderLocationSchema.js";
 import pushTokenRoutes from "./routes/pushTokenRoutes.js";
 import User from "./models/userModel.js";
-import fcmService from "./services/fcmService.js";
 import debugRoutes from "./routes/debugRoutes.js";
 import osrmRoutes from "./routes/osrmRoutes.js";
+import adminCoupons from "./routes/adminCouponRoutes.js"
+import customerCoupons from "./routes/customerCouponRoutes.js"
 import notificationRoutes from "./routes/notificationRoutes.js";
 import catalogRoutes from "./routes/catalogRoutes.js";
+import customerNotificationRoutes from "./routes/customerNotificationRoutes.js";
+import customerPushTokenRoutes from "./routes/customerPushTokenRoutes.js";
+import slotRoutes from "./routes/slotsRoutes.js";
+import { cleanupExpiredCoupons } from "./jobs/couponCleanup.js";
 
 const app = express();
+
+console.log("just changed")
 const server = http.createServer(app);
 app.use(cookies());
-console.log("changed--------------------------")
 app.use(
   cors({
     origin: [
@@ -327,6 +333,22 @@ io.on("connection", (socket) => {
   });
 });
 
+let isRunning = false;
+
+setInterval(async () => {
+  if (isRunning) return;
+
+  try {
+    isRunning = true;
+    await cleanupExpiredCoupons();
+  } catch (err) {
+    console.error("Coupon cleanup error:", err);
+  } finally {
+    isRunning = false;
+  }
+}, 30000);
+
+
 // Periodic cleanup: mark riders offline if no update for 2 minutes
 setInterval(async () => {
   const now = new Date();
@@ -374,91 +396,6 @@ setInterval(async () => {
   }
 }, 60 * 1000);
 
-app.post("/api/v1/test-fcm", async (req, res) => {
-  try {
-    const { riderId, title = "Test Notification", body = "This is a test notification" } = req.body;
-
-    if (!riderId) {
-      return res.status(400).json({ error: "riderId is required" });
-    }
-
-    const result = await fcmService.sendToRider(
-      riderId,
-      { title, body },
-      { type: "test", timestamp: new Date().toISOString() }
-    );
-
-    res.json({
-      message: "FCM test sent",
-      result
-    });
-  } catch (error) {
-    console.error("Test FCM error:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Test FCM connection
-app.get("/api/v1/fcm-status", async (req, res) => {
-  try {
-    const status = await fcmService.testConnection();
-    res.json(status);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get("/api/v1/fcm-status", async (req, res) => {
-  try {
-    const status = await fcmService.testConnection();
-    res.json(status);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Test send notification
-app.post("/api/v1/test-fcm", async (req, res) => {
-  try {
-    const { riderId, title = "Test Notification", body = "This is a test notification" } = req.body;
-
-    if (!riderId) {
-      return res.status(400).json({
-        error: "riderId is required",
-        hint: "Get rider ID from /api/v1/debug/riders-with-tokens"
-      });
-    }
-
-    // Validate riderId format
-    if (!mongoose.Types.ObjectId.isValid(riderId)) {
-      return res.status(400).json({
-        error: "Invalid riderId format. Must be a valid MongoDB ObjectId"
-      });
-    }
-
-    const result = await fcmService.sendToRider(
-      riderId,
-      { title, body },
-      {
-        type: "test",
-        timestamp: new Date().toISOString(),
-        test: "true"
-      }
-    );
-
-    res.json({
-      message: "FCM test completed",
-      riderId,
-      result
-    });
-  } catch (error) {
-    console.error("Test FCM error:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-
-
 app.use("/api/v1/debug", debugRoutes);
 app.use("/api/v1/rider/push-tokens", pushTokenRoutes);
 app.use("/api/v1/trips", tripRoutes);
@@ -472,8 +409,13 @@ app.use("/api/v1", revenueRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/qr', qrRoutes);
 app.use("/api/v1/osrm", osrmRoutes);
+app.use("/api/v1/admincoupons",adminCoupons)
+app.use("/api/v1/customercoupons",customerCoupons)
+app.use("/api/v1/slots",slotRoutes)
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/catalog", catalogRoutes);
+app.use("/api/v1/customer/notifications", customerNotificationRoutes);
+app.use("/api/v1/customer/push-tokens", customerPushTokenRoutes);
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });

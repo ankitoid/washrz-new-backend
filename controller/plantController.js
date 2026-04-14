@@ -6,6 +6,7 @@ import cron from "node-cron";
 import fcmService from "../services/fcmService.js";
 import RiderLocation from "../models/riderLocationSchema.js";
 import { createNotification } from "../controller/notificationController.js";
+import customerFcmService from "../services/customerFcmService.js";
 
 // Create a new plant
 export const addPlant = async (req, res) => {
@@ -313,25 +314,24 @@ export const assignPickupRider = async (req, res) => {
     req.socket.emit("assignedPickup", { pickup, riderName });
 
     if (riderId) {
-      req.socket
-        .to(`rider:${riderId}`)
-        .emit("riderAssignedPickup", { pickup });
-      
-      const fcmResult = await fcmService.sendToRider(
+      req.socket.to(`rider:${riderId}`).emit("riderAssignedPickup", { pickup });
+
+      await fcmService.sendToRider(
         riderId,
         {
           title: "📦 New Pickup Assigned",
-          body: `Pickup - Ready for collection`
+          body: "Pickup - Ready for collection",
         },
         {
           pickupId: String(pickup._id),
           type: "pickup_assigned",
           customerName: pickup.customerName || "Customer",
           action: "view_pickup",
-          screen: "pickup_details"
+          screen: "pickup_details",
         }
       );
     }
+
     await createNotification({
       riderId,
       title: "📦 New Pickup Assigned",
@@ -342,6 +342,23 @@ export const assignPickupRider = async (req, res) => {
         screen: "pickup_details",
       },
     });
+
+    if (pickup.appCustomerId) {
+
+
+      await customerFcmService.sendToCustomer(
+        String(pickup.appCustomerId),
+        {
+          title: "Rider Assigned",
+          body: "Keep items bagged & ready. Your laundry's escape plan is in motion!",
+        },
+        {
+          type: "pickup_assigned",
+          pickupId: String(pickup._id),
+          screen: "PickupDetails",
+        }
+      );
+    }
 
     res.status(200).json({
       status: "success",

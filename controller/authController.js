@@ -10,6 +10,7 @@ import multer from "multer";
 import Pickup from "../models/pickupSchema.js";
 import bcrypt from "bcryptjs/dist/bcrypt.js";
 import otp from "../models/otpSchema.js";
+import customerFcmService from "../services/customerFcmService.js";
 
 const signAccToken = (id, type) => {
   return jwt.sign({ id, userType: type }, process.env.JWT_SECRET, {
@@ -516,34 +517,32 @@ export const updateOrderStatus = async (req, res) => {
   try {
     const orderId = req.params.id;
 
-    // Ensure that both `orderId` and `status` are provided
     if (!orderId || !status) {
       return res
         .status(400)
         .json({ message: "Order ID and status are required." });
     }
 
-    // Prepare the update object to update the status and the statusHistory
-    const updateData = {
-      status,
-    };
-
-    // Set the appropriate statusHistory field based on the status
-    if (status === "intransit") {
-      updateData["statusHistory.intransit"] = new Date();
-    } else if (status === "processing") {
-      updateData["statusHistory.processing"] = new Date();
-    } else if (status === "ready for delivery") {
-      updateData["statusHistory.readyForDelivery"] = new Date();
-    } else if (status === "delivery rider assigned") {
-      updateData["statusHistory.deliveryriderassigned"] = new Date();
-    } else if (status === "delivered") {
-      updateData["statusHistory.delivered"] = new Date();
-    } else if (status === "cancelled") {
-      updateData["statusHistory.cancelled"] = new Date();
+    const existingOrder = await Order.findById(orderId);
+    if (!existingOrder) {
+      return res.status(404).json({ message: "Order not found." });
     }
 
-    // Update the order status and statusHistory in the database
+    const statusHistoryMap = {
+      intransit: "statusHistory.intransit",
+      processing: "statusHistory.processing",
+      "ready for delivery": "statusHistory.readyForDelivery",
+      "delivery rider assigned": "statusHistory.deliveryriderassigned",
+      delivered: "statusHistory.delivered",
+      cancelled: "statusHistory.cancelled",
+    };
+
+    const updateData = { status };
+
+    if (statusHistoryMap[status]) {
+      updateData[statusHistoryMap[status]] = new Date();
+    }
+
     const updatedOrder = await Order.findByIdAndUpdate(orderId, updateData, {
       new: true,
     });
@@ -552,12 +551,51 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ message: "Order not found." });
     }
 
-    res
-      .status(200)
-      .json({ message: "Order status updated successfully.", updatedOrder });
+    if (
+      status === "delivery rider assigned" &&
+      existingOrder.status !== "delivery rider assigned" &&
+      updatedOrder.appCustomerId
+    ) {
+      await customerFcmService.sendToCustomer(
+        String(updatedOrder.appCustomerId),
+        {
+          title: "All set 👌",
+          body: "Your items are heading home, clean and fresh.",
+        },
+        {
+          type: "Out_for_Delivery",
+          orderId: String(updatedOrder._id),
+          screen: "OrderDetails",
+        }
+      );
+    }
+
+    if (
+      status === "delivered" &&
+      existingOrder.status !== "delivered" &&
+      updatedOrder.appCustomerId
+    ) {
+      await customerFcmService.sendToCustomer(
+        String(updatedOrder.appCustomerId),
+        {
+          title: "Delivered ✨",
+          body: "Freshly cleaned and delivered with care.",
+        },
+        {
+          type: "order_Delivered",
+          orderId: String(updatedOrder._id),
+          screen: "OrderDetails",
+        }
+      );
+    }
+
+    return res.status(200).json({
+      message: "Order status updated successfully.",
+      updatedOrder,
+    });
   } catch (error) {
     console.error("Error updating order status:", error);
-    res.status(500).json({ message: "Internal server error." });
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
