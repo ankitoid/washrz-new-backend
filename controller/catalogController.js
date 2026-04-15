@@ -151,6 +151,7 @@ const mapCategoryList = (category) => ({
   itemCount: getPublishedItems(category.items).length,
   createdAt: category.createdAt,
   updatedAt: category.updatedAt,
+  items: category.items
 });
 
 export const list = async (req, res) => {
@@ -583,10 +584,13 @@ export const deleteItem = async (req, res) => {
 };
 
 export const uploadItemMedia = async (req, res) => {
+  console.log()
   upload(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ status: "error", message: err.message });
     }
+
+    console.log("this is the files:: ",  req.params, req.files?.images)
 
     try {
       const { id, itemId } = req.params;
