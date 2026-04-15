@@ -14,7 +14,9 @@ const upload = multer({
     files: 20,
   },
 }).fields([
+  { name: "image", maxCount: 10 },
   { name: "images", maxCount: 10 },
+  { name: "video", maxCount: 10 },
   { name: "videos", maxCount: 10 },
 ]);
 
@@ -74,6 +76,7 @@ const buildPagination = (page, limit, total) => ({
 });
 
 const buildCategoryPayload = (body = {}) => ({
+  sacid: String(body.sacid || "").trim(),
   label: String(body.label || "").trim(),
   slug: slugify(body.slug || body.label || ""),
   mainHeading: String(body.mainHeading || body.label || "").trim(),
@@ -106,6 +109,7 @@ const buildItemPayload = (body = {}, fallbackLabel = "") => {
 };
 
 const validateCategoryPayload = (payload) => {
+  if (!payload.sacid) return "Category sacid is required.";
   if (!payload.label) return "Category label is required.";
   if (!payload.slug) return "Category slug is required.";
   if (!payload.mainHeading) return "Category mainHeading is required.";
@@ -136,6 +140,7 @@ const getPublishedItems = (items = []) =>
 
 const mapCategoryList = (category) => ({
   _id: category._id,
+  sacid: category.sacid,
   label: category.label,
   slug: category.slug,
   mainHeading: category.mainHeading,
@@ -239,6 +244,7 @@ export const getCategory = async (req, res) => {
       status: "success",
       data: {
         _id: category._id,
+        sacid: category.sacid,
         label: category.label,
         slug: category.slug,
         mainHeading: category.mainHeading,
@@ -399,6 +405,7 @@ export const updateCategory = async (req, res) => {
     }
 
     category.label = payload.label;
+    category.sacid = payload.sacid;
     category.slug = payload.slug;
     category.mainHeading = payload.mainHeading;
     category.mainDescription = payload.mainDescription;
@@ -576,17 +583,21 @@ export const deleteItem = async (req, res) => {
 };
 
 export const uploadItemMedia = async (req, res) => {
-  console.log("i am here")
   upload(req, res, async (err) => {
-    console.log("err", err)
     if (err) {
       return res.status(400).json({ status: "error", message: err.message });
     }
 
     try {
       const { id, itemId } = req.params;
-      const images = req.files?.images || [];
-      const videos = req.files?.videos || [];
+      const images = [
+        ...(req.files?.images || []),
+        ...(req.files?.image || []),
+      ];
+      const videos = [
+        ...(req.files?.videos || []),
+        ...(req.files?.video || []),
+      ];
 
       if (images.length === 0 && videos.length === 0) {
         return res.status(400).json({
@@ -596,8 +607,6 @@ export const uploadItemMedia = async (req, res) => {
       }
 
       const category = await Catalog.findById(id);
-
-      console.log("category", category)
       if (!category) {
         return res.status(404).json({
           status: "error",

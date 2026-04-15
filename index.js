@@ -34,7 +34,6 @@ import { cleanupExpiredCoupons } from "./jobs/couponCleanup.js";
 
 const app = express();
 
-console.log("just changed")
 const server = http.createServer(app);
 app.use(cookies());
 app.use(

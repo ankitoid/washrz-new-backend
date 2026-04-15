@@ -132,6 +132,11 @@ const catalogItemSchema = new mongoose.Schema(
 
 const catalogCategorySchema = new mongoose.Schema(
   {
+    sacid: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     label: {
       type: String,
       required: true,
@@ -176,6 +181,7 @@ const catalogCategorySchema = new mongoose.Schema(
 );
 
 catalogCategorySchema.index({ slug: 1 }, { unique: true });
+catalogCategorySchema.index({ sacid: 1 }, { unique: true });
 catalogCategorySchema.index({ label: 1, isActive: 1 });
 catalogCategorySchema.index({ "items.sku": 1 });
 catalogCategorySchema.index({ "items.sacid": 1 });

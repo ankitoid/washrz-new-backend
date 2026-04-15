@@ -50,6 +50,7 @@ const buildItem = (categorySlug, categoryLabel, item, index) => ({
 
 export const catalogSeed = [
   {
+    sacid: "SAC-LAUNDRY-CAT-001",
     label: "Laundry",
     slug: "laundry",
     mainHeading: "Laundry Services",
@@ -63,6 +64,7 @@ export const catalogSeed = [
     ],
   },
   {
+    sacid: "SAC-DRYCLEAN-CAT-001",
     label: "DryClean",
     slug: "dryclean",
     mainHeading: "Dry Clean Services",
@@ -121,6 +123,7 @@ export const catalogSeed = [
     ],
   },
   {
+    sacid: "SAC-SHOESPA-CAT-001",
     label: "ShoeSpa",
     slug: "shoespa",
     mainHeading: "Shoe Spa Services",
