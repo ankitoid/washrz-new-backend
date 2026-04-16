@@ -195,7 +195,6 @@ export const uploadFiles = (req, res, next) => {
   });
 };
 
-// Reschedule Pickup Controller
 export const reschedulePickup = async (req, res) => {
   const { id } = req.params;
   const { newDate } = req.body;

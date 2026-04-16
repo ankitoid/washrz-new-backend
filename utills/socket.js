@@ -1,6 +1,4 @@
-export const emitToUser = (userId, event, data) => {
-  const socket = userSocketMap.get(userId);
-  if (socket) {
-    socket.emit(event, data);
-  }
-};
+import socketService from "../services/socketService.js";
+
+export const emitToUser = (userId, event, data) =>
+  socketService.emitToUser(userId, event, data);

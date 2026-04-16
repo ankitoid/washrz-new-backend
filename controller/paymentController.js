@@ -6,7 +6,7 @@ import Order from "../models/orderSchema.js";
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
 // ================= INITIATE PAYMENT =================
@@ -20,14 +20,14 @@ export const initiatePayment = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: "Order not found"
+        message: "Order not found",
       });
     }
 
     if (order.isPaid) {
       return res.status(400).json({
         success: false,
-        message: "Order already paid"
+        message: "Order already paid",
       });
     }
 
@@ -36,7 +36,7 @@ export const initiatePayment = async (req, res) => {
     const razorpayOrder = await razorpay.orders.create({
       amount: Math.round(amount * 100),
       currency: "INR",
-      receipt: order.order_id
+      receipt: order.order_id,
     });
 
     order.payment = {
@@ -46,7 +46,7 @@ export const initiatePayment = async (req, res) => {
       currency: "INR",
       status: "pending",
       paymentGateway: "razorpay",
-      initiatedAt: new Date()
+      initiatedAt: new Date(),
     };
 
     await order.save();
@@ -58,15 +58,14 @@ export const initiatePayment = async (req, res) => {
       razorpayOrderId: razorpayOrder.id,
       amount: razorpayOrder.amount,
       currency: "INR",
-      key: process.env.RAZORPAY_KEY_ID
+      key: process.env.RAZORPAY_KEY_ID,
     });
-
   } catch (error) {
     console.error("Initiate payment error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to initiate payment",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -74,14 +73,9 @@ export const initiatePayment = async (req, res) => {
 // ================= VERIFY PAYMENT =================
 
 export const verifyRazorpayPayment = async (req, res) => {
-
   try {
-
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature
-    } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+      req.body;
 
     // ================= VERIFY SIGNATURE =================
 
@@ -93,39 +87,33 @@ export const verifyRazorpayPayment = async (req, res) => {
       .digest("hex");
 
     if (expectedSignature !== razorpay_signature) {
-
       return res.status(400).json({
         success: false,
-        message: "Payment verification failed"
+        message: "Payment verification failed",
       });
-
     }
 
     // ================= FIND ORDER =================
 
     const order = await Order.findOne({
-      "payment.razorpayOrderId": razorpay_order_id
+      "payment.razorpayOrderId": razorpay_order_id,
     });
 
     if (!order) {
-
       return res.status(404).json({
         success: false,
-        message: "Order not found"
+        message: "Order not found",
       });
-
     }
 
     // ================= PREVENT DUPLICATE =================
 
     if (order.isPaid) {
-
       return res.json({
         success: true,
         message: "Payment already verified",
-        orderId: order.order_id
+        orderId: order.order_id,
       });
-
     }
 
     // ================= UPDATE PAYMENT =================
@@ -141,9 +129,9 @@ export const verifyRazorpayPayment = async (req, res) => {
     order.markModified("payment");
 
     // ✅ CONFIRM COUPON AFTER PAYMENT
-await coupons_service.confirmAfterPayment({
-  orderId: order.order_id,
-})
+    await coupons_service.confirmAfterPayment({
+      orderId: order.order_id,
+    });
 
     await order.save();
 
@@ -151,36 +139,41 @@ await coupons_service.confirmAfterPayment({
 
     // ================= SOCKET =================
 
-    if (req.socket) {
+    // if (req.socket) {
+    //   req.socket.to("admin-dashboard").emit("paymentUpdate", {
+    //     orderId: order.order_id,
+    //     paymentStatus: "success",
+    //     isPaid: true,
+    //     orderStatus: order.status,
+    //     amount: order.totalAmount || order.price,
+    //     transactionId: razorpay_payment_id,
+    //     time: new Date(),
+    //   });
+    // }
 
-      req.socket.to("admin-dashboard").emit("paymentUpdate", {
-        orderId: order.order_id,
-        paymentStatus: "success",
-        isPaid: true,
-        orderStatus: order.status,
-        amount: order.totalAmount || order.price,
-        transactionId: razorpay_payment_id,
-        time: new Date()
-      });
-
-    }
+    req.socket.emitToAdmin("paymentUpdate", {
+      orderId: order.order_id,
+      paymentStatus: "success",
+      isPaid: true,
+      orderStatus: order.status,
+      amount: order.totalAmount || order.price,
+      transactionId: razorpay_payment_id,
+      time: new Date(),
+    });
 
     return res.json({
       success: true,
       message: "Payment verified successfully",
-      orderId: order.order_id
+      orderId: order.order_id,
     });
-
   } catch (error) {
-
     console.error("Payment verification error:", error);
 
     return res.status(500).json({
       success: false,
       message: "Payment verification failed",
-      error: error.message
+      error: error.message,
     });
-
   }
 };
 
@@ -195,7 +188,7 @@ export const checkPaymentStatus = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: "Order not found"
+        message: "Order not found",
       });
     }
 
@@ -210,16 +203,15 @@ export const checkPaymentStatus = async (req, res) => {
       orderId: order.order_id,
       paymentId: order.payment?.paymentId,
       paymentInitiatedAt: order.payment?.initiatedAt,
-      paymentCompletedAt: order.payment?.completedAt
+      paymentCompletedAt: order.payment?.completedAt,
     });
-
   } catch (error) {
     console.error("Check payment status error:", error);
 
     res.status(500).json({
       success: false,
       message: "Failed to check payment status",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -236,7 +228,7 @@ export const markAsPaid = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: "Order not found"
+        message: "Order not found",
       });
     }
 
@@ -248,10 +240,10 @@ export const markAsPaid = async (req, res) => {
       paymentMode,
       methodDetails: {
         paymentMode,
-        processedBy: req.user?.id || "admin"
+        processedBy: req.user?.id || "admin",
       },
       completedAt: new Date(),
-      isManual: true
+      isManual: true,
     };
 
     order.isPaid = true;
@@ -266,16 +258,15 @@ export const markAsPaid = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Order marked as paid successfully"
+      message: "Order marked as paid successfully",
     });
-
   } catch (error) {
     console.error("Mark as paid error:", error);
 
     res.status(500).json({
       success: false,
       message: "Failed to mark as paid",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -292,20 +283,20 @@ export const initiateRefund = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: "Order not found"
+        message: "Order not found",
       });
     }
 
     if (!order.isPaid) {
       return res.status(400).json({
         success: false,
-        message: "Order not paid yet"
+        message: "Order not paid yet",
       });
     }
 
     order.payment.refundStatus = "initiated";
     order.payment.refundAmount =
-      refundAmount || (order.totalAmount || order.price);
+      refundAmount || order.totalAmount || order.price;
 
     order.payment.refundReason = reason;
     order.payment.refundInitiatedAt = new Date();
@@ -315,21 +306,18 @@ export const initiateRefund = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Refund initiated successfully"
+      message: "Refund initiated successfully",
     });
-
   } catch (error) {
     console.error("Refund error:", error);
 
     res.status(500).json({
       success: false,
       message: "Failed to initiate refund",
-      error: error.message
+      error: error.message,
     });
   }
 };
-
-
 
 export const razorpayWebhook = async (req, res) => {
   try {
@@ -435,9 +423,7 @@ export const razorpayWebhook = async (req, res) => {
 
       // ---------- UPDATE QR PAYMENT IF EXISTS ----------
       if (order.qrPayments && order.qrPayments.length > 0) {
-        const qrPayment = order.qrPayments.find(
-          (q) => q.status !== "paid"
-        );
+        const qrPayment = order.qrPayments.find((q) => q.status !== "paid");
 
         if (qrPayment) {
           qrPayment.status = "paid";
@@ -452,8 +438,8 @@ export const razorpayWebhook = async (req, res) => {
       await order.save();
 
       await coupons_service.confirmAfterPayment({
-  orderId: order.order_id,
-});
+        orderId: order.order_id,
+      });
 
       console.log("✅ Webhook updated order:", order.order_id);
 
@@ -462,7 +448,23 @@ export const razorpayWebhook = async (req, res) => {
       // =====================================================
 
       if (req.socket) {
-        req.socket.to("admin-dashboard").emit("paymentUpdate", {
+        // req.socket.to("admin-dashboard").emit("paymentUpdate", {
+        //   orderId: order.order_id,
+        //   paymentStatus: "success",
+        //   isPaid: true,
+        //   orderStatus: order.status,
+        //   amount: order.totalAmount || order.price,
+        //   transactionId: razorpayPaymentId,
+        //   time: new Date(),
+        // });
+
+        // // hariom codes here
+        // req.socket.to(`order:${order.order_id}`).emit("paymentUpdate", {
+        //   orderId: order.order_id,
+        //   paymentStatus: "success",
+        //   isPaid: true,
+        // });
+        req.socket.emitToAdmin("paymentUpdate", {
           orderId: order.order_id,
           paymentStatus: "success",
           isPaid: true,
@@ -472,8 +474,7 @@ export const razorpayWebhook = async (req, res) => {
           time: new Date(),
         });
 
-        // hariom codes here
-        req.socket.to(`order:${order.order_id}`).emit("paymentUpdate", {
+        req.socket.emitToOrder(order.order_id, "paymentUpdate", {
           orderId: order.order_id,
           paymentStatus: "success",
           isPaid: true,

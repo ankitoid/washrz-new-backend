@@ -11,6 +11,7 @@ import Pickup from "../models/pickupSchema.js";
 import bcrypt from "bcryptjs/dist/bcrypt.js";
 import otp from "../models/otpSchema.js";
 import customerFcmService from "../services/customerFcmService.js";
+import { createCustomerNotification } from "./customerNotificationController.js";
 
 const signAccToken = (id, type) => {
   return jwt.sign({ id, userType: type }, process.env.JWT_SECRET, {
@@ -100,10 +101,7 @@ const createSendToken = async (user, type, statusCode, req, res) => {
     const accessToken = signAccToken(user._id, type);
     const refreshToken = signRefToken(user._id, type);
 
-    await User.updateOne(
-      { _id: user._id },
-      { refreshToken }
-    );
+    await User.updateOne({ _id: user._id }, { refreshToken });
 
     const clientType = req.headers["x-client-type"] || "web";
 
@@ -135,7 +133,6 @@ const createSendToken = async (user, type, statusCode, req, res) => {
     });
   }
 };
-
 
 export const signup = catchAsync(async (req, res, next) => {
   const {
@@ -216,7 +213,7 @@ export const protect = catchAsync(async (req, res, next) => {
   }
   if (!token) {
     return next(
-      new AppError("You are not logged in! Please log in to get access.", 401)
+      new AppError("You are not logged in! Please log in to get access.", 401),
     );
   }
 
@@ -230,19 +227,19 @@ export const protect = catchAsync(async (req, res, next) => {
     return next(
       new AppError(
         "The user belonging to this token does no longer exist.",
-        401
-      )
+        401,
+      ),
     );
   }
 
   // 4) Check if user changed password after the token was issued
   if (currentUser.changedPasswordAfter(decoded.iat)) {
     return next(
-      new AppError("User recently changed password! Please log in again.", 401)
+      new AppError("User recently changed password! Please log in again.", 401),
     );
   }
 
-// GRANT ACCESS TO PROTECTED ROUTE
+  // GRANT ACCESS TO PROTECTED ROUTE
   req.user = currentUser;
   res.locals.user = currentUser;
   next();
@@ -255,7 +252,7 @@ export const isLoggedIn = async (req, res, next) => {
       // 1) verify token
       const decoded = await promisify(jwt.verify)(
         req.cookies.jwt,
-        process.env.JWT_SECRET
+        process.env.JWT_SECRET,
       );
 
       // 2) Check if user still exists
@@ -284,7 +281,7 @@ export const restrictTo = (...roles) => {
     // roles ['admin', 'lead-guide']. role='user'
     if (!roles.includes(req.user.role)) {
       return next(
-        new AppError("You do not have permission to perform this action", 403)
+        new AppError("You do not have permission to perform this action", 403),
       );
     }
 
@@ -306,7 +303,7 @@ export const forgotPassword = catchAsync(async (req, res, next) => {
   // 3) Send it to user's email
   try {
     const resetURL = `${req.protocol}://${req.get(
-      "host"
+      "host",
     )}/api/v1/users/resetPassword/${resetToken}`;
     await new Email(user, resetURL).sendPasswordReset();
 
@@ -321,7 +318,7 @@ export const forgotPassword = catchAsync(async (req, res, next) => {
 
     return next(
       new AppError("There was an error sending the email. Try again later!"),
-      500
+      500,
     );
   }
 });
@@ -466,40 +463,40 @@ export const getUser = catchAsync(async (req, res, next) => {
 
 export const updateUserPassword = catchAsync(async (req, res, next) => {
   try {
-    console.log("i am called===>>>>>")
+    console.log("i am called===>>>>>");
     const { id } = req.params;
     const { password } = req.body;
-    
+
     if (!password) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Password is required" 
+      return res.status(400).json({
+        success: false,
+        message: "Password is required",
       });
     }
-    
+
     const hashpassword = await bcrypt.hash(password, 12);
     const user = await User.findByIdAndUpdate(
       id,
       { password: hashpassword },
-      { new: true }
+      { new: true },
     );
-    
+
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "User not found" 
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
       });
     }
-    
-    res.status(200).json({ 
-      success: true, 
-      message: "Password changed successfully!" 
+
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully!",
     });
   } catch (error) {
     console.log("this is error", error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message,
     });
   }
 });
@@ -550,6 +547,17 @@ export const updateOrderStatus = async (req, res) => {
       existingOrder.status !== "delivery rider assigned" &&
       updatedOrder.appCustomerId
     ) {
+      await createCustomerNotification({
+        customerId: updatedOrder.appCustomerId,
+        title: "Out for Delivery 🚚",
+        message: "Your items are heading home, clean and fresh.",
+        type: "delivery_rider_assigned",
+        data: {
+          orderId: String(updatedOrder._id),
+          screen: "OrderDetails",
+        },
+      });
+
       await customerFcmService.sendToCustomer(
         String(updatedOrder.appCustomerId),
         {
@@ -560,7 +568,7 @@ export const updateOrderStatus = async (req, res) => {
           type: "Out_for_Delivery",
           orderId: String(updatedOrder._id),
           screen: "OrderDetails",
-        }
+        },
       );
     }
 
@@ -569,6 +577,17 @@ export const updateOrderStatus = async (req, res) => {
       existingOrder.status !== "delivered" &&
       updatedOrder.appCustomerId
     ) {
+      await createCustomerNotification({
+        customerId: updatedOrder.appCustomerId,
+        title: "Delivered ✨",
+        message: "Freshly cleaned and delivered with care.",
+        type: "order_delivered",
+        data: {
+          orderId: String(updatedOrder._id),
+          screen: "OrderDetails",
+        },
+      });
+
       await customerFcmService.sendToCustomer(
         String(updatedOrder.appCustomerId),
         {
@@ -579,7 +598,7 @@ export const updateOrderStatus = async (req, res) => {
           type: "order_Delivered",
           orderId: String(updatedOrder._id),
           screen: "OrderDetails",
-        }
+        },
       );
     }
 
@@ -593,8 +612,6 @@ export const updateOrderStatus = async (req, res) => {
   }
 };
 
-// upload audio and voice
-// Configure AWS S3
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_S3_SECRET_ACCESS_KEY,
@@ -641,7 +658,7 @@ export const uploadFiles = (req, res, next) => {
     try {
       // Upload multiple images to S3
       const imageUploads = await Promise.all(
-        image.map((img) => uploadToS3(img, process.env.AWS_S3_BUCKET_NAME))
+        image.map((img) => uploadToS3(img, process.env.AWS_S3_BUCKET_NAME)),
       );
       const imageUrls = imageUploads.map((upload) => upload.Location);
 
@@ -655,7 +672,7 @@ export const uploadFiles = (req, res, next) => {
       if (voice.length > 0) {
         voiceUpload = await uploadToS3(
           voice[0],
-          process.env.AWS_S3_BUCKET_NAME
+          process.env.AWS_S3_BUCKET_NAME,
         );
       }
 
@@ -666,7 +683,7 @@ export const uploadFiles = (req, res, next) => {
           image: imageUrls,
           voice: voiceUpload?.Location || null,
         },
-        { new: true }
+        { new: true },
       );
 
       if (!updatedOrder) {
@@ -737,7 +754,6 @@ export const getMedia = async (req, res) => {
   }
 };
 
-
 function generateCompactTimestamp(date = new Date()) {
   return (
     String(date.getDate()).padStart(2, "0") +
@@ -748,103 +764,99 @@ function generateCompactTimestamp(date = new Date()) {
   );
 }
 
+const sendOtpOnWhatsApp = async (phone, otp) => {
+  try {
+    const url = `https://live-mt-server.wati.io/101289/api/v1/sendTemplateMessage?whatsappNumber=${phone}`;
+    const options = {
+      method: "POST",
+      headers: {
+        "content-type": "application/json-patch+json",
+        Authorization:
+          "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1bmlxdWVfbmFtZSI6ImF5dXNoc2luZ2g4NDIwMThAZ21haWwuY29tIiwibmFtZWlkIjoiYXl1c2hzaW5naDg0MjAxOEBnbWFpbC5jb20iLCJlbWFpbCI6ImF5dXNoc2luZ2g4NDIwMThAZ21haWwuY29tIiwiYXV0aF90aW1lIjoiMDEvMDcvMjAyNiAwNzo0MDoxNCIsInRlbmFudF9pZCI6IjEwMTI4OSIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOlsiQlJPQURDQVNUX01BTkFHRVIiLCJURU1QTEFURV9NQU5BR0VSIiwiT1BFUkFUT1IiLCJERVZFTE9QRVIiLCJBVVRPTUFUSU9OX01BTkFHRVIiXSwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.wbDwYBA3-XNyKfIy7kzjpRFmLBZrkms5apdyU7lkeV4",
+      },
+      body: `{"parameters":[{"name":"1","value":${otp}}],"template_name":"drydash_otp","broadcast_name":"drydash_otp_${generateCompactTimestamp()}"}`,
+    };
 
-const sendOtpOnWhatsApp = async (phone,otp) =>
-{
-try {
-   const url = `https://live-mt-server.wati.io/101289/api/v1/sendTemplateMessage?whatsappNumber=${phone}`
-  const options = {
-  method: 'POST',
-  headers: {
-    'content-type': 'application/json-patch+json',
-    Authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1bmlxdWVfbmFtZSI6ImF5dXNoc2luZ2g4NDIwMThAZ21haWwuY29tIiwibmFtZWlkIjoiYXl1c2hzaW5naDg0MjAxOEBnbWFpbC5jb20iLCJlbWFpbCI6ImF5dXNoc2luZ2g4NDIwMThAZ21haWwuY29tIiwiYXV0aF90aW1lIjoiMDEvMDcvMjAyNiAwNzo0MDoxNCIsInRlbmFudF9pZCI6IjEwMTI4OSIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOlsiQlJPQURDQVNUX01BTkFHRVIiLCJURU1QTEFURV9NQU5BR0VSIiwiT1BFUkFUT1IiLCJERVZFTE9QRVIiLCJBVVRPTUFUSU9OX01BTkFHRVIiXSwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.wbDwYBA3-XNyKfIy7kzjpRFmLBZrkms5apdyU7lkeV4'
-  },
-  body: `{"parameters":[{"name":"1","value":${otp}}],"template_name":"drydash_otp","broadcast_name":"drydash_otp_${generateCompactTimestamp()}"}`
+    const res = await fetch(url, options);
+    const json = await res.json();
+    // console.log("this is json",json)
+    return json;
+  } catch (error) {
+    console.log("this is the error", error);
+  }
 };
-
-const res = await fetch(url,options)
-const json = await res.json()
-// console.log("this is json",json)
-return json
-} catch (error) {
-  console.log('this is the error',error)
-}
-}
 
 //login through otp
 
-export const loginViaOtp = catchAsync(async (req,res,next) =>
-{
-  const {phoneNumber} = req.body;
+export const loginViaOtp = catchAsync(async (req, res, next) => {
+  const { phoneNumber } = req.body;
 
-  if(!phoneNumber)
-  {
-     return next(new AppError("Please enter phone Number!", 400));
+  if (!phoneNumber) {
+    return next(new AppError("Please enter phone Number!", 400));
   }
 
-  const user = await User.findOne({ phone:phoneNumber });
+  const user = await User.findOne({ phone: phoneNumber });
 
   if (!user) {
     return next(
-      new AppError("This mobile number is not registered. Please sign up through admin!", 404)
+      new AppError(
+        "This mobile number is not registered. Please sign up through admin!",
+        404,
+      ),
     );
   }
 
-  const gen_otp =  Math.floor(100000 + Math.random() * 900000)
+  const gen_otp = Math.floor(100000 + Math.random() * 900000);
 
-  const expire_at =  new Date(Date.now() + 5 * 60 * 1000);
-
+  const expire_at = new Date(Date.now() + 5 * 60 * 1000);
 
   const result = await otp.findOneAndUpdate(
-    {Phone:phoneNumber},
+    { Phone: phoneNumber },
     {
-      Otp : gen_otp.toString(),
-      Expire_At : expire_at
+      Otp: gen_otp.toString(),
+      Expire_At: expire_at,
     },
     {
-      upsert : true,  // want to create a new one in db
-      new : true      // return created/updated doc
-    }
+      upsert: true, // want to create a new one in db
+      new: true, // return created/updated doc
+    },
   );
 
-const otp_res = await sendOtpOnWhatsApp(phoneNumber,gen_otp);
+  const otp_res = await sendOtpOnWhatsApp(phoneNumber, gen_otp);
 
-// console.log("here is the result",otp_res)
+  // console.log("here is the result",otp_res)
 
   res.status(200).json({
     status: "success",
-    message : `otp sent on ${phoneNumber} successfully!`,
+    message: `otp sent on ${phoneNumber} successfully!`,
+  });
+});
+
+export const verifyOtp = catchAsync(async (req, res, next) => {
+  const { otp: userOtp, phoneNumber } = req.body;
+
+  if (!phoneNumber) {
+    return next(new AppError("Please provide PhoneNumber! ", 400));
+  } else if (!userOtp) {
+    return next(new AppError("Please provide otp! ", 400));
+  }
+
+  const record = await otp.findOne({
+    Phone: phoneNumber,
+    Otp: userOtp.toString(),
+    Expire_At: { $gt: new Date() },
   });
 
-})
-
-
-export const verifyOtp = catchAsync(async (req,res,next) =>
-{
-   const {otp : userOtp,phoneNumber} = req.body;
-
-   if(!phoneNumber)
-   {
-    return next(new AppError("Please provide PhoneNumber! ", 400));
-   }else if(!userOtp)
-   {
-     return next(new AppError("Please provide otp! ", 400));
-   }
-
-   const record = await otp.findOne({
-    Phone : phoneNumber,
-    Otp : userOtp.toString(),
-    Expire_At : {$gt : new Date()},
-   });
-
-
-   if(!record){
+  if (!record) {
     return next(new AppError("Invalid or expired OTP! ", 400));
-   }
+  }
 
-   await otp.updateOne({Phone:phoneNumber},{$unset:{Otp:"",Expire_At:""}});
+  await otp.updateOne(
+    { Phone: phoneNumber },
+    { $unset: { Otp: "", Expire_At: "" } },
+  );
 
-   const user = await User.findOne({phone:phoneNumber})
+  const user = await User.findOne({ phone: phoneNumber });
 
   //  console.log("this is the user===>>",user);
 
@@ -858,5 +870,4 @@ export const verifyOtp = catchAsync(async (req,res,next) =>
   //   status: "success",
   //   message: "OTP verified successfully",
   // });
-}
-);
+});
