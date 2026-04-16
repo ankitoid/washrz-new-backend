@@ -19,6 +19,7 @@ const customerNotificationSchema = new mongoose.Schema(
       type: String,
       enum: [
         "pickup_Created",
+        "pickup_Assigned",
         "pickup_Rescheduled",
         "pickup_Completed",
         "out_for_Delivery",

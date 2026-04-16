@@ -4,7 +4,7 @@ import "./database.js";
 import authRoutes from "./routes/authRoutes.js";
 import riderRoutes from "./routes/riderRoutes.js";
 import plantRoutes from "./routes/plantRoutes.js";
-import customerAppRoutes from "./routes/customerAppRoutes.js"
+import customerAppRoutes from "./routes/customerAppRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import revenueRoutes from "./routes/revenueRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
@@ -23,17 +23,19 @@ import pushTokenRoutes from "./routes/pushTokenRoutes.js";
 import User from "./models/userModel.js";
 import debugRoutes from "./routes/debugRoutes.js";
 import osrmRoutes from "./routes/osrmRoutes.js";
-import adminCoupons from "./routes/adminCouponRoutes.js"
-import customerCoupons from "./routes/customerCouponRoutes.js"
+import adminCoupons from "./routes/adminCouponRoutes.js";
+import customerCoupons from "./routes/customerCouponRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import catalogRoutes from "./routes/catalogRoutes.js";
 import customerNotificationRoutes from "./routes/customerNotificationRoutes.js";
 import customerPushTokenRoutes from "./routes/customerPushTokenRoutes.js";
 import slotRoutes from "./routes/slotsRoutes.js";
+import socketService from "./services/socketService.js";
 import { cleanupExpiredCoupons } from "./jobs/couponCleanup.js";
 
 const app = express();
 
+console.log("just changed");
 const server = http.createServer(app);
 app.use(cookies());
 app.use(
@@ -54,7 +56,7 @@ app.use(
     ],
     methods: "GET, POST, PUT, DELETE, PATCH",
     credentials: true, // Allow credentials (cookies) to be sent with the request
-  })
+  }),
 );
 
 console.log(`The total number of CPUs is ${os.cpus().length}`);
@@ -79,7 +81,7 @@ const io = new Server(server, {
       // ADD FOR RIDER APP
       "exp://192.168.10.215:8081", // Expo local development
       "http://192.168.10.215:8081", // Expo web
-      "*"
+      "*",
     ],
     credentials: true,
     methods: ["GET", "POST"],
@@ -91,6 +93,8 @@ const io = new Server(server, {
   transports: ["websocket", "polling"], // Enable both transports
 });
 
+socketService.init(io);
+
 const addAppToRequest = (app) => {
   return (req, res, next) => {
     req.app = app; // Add the app  to the request
@@ -98,9 +102,9 @@ const addAppToRequest = (app) => {
   };
 };
 
-const addSocketToRequest = (io) => {
+const addSocketToRequest = () => {
   return (req, res, next) => {
-    req.socket = io; // Add the socket object to the request
+    req.socket = socketService;
     next();
   };
 };
@@ -110,7 +114,7 @@ app.use(express.json({ limit: "100mb" }));
 app.use("/api/v1/catalog", catalogRoutes);
 
 // Attach io to requests early if any route/middleware needs req.socket
-app.use(addSocketToRequest(io));
+app.use(addSocketToRequest());
 
 // If uploadFiles expects req.body or req.socket, it will now have them
 app.use("/api/v1/rider/uploadFiles/:id", addAppToRequest(app), uploadFiles);
@@ -132,25 +136,32 @@ app.get("/test", (req, res) => {
 
 app.use("/api/v1/rider/uploadFiles/:id", addAppToRequest(app), uploadFiles);
 
-app.use(express.json({ limit: '100mb' }));
+app.use(express.json({ limit: "100mb" }));
 app.use(addSocketToRequest(io));
+
+// app.post("/send", (req, res) => {
+//   const message = req.body.message;
+//   // console.log("testing", req.body.message);
+
+//   io.emit("pushNotification", {
+//     message,
+//   });
+//   res.status(200).send({
+//     message: "Sent Successfully",
+//   });
+
+//   io.on("connection", (socket) => {
+//     // console.log("Connected");
+//     socket.on("disconnect", () => {
+//       // console.log("Client disconnected");
+//     });
+//   });
+// });
+
 app.post("/send", (req, res) => {
   const message = req.body.message;
-  // console.log("testing", req.body.message);
-
-  io.emit("pushNotification", {
-    message,
-  });
-  res.status(200).send({
-    message: "Sent Successfully",
-  });
-
-  io.on("connection", (socket) => {
-    // console.log("Connected");
-    socket.on("disconnect", () => {
-      // console.log("Client disconnected");
-    });
-  });
+  req.socket.emitToAll("pushNotification", { message });
+  res.status(200).send({ message: "Sent Successfully" });
 });
 
 // In-memory fast-access store for active riders
@@ -176,7 +187,7 @@ io.on("connection", (socket) => {
     if (!activeRiderLocations.has(riderId)) {
       activeRiderLocations.set(riderId, {
         status: "active",
-        lastUpdate: new Date()
+        lastUpdate: new Date(),
       });
     }
   });
@@ -187,11 +198,23 @@ io.on("connection", (socket) => {
     adminRooms.add(socket.id);
     console.log(`Admin joined: ${socket.id}`);
 
-    const allRiders = Array.from(activeRiderLocations.entries()).map(([id, data]) => ({
-      riderId: id,
-      ...data,
-    }));
+    const allRiders = Array.from(activeRiderLocations.entries()).map(
+      ([id, data]) => ({
+        riderId: id,
+        ...data,
+      }),
+    );
     socket.emit("allActiveRiders", allRiders);
+  });
+
+  socket.on("joinCustomer", ({ customerId }) => {
+    if (!customerId) return;
+    socketService.registerUser(customerId, socket);
+    socket.customerId = customerId;
+  });
+
+  socket.on("disconnect", () => {
+    if (socket.customerId) socketService.removeUser(socket.customerId);
   });
 
   socket.on("riderLocationUpdate", async (data) => {
@@ -231,18 +254,20 @@ io.on("connection", (socket) => {
             batteryLevel: locationData.batteryLevel,
             status: "active",
             lastUpdate: locationData.lastUpdate,
-          }
+          },
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
 
-      console.log(`📍 Updated rider ${riderId}, location = ${locationData.lat}, ${locationData.lng}`);
+      console.log(
+        `📍 Updated rider ${riderId}, location = ${locationData.lat}, ${locationData.lng}`,
+      );
     } catch (error) {
       console.error("Error saving rider location:", error);
     }
 
     // Broadcast to admin dashboard sockets
-    io.to("admin-dashboard").emit("riderLocationUpdate", {
+    socketService.emitToAdmin("riderLocationUpdate", {
       riderId,
       ...locationData,
       name: user?.name || "Unknown Rider",
@@ -279,23 +304,23 @@ io.on("connection", (socket) => {
             phone: user?.phone || "N/A",
             location: lastLocation?.location || {
               type: "Point",
-              coordinates: [0, 0]
+              coordinates: [0, 0],
             },
             speed: lastLocation?.speed || 0,
             bearing: lastLocation?.bearing || 0,
             batteryLevel: lastLocation?.batteryLevel || 100,
             status: status,
             lastUpdate: new Date(),
-          }
+          },
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
 
       console.log(`📝 Updated rider ${riderId} status to ${status} in MongoDB`);
     } catch (error) {
       console.error("❌ Error updating rider status in MongoDB:", error);
     }
-    io.to("admin-dashboard").emit("riderStatusUpdate", {
+    socketService.emitToAdmin("riderStatusUpdate", {
       riderId,
       status,
       lastUpdate: new Date(),
@@ -311,7 +336,9 @@ io.on("connection", (socket) => {
     }
 
     try {
-      const latestLocation = await RiderLocation.findOne({ riderId }).sort({ lastUpdate: -1 }).limit(1);
+      const latestLocation = await RiderLocation.findOne({ riderId })
+        .sort({ lastUpdate: -1 })
+        .limit(1);
       if (latestLocation) {
         socket.emit("riderLocation", {
           riderId,
@@ -326,10 +353,6 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.error("Error fetching rider location:", error);
     }
-  });
-
-  socket.on("disconnect", () => {
-    // console.log("Client disconnected:", socket.id);
   });
 });
 
@@ -374,20 +397,22 @@ setInterval(async () => {
               phone: user?.phone || "N/A",
               location: lastLocation?.location || {
                 type: "Point",
-                coordinates: [0, 0]
+                coordinates: [0, 0],
               },
               status: "idle",
               lastUpdate: now,
-            }
+            },
           },
-          { upsert: true }
+          { upsert: true },
         );
-        console.log(`🟡 Rider ${riderId} marked as IDLE (no updates for 5 min)`);
+        console.log(
+          `🟡 Rider ${riderId} marked as IDLE (no updates for 5 min)`,
+        );
       } catch (error) {
         console.error("Error updating idle status in DB:", error);
       }
 
-      io.to("admin-dashboard").emit("riderStatusUpdate", {
+      socketService.emitToAdmin("riderStatusUpdate", {
         riderId,
         status: "idle",
         lastUpdate: now,
@@ -400,18 +425,18 @@ app.use("/api/v1/debug", debugRoutes);
 app.use("/api/v1/rider/push-tokens", pushTokenRoutes);
 app.use("/api/v1/trips", tripRoutes);
 app.use("/api/v1", customerRoutes);
-app.use("/api/app",customerAppRoutes)
+app.use("/api/app", customerAppRoutes);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/rider", riderRoutes);
 app.use("/api/v1/location", riderLocationRoutes);
 app.use("/api/v1/plant", plantRoutes);
 app.use("/api/v1", revenueRoutes);
-app.use('/api/v1/payments', paymentRoutes);
-app.use('/api/v1/qr', qrRoutes);
+app.use("/api/v1/payments", paymentRoutes);
+app.use("/api/v1/qr", qrRoutes);
 app.use("/api/v1/osrm", osrmRoutes);
-app.use("/api/v1/admincoupons",adminCoupons)
-app.use("/api/v1/customercoupons",customerCoupons)
-app.use("/api/v1/slots",slotRoutes)
+app.use("/api/v1/admincoupons", adminCoupons);
+app.use("/api/v1/customercoupons", customerCoupons);
+app.use("/api/v1/slots", slotRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/customer/notifications", customerNotificationRoutes);
 app.use("/api/v1/customer/push-tokens", customerPushTokenRoutes);

@@ -6,6 +6,7 @@ import cron from "node-cron";
 import fcmService from "../services/fcmService.js";
 import RiderLocation from "../models/riderLocationSchema.js";
 import { createNotification } from "../controller/notificationController.js";
+import { createCustomerNotification } from "./customerNotificationController.js";
 import customerFcmService from "../services/customerFcmService.js";
 
 // Create a new plant
@@ -70,7 +71,7 @@ export const assignPlant = async (req, res) => {
     const updatedPickup = await Pickup.findByIdAndUpdate(
       pickupId,
       { plantName: plantName, PickupStatus: "assigned" }, // Update with plantName instead of ID
-      { new: true }
+      { new: true },
     );
 
     if (!updatedPickup) {
@@ -89,11 +90,11 @@ export const assignPlant = async (req, res) => {
 export const getRiders = async (req, res) => {
   try {
     const riders = await User.find({ role: "rider" }).lean();
-    const riderIds = riders.map(r => r._id);
-    const riderNames = riders.map(r => r.name);
+    const riderIds = riders.map((r) => r._id);
+    const riderNames = riders.map((r) => r.name);
 
     const today = new Date().toLocaleDateString("en-CA", {
-      timeZone: "Asia/Kolkata"
+      timeZone: "Asia/Kolkata",
     });
 
     const latestLocations = await RiderLocation.aggregate([
@@ -102,25 +103,25 @@ export const getRiders = async (req, res) => {
       {
         $group: {
           _id: "$riderId",
-          latestLocation: { $first: "$$ROOT" }
-        }
-      }
+          latestLocation: { $first: "$$ROOT" },
+        },
+      },
     ]);
 
     const locationMap = {};
-    latestLocations.forEach(loc => {
+    latestLocations.forEach((loc) => {
       locationMap[loc._id.toString()] = loc.latestLocation;
     });
 
     const pickupMatch = {
       riderName: { $in: riderNames },
       isDeleted: false,
-      riderDate: today
+      riderDate: today,
     };
 
     const orderMatch = {
       riderName: { $in: riderNames },
-      riderDate: today
+      riderDate: today,
     };
 
     const pickupSummary = await Pickup.aggregate([
@@ -131,15 +132,15 @@ export const getRiders = async (req, res) => {
           totalPickups: { $sum: 1 },
           totalCompletedPickups: {
             $sum: {
-              $cond: [{ $eq: ["$PickupStatus", "complete"] }, 1, 0]
-            }
-          }
-        }
-      }
+              $cond: [{ $eq: ["$PickupStatus", "complete"] }, 1, 0],
+            },
+          },
+        },
+      },
     ]);
 
     const pickupMap = {};
-    pickupSummary.forEach(p => {
+    pickupSummary.forEach((p) => {
       pickupMap[p._id] = p;
     });
 
@@ -151,19 +152,19 @@ export const getRiders = async (req, res) => {
           totalDeliveries: { $sum: 1 },
           totalCompletedDeliveries: {
             $sum: {
-              $cond: [{ $eq: ["$status", "delivered"] }, 1, 0]
-            }
-          }
-        }
-      }
+              $cond: [{ $eq: ["$status", "delivered"] }, 1, 0],
+            },
+          },
+        },
+      },
     ]);
 
     const deliveryMap = {};
-    deliverySummary.forEach(d => {
+    deliverySummary.forEach((d) => {
       deliveryMap[d._id] = d;
     });
 
-    const ridersWithLocation = riders.map(rider => {
+    const ridersWithLocation = riders.map((rider) => {
       const location = locationMap[rider._id.toString()];
       const pickupData = pickupMap[rider.name] || {};
       const deliveryData = deliveryMap[rider.name] || {};
@@ -183,16 +184,13 @@ export const getRiders = async (req, res) => {
         summary: {
           totalPickups: pickupData.totalPickups || 0,
           totalDeliveries: deliveryData.totalDeliveries || 0,
-          totalCompletedPickups:
-            pickupData.totalCompletedPickups || 0,
-          totalCompletedDeliveries:
-            deliveryData.totalCompletedDeliveries || 0,
-        }
+          totalCompletedPickups: pickupData.totalCompletedPickups || 0,
+          totalCompletedDeliveries: deliveryData.totalCompletedDeliveries || 0,
+        },
       };
     });
 
     res.status(200).json(ridersWithLocation);
-
   } catch (error) {
     console.error("Error in getRiders:", error);
     res.status(500).json({
@@ -215,16 +213,20 @@ export const assignRider = async (req, res) => {
     const order = await Order.findByIdAndUpdate(
       orderId,
       { riderName, riderDate },
-      { new: true }
+      { new: true },
     );
 
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
-    console.log(`🔄 Assigning rider ${riderName} (${riderId}) to order ${orderId}`);
+    console.log(
+      `🔄 Assigning rider ${riderName} (${riderId}) to order ${orderId}`,
+    );
 
-    req.socket.emit("assignOrder", { order });
-    req.socket.to(`rider:${riderId}`).emit("assignOrder", { order });
+    // req.socket.emit("assignOrder", { order });
+    // req.socket.to(`rider:${riderId}`).emit("assignOrder", { order });
+    req.socket.emitToAdmin("assignOrder", { order });
+    req.socket.emitToRider(riderId, "assignOrder", { order });
     console.log(`📡 Socket notification sent to rider:${riderId}`);
 
     console.log(`📱 Attempting FCM notification for rider ${riderId}`);
@@ -232,7 +234,7 @@ export const assignRider = async (req, res) => {
       riderId,
       {
         title: "🎯 New Delivery Assigned",
-        body: `Tap to view Order`
+        body: `Tap to view Order`,
       },
       {
         orderId: String(order._id),
@@ -243,8 +245,8 @@ export const assignRider = async (req, res) => {
         amount: order.totalAmount ? `₹${order.totalAmount}` : "N/A",
         action: "VIEW_ORDER",
         screen: "OrderDetails",
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      },
     );
 
     await createNotification({
@@ -262,31 +264,31 @@ export const assignRider = async (req, res) => {
       success: fcmResult.success,
       sentTo: fcmResult.successCount,
       failed: fcmResult.failureCount,
-      totalTokens: fcmResult.totalTokens
+      totalTokens: fcmResult.totalTokens,
     });
 
-    const notificationStatus = fcmResult.success ? 
-      "Push notification sent to rider's device" :
-      "Socket notification sent, but push notification failed";
+    const notificationStatus = fcmResult.success
+      ? "Push notification sent to rider's device"
+      : "Socket notification sent, but push notification failed";
 
     return res.status(200).json({
       status: "success",
       message: `Rider ${riderName} assigned successfully`,
-      data: { 
+      data: {
         order,
         notification: {
           status: notificationStatus,
           fcm: fcmResult,
-          socket: true
-        }
+          socket: true,
+        },
       },
     });
   } catch (error) {
     console.error("assignRider error:", error);
-    return res.status(500).json({ 
-      status: "error", 
+    return res.status(500).json({
+      status: "error",
       message: error.message,
-      code: error.code 
+      code: error.code,
     });
   }
 };
@@ -304,17 +306,21 @@ export const assignPickupRider = async (req, res) => {
         riderDate,
         PickupStatus: "assigned",
       },
-      { new: true }
+      { new: true },
     );
 
     if (!pickup) {
       return res.status(404).json({ message: "Pickup not found" });
     }
 
-    req.socket.emit("assignedPickup", { pickup, riderName });
+    // req.socket.emit("assignedPickup", { pickup, riderName });
+    req.socket.emitToAdmin("assignedPickup", { pickup, riderName });
+
+    // if (riderId) {
+    //   req.socket.to(`rider:${riderId}`).emit("riderAssignedPickup", { pickup });
 
     if (riderId) {
-      req.socket.to(`rider:${riderId}`).emit("riderAssignedPickup", { pickup });
+      req.socket.emitToRider(riderId, "riderAssignedPickup", { pickup });
 
       await fcmService.sendToRider(
         riderId,
@@ -328,7 +334,7 @@ export const assignPickupRider = async (req, res) => {
           customerName: pickup.customerName || "Customer",
           action: "view_pickup",
           screen: "pickup_details",
-        }
+        },
       );
     }
 
@@ -344,7 +350,17 @@ export const assignPickupRider = async (req, res) => {
     });
 
     if (pickup.appCustomerId) {
-
+     const done =  await createCustomerNotification({
+        customerId: pickup.appCustomerId,
+        title: "Rider Assigned",
+        message:
+          "Keep your items bagged & ready.",
+        type: "pickup_Assigned",
+        data: {
+          pickupId: String(pickup._id),
+          screen: "PickupDetails",
+        },
+      });
 
       await customerFcmService.sendToCustomer(
         String(pickup.appCustomerId),
@@ -353,10 +369,10 @@ export const assignPickupRider = async (req, res) => {
           body: "Keep items bagged & ready. Your laundry's escape plan is in motion!",
         },
         {
-          type: "pickup_assigned",
+          type: "pickup_Assigned",
           pickupId: String(pickup._id),
           screen: "PickupDetails",
-        }
+        },
       );
     }
 
@@ -392,7 +408,7 @@ cron.schedule("30 0 * * *", async () => {
           riderName: "",
           riderDate: "",
         },
-      }
+      },
     );
 
     console.log("Pickup statuses updated and rider data cleared");
@@ -405,7 +421,7 @@ cron.schedule("30 0 * * *", async () => {
           riderName: "",
           riderDate: "",
         },
-      }
+      },
     );
 
     console.log("Cleared riderName and riderDate from all orders");
