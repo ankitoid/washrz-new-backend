@@ -7,6 +7,7 @@ import {
   createCategory,
   deleteCategory,
   deleteItem,
+  getFullCatalog,
   getCategory,
   getItem,
   list,
@@ -19,6 +20,7 @@ import {
 const router = express.Router();
 
 router.get("/", list);
+router.get("/full", getFullCatalog);
 router.get("/admin/categories", ...ADMIN_MIDDLEWARE, adminListCategories);
 router.post("/cleanup-media", ...ADMIN_MIDDLEWARE, cleanupMedia);
 router.post("/seed", ...ADMIN_MIDDLEWARE, seedCatalog);

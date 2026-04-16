@@ -1,5 +1,5 @@
 import AWS from "aws-sdk";
-import Catalog from "../models/catalogSchema.js";
+import CatalogItem from "../models/catalogItemSchema.js";
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
@@ -25,7 +25,7 @@ export const uploadCatalogFileToS3 = async (
 
   const uploadResult = await s3
     .upload({
-      Bucket: process.env.AWS_S3_BUCKET_NAME_CAT,
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
       Key: key,
       Body: file.buffer,
       ContentType: file.mimetype,
@@ -49,7 +49,7 @@ const listAllObjects = async (prefix) => {
   do {
     const response = await s3
       .listObjectsV2({
-        Bucket: process.env.AWS_S3_BUCKET_NAME_CAT,
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
         Prefix: prefix,
         ContinuationToken: continuationToken,
       })
@@ -79,7 +79,7 @@ const deleteObjects = async (keys = []) => {
   for (const chunk of chunks) {
     const response = await s3
       .deleteObjects({
-        Bucket: process.env.AWS_S3_BUCKET_NAME_CAT,
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
         Delete: {
           Objects: chunk.map((key) => ({ Key: key })),
           Quiet: true,
@@ -98,17 +98,15 @@ export const cleanupUnusedCatalogMedia = async ({
   olderThanHours = 24,
   dryRun = false,
 } = {}) => {
-  const categories = await Catalog.find({}, { items: 1 }).lean();
+  const items = await CatalogItem.find({}, { images: 1, videos: 1 }).lean();
 
   const usedKeys = new Set();
-  for (const category of categories) {
-    for (const item of category.items || []) {
-      for (const image of item.images || []) {
-        if (image.key) usedKeys.add(image.key);
-      }
-      for (const video of item.videos || []) {
-        if (video.key) usedKeys.add(video.key);
-      }
+  for (const item of items) {
+    for (const image of item.images || []) {
+      if (image.key) usedKeys.add(image.key);
+    }
+    for (const video of item.videos || []) {
+      if (video.key) usedKeys.add(video.key);
     }
   }
 

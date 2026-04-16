@@ -1,5 +1,6 @@
 import multer from "multer";
 import Catalog from "../models/catalogSchema.js";
+import CatalogItem from "../models/catalogItemSchema.js";
 import { protect, restrictTo } from "./authController.js";
 import catalogSeed from "../config/catalogSeedData.js";
 import {
@@ -21,6 +22,11 @@ const upload = multer({
 ]);
 
 const ADMIN_MIDDLEWARE = [protect, restrictTo("admin", "plant-manager")];
+
+const CATEGORY_POPULATE = {
+  path: "category",
+  select: "_id sacid label slug mainHeading mainDescription coverImage isActive sortOrder",
+};
 
 const slugify = (value = "") =>
   value
@@ -73,6 +79,21 @@ const buildPagination = (page, limit, total) => ({
   totalPages: total === 0 ? 0 : Math.ceil(total / limit),
   hasNextPage: page * limit < total,
   hasPrevPage: page > 1,
+});
+
+const mapCategoryList = (category, itemCount = 0) => ({
+  _id: category._id,
+  sacid: category.sacid,
+  label: category.label,
+  slug: category.slug,
+  mainHeading: category.mainHeading,
+  mainDescription: category.mainDescription,
+  coverImage: category.coverImage,
+  isActive: category.isActive,
+  sortOrder: category.sortOrder,
+  itemCount,
+  createdAt: category.createdAt,
+  updatedAt: category.updatedAt,
 });
 
 const buildCategoryPayload = (body = {}) => ({
@@ -135,24 +156,68 @@ const validateItemPayload = (payload) => {
   return null;
 };
 
-const getPublishedItems = (items = []) =>
-  items.filter((item) => item.isActive !== false);
+const buildItemFilters = ({ search, type, minPrice, maxPrice, isActiveOnly = true }) => {
+  const filter = {};
 
-const mapCategoryList = (category) => ({
-  _id: category._id,
-  sacid: category.sacid,
-  label: category.label,
-  slug: category.slug,
-  mainHeading: category.mainHeading,
-  mainDescription: category.mainDescription,
-  coverImage: category.coverImage,
-  isActive: category.isActive,
-  sortOrder: category.sortOrder,
-  itemCount: getPublishedItems(category.items).length,
-  createdAt: category.createdAt,
-  updatedAt: category.updatedAt,
-  items: category.items
-});
+  if (isActiveOnly) {
+    filter.isActive = true;
+  }
+
+  const normalizedSearch = String(search || "").trim();
+  if (normalizedSearch) {
+    filter.$or = [
+      { label: { $regex: normalizedSearch, $options: "i" } },
+      { mainHeading: { $regex: normalizedSearch, $options: "i" } },
+      { mainDescription: { $regex: normalizedSearch, $options: "i" } },
+      { sku: { $regex: normalizedSearch, $options: "i" } },
+      { sacid: { $regex: normalizedSearch, $options: "i" } },
+    ];
+  }
+
+  const normalizedType = String(type || "").trim();
+  if (normalizedType) {
+    filter.type = { $regex: `^${normalizedType}$`, $options: "i" };
+  }
+
+  const priceFilter = {};
+  if (Number.isFinite(minPrice)) {
+    priceFilter.$gte = minPrice;
+  }
+  if (Number.isFinite(maxPrice)) {
+    priceFilter.$lte = maxPrice;
+  }
+  if (Object.keys(priceFilter).length > 0) {
+    filter.price = priceFilter;
+  }
+
+  return filter;
+};
+
+const getCategoryItemCounts = async (categoryIds, itemMatch = {}) => {
+  if (categoryIds.length === 0) return new Map();
+
+  const counts = await CatalogItem.aggregate([
+    {
+      $match: {
+        ...itemMatch,
+        category: { $in: categoryIds },
+      },
+    },
+    {
+      $group: {
+        _id: "$category",
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  return new Map(counts.map((entry) => [String(entry._id), entry.count]));
+};
+
+const getCategoryByIdOrFail = async (id) => {
+  const category = await Catalog.findById(id);
+  return category;
+};
 
 export const list = async (req, res) => {
   try {
@@ -166,6 +231,7 @@ export const list = async (req, res) => {
         { label: { $regex: search, $options: "i" } },
         { mainHeading: { $regex: search, $options: "i" } },
         { mainDescription: { $regex: search, $options: "i" } },
+        { sacid: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -178,9 +244,72 @@ export const list = async (req, res) => {
       Catalog.countDocuments(filter),
     ]);
 
+    const categoryIds = categories.map((category) => category._id);
+    const itemCounts = await getCategoryItemCounts(categoryIds, { isActive: true });
+
     res.status(200).json({
       status: "success",
-      data: categories.map(mapCategoryList),
+      data: categories.map((category) =>
+        mapCategoryList(category, itemCounts.get(String(category._id)) || 0)
+      ),
+      pagination: buildPagination(page, limit, total),
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: error.message });
+  }
+};
+
+export const getFullCatalog = async (req, res) => {
+  try {
+    const page = Math.max(toNumber(req.query.page, 1), 1);
+    const limit = Math.min(Math.max(toNumber(req.query.limit, 10), 1), 100);
+    const includeInactive = toBoolean(req.query.includeInactive, false);
+    const minPrice =
+      req.query.minPrice !== undefined ? toNumber(req.query.minPrice, NaN) : NaN;
+    const maxPrice =
+      req.query.maxPrice !== undefined ? toNumber(req.query.maxPrice, NaN) : NaN;
+
+    const itemFilter = buildItemFilters({
+      search: req.query.search,
+      type: req.query.type,
+      minPrice,
+      maxPrice,
+      isActiveOnly: !includeInactive,
+    });
+
+    const categorySlug = String(req.query.categorySlug || "").trim();
+    if (categorySlug) {
+      const category = await Catalog.findOne({
+        slug: categorySlug,
+        ...(includeInactive ? {} : { isActive: true }),
+      }).select("_id");
+
+      if (!category) {
+        return res.status(404).json({
+          status: "error",
+          message: "Catalog category not found.",
+        });
+      }
+
+      itemFilter.category = category._id;
+    } else if (!includeInactive) {
+      const activeCategoryIds = await Catalog.find({ isActive: true }).distinct("_id");
+      itemFilter.category = { $in: activeCategoryIds };
+    }
+
+    const [items, total] = await Promise.all([
+      CatalogItem.find(itemFilter)
+        .populate(CATEGORY_POPULATE)
+        .sort({ sortOrder: 1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      CatalogItem.countDocuments(itemFilter),
+    ]);
+
+    res.status(200).json({
+      status: "success",
+      data: items,
       pagination: buildPagination(page, limit, total),
     });
   } catch (error) {
@@ -193,12 +322,10 @@ export const getCategory = async (req, res) => {
     const { slug } = req.params;
     const page = Math.max(toNumber(req.query.page, 1), 1);
     const limit = Math.min(Math.max(toNumber(req.query.limit, 10), 1), 100);
-    const search = String(req.query.search || "").trim().toLowerCase();
-    const type = String(req.query.type || "").trim().toLowerCase();
     const minPrice =
-      req.query.minPrice !== undefined ? toNumber(req.query.minPrice, NaN) : null;
+      req.query.minPrice !== undefined ? toNumber(req.query.minPrice, NaN) : NaN;
     const maxPrice =
-      req.query.maxPrice !== undefined ? toNumber(req.query.maxPrice, NaN) : null;
+      req.query.maxPrice !== undefined ? toNumber(req.query.maxPrice, NaN) : NaN;
 
     const category = await Catalog.findOne({ slug, isActive: true }).lean();
     if (!category) {
@@ -207,53 +334,31 @@ export const getCategory = async (req, res) => {
         .json({ status: "error", message: "Catalog category not found." });
     }
 
-    let items = getPublishedItems(category.items || []);
+    const itemFilter = {
+      ...buildItemFilters({
+        search: req.query.search,
+        type: req.query.type,
+        minPrice,
+        maxPrice,
+        isActiveOnly: true,
+      }),
+      category: category._id,
+    };
 
-    if (search) {
-      items = items.filter((item) =>
-        [item.label, item.mainHeading, item.mainDescription, item.sku, item.sacid]
-          .filter(Boolean)
-          .some((field) => String(field).toLowerCase().includes(search))
-      );
-    }
-
-    if (type) {
-      items = items.filter(
-        (item) => String(item.type || "").toLowerCase() === type
-      );
-    }
-
-    if (Number.isFinite(minPrice)) {
-      items = items.filter((item) => Number(item.price) >= minPrice);
-    }
-
-    if (Number.isFinite(maxPrice)) {
-      items = items.filter((item) => Number(item.price) <= maxPrice);
-    }
-
-    items.sort((a, b) => {
-      if ((a.sortOrder || 0) !== (b.sortOrder || 0)) {
-        return (a.sortOrder || 0) - (b.sortOrder || 0);
-      }
-      return a.label.localeCompare(b.label);
-    });
-
-    const totalItems = items.length;
-    const paginatedItems = items.slice((page - 1) * limit, page * limit);
+    const [items, totalItems] = await Promise.all([
+      CatalogItem.find(itemFilter)
+        .sort({ sortOrder: 1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      CatalogItem.countDocuments(itemFilter),
+    ]);
 
     res.status(200).json({
       status: "success",
       data: {
-        _id: category._id,
-        sacid: category.sacid,
-        label: category.label,
-        slug: category.slug,
-        mainHeading: category.mainHeading,
-        mainDescription: category.mainDescription,
-        coverImage: category.coverImage,
-        isActive: category.isActive,
-        sortOrder: category.sortOrder,
-        items: paginatedItems,
+        ...mapCategoryList(category, totalItems),
+        items,
       },
       pagination: buildPagination(page, limit, totalItems),
     });
@@ -266,33 +371,23 @@ export const getItem = async (req, res) => {
   try {
     const { slug, itemId } = req.params;
 
-    const category = await Catalog.findOne({ slug, isActive: true }).lean();
-    if (!category) {
-      return res
-        .status(404)
-        .json({ status: "error", message: "Catalog category not found." });
-    }
+    const item = await CatalogItem.findById(itemId).populate(CATEGORY_POPULATE).lean();
 
-    const item = (category.items || []).find(
-      (entry) => String(entry._id) === itemId && entry.isActive !== false
-    );
-
-    if (!item) {
+    if (!item || !item.category || item.category.slug !== slug || item.isActive === false) {
       return res
         .status(404)
         .json({ status: "error", message: "Catalog item not found." });
     }
 
+    if (item.category.isActive === false) {
+      return res
+        .status(404)
+        .json({ status: "error", message: "Catalog category not found." });
+    }
+
     res.status(200).json({
       status: "success",
-      data: {
-        category: {
-          _id: category._id,
-          label: category.label,
-          slug: category.slug,
-        },
-        item,
-      },
+      data: item,
     });
   } catch (error) {
     res.status(500).json({ status: "error", message: error.message });
@@ -311,9 +406,7 @@ export const adminListCategories = async (req, res) => {
       filter.$or = [
         { label: { $regex: search, $options: "i" } },
         { slug: { $regex: search, $options: "i" } },
-        { "items.label": { $regex: search, $options: "i" } },
-        { "items.sku": { $regex: search, $options: "i" } },
-        { "items.sacid": { $regex: search, $options: "i" } },
+        { sacid: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -326,11 +419,15 @@ export const adminListCategories = async (req, res) => {
       Catalog.countDocuments(filter),
     ]);
 
+    const categoryIds = categories.map((category) => category._id);
+    const totalCounts = await getCategoryItemCounts(categoryIds);
+    const activeCounts = await getCategoryItemCounts(categoryIds, { isActive: true });
+
     res.status(200).json({
       status: "success",
       data: categories.map((category) => ({
-        ...mapCategoryList(category),
-        totalItems: category.items?.length || 0,
+        ...mapCategoryList(category, activeCounts.get(String(category._id)) || 0),
+        totalItems: totalCounts.get(String(category._id)) || 0,
       })),
       pagination: buildPagination(page, limit, total),
     });
@@ -349,13 +446,17 @@ export const createCategory = async (req, res) => {
     }
 
     const existingCategory = await Catalog.findOne({
-      $or: [{ slug: payload.slug }, { label: payload.label }],
+      $or: [
+        { slug: payload.slug },
+        { label: payload.label },
+        { sacid: payload.sacid },
+      ],
     });
 
     if (existingCategory) {
       return res.status(409).json({
         status: "error",
-        message: "Catalog category with the same label or slug already exists.",
+        message: "Catalog category with the same sacid, label, or slug already exists.",
       });
     }
 
@@ -394,26 +495,22 @@ export const updateCategory = async (req, res) => {
 
     const duplicateCategory = await Catalog.findOne({
       _id: { $ne: id },
-      $or: [{ slug: payload.slug }, { label: payload.label }],
+      $or: [
+        { slug: payload.slug },
+        { label: payload.label },
+        { sacid: payload.sacid },
+      ],
     });
 
     if (duplicateCategory) {
       return res.status(409).json({
         status: "error",
         message:
-          "Another catalog category with the same label or slug already exists.",
+          "Another catalog category with the same sacid, label, or slug already exists.",
       });
     }
 
-    category.label = payload.label;
-    category.sacid = payload.sacid;
-    category.slug = payload.slug;
-    category.mainHeading = payload.mainHeading;
-    category.mainDescription = payload.mainDescription;
-    category.coverImage = payload.coverImage;
-    category.isActive = payload.isActive;
-    category.sortOrder = payload.sortOrder;
-
+    Object.assign(category, payload);
     await category.save();
 
     res.status(200).json({
@@ -437,6 +534,8 @@ export const deleteCategory = async (req, res) => {
         .json({ status: "error", message: "Catalog category not found." });
     }
 
+    await CatalogItem.deleteMany({ category: id });
+
     res.status(200).json({
       status: "success",
       message: "Catalog category deleted successfully.",
@@ -449,7 +548,7 @@ export const deleteCategory = async (req, res) => {
 export const addItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const category = await Catalog.findById(id);
+    const category = await getCategoryByIdOrFail(id);
 
     if (!category) {
       return res
@@ -464,31 +563,27 @@ export const addItem = async (req, res) => {
       return res.status(400).json({ status: "error", message: validationError });
     }
 
-    const duplicateItem = category.items.find(
-      (item) =>
-        item.sku.toLowerCase() === payload.sku.toLowerCase() ||
-        (payload.sacid &&
-          item.sacid?.toLowerCase() === payload.sacid.toLowerCase()) ||
-        item.slug.toLowerCase() === payload.slug.toLowerCase()
-    );
+    const duplicateItem = await CatalogItem.findOne({
+      $or: [{ sku: payload.sku }, { sacid: payload.sacid }, { category: id, slug: payload.slug }],
+    }).lean();
 
     if (duplicateItem) {
       return res.status(409).json({
         status: "error",
         message:
-          "Catalog item with the same sku, sacid, or slug already exists in this category.",
+          "Catalog item with the same sku, sacid, or slug already exists.",
       });
     }
 
-    category.items.push(payload);
-    await category.save();
-
-    const newItem = category.items[category.items.length - 1];
+    const item = await CatalogItem.create({
+      ...payload,
+      category: category._id,
+    });
 
     res.status(201).json({
       status: "success",
       message: "Catalog item created successfully.",
-      data: newItem,
+      data: item,
     });
   } catch (error) {
     res.status(500).json({ status: "error", message: error.message });
@@ -498,7 +593,7 @@ export const addItem = async (req, res) => {
 export const updateItem = async (req, res) => {
   try {
     const { id, itemId } = req.params;
-    const category = await Catalog.findById(id);
+    const category = await getCategoryByIdOrFail(id);
 
     if (!category) {
       return res
@@ -506,7 +601,7 @@ export const updateItem = async (req, res) => {
         .json({ status: "error", message: "Catalog category not found." });
     }
 
-    const item = category.items.id(itemId);
+    const item = await CatalogItem.findOne({ _id: itemId, category: id });
     if (!item) {
       return res
         .status(404)
@@ -523,25 +618,25 @@ export const updateItem = async (req, res) => {
       return res.status(400).json({ status: "error", message: validationError });
     }
 
-    const duplicateItem = category.items.find(
-      (entry) =>
-        String(entry._id) !== itemId &&
-        (entry.sku.toLowerCase() === payload.sku.toLowerCase() ||
-          (payload.sacid &&
-            entry.sacid?.toLowerCase() === payload.sacid.toLowerCase()) ||
-          entry.slug.toLowerCase() === payload.slug.toLowerCase())
-    );
+    const duplicateItem = await CatalogItem.findOne({
+      _id: { $ne: itemId },
+      $or: [
+        { sku: payload.sku },
+        { sacid: payload.sacid },
+        { category: id, slug: payload.slug },
+      ],
+    }).lean();
 
     if (duplicateItem) {
       return res.status(409).json({
         status: "error",
         message:
-          "Another item with the same sku, sacid, or slug already exists in this category.",
+          "Another item with the same sku, sacid, or slug already exists.",
       });
     }
 
-    Object.assign(item, payload);
-    await category.save();
+    Object.assign(item, payload, { category: category._id });
+    await item.save();
 
     res.status(200).json({
       status: "success",
@@ -556,23 +651,13 @@ export const updateItem = async (req, res) => {
 export const deleteItem = async (req, res) => {
   try {
     const { id, itemId } = req.params;
-    const category = await Catalog.findById(id);
+    const item = await CatalogItem.findOneAndDelete({ _id: itemId, category: id });
 
-    if (!category) {
-      return res
-        .status(404)
-        .json({ status: "error", message: "Catalog category not found." });
-    }
-
-    const item = category.items.id(itemId);
     if (!item) {
       return res
         .status(404)
         .json({ status: "error", message: "Catalog item not found." });
     }
-
-    category.items.pull({ _id: itemId });
-    await category.save();
 
     res.status(200).json({
       status: "success",
@@ -584,24 +669,15 @@ export const deleteItem = async (req, res) => {
 };
 
 export const uploadItemMedia = async (req, res) => {
-  console.log()
   upload(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ status: "error", message: err.message });
     }
 
-    console.log("this is the files:: ",  req.params, req.files?.images)
-
     try {
       const { id, itemId } = req.params;
-      const images = [
-        ...(req.files?.images || []),
-        ...(req.files?.image || []),
-      ];
-      const videos = [
-        ...(req.files?.videos || []),
-        ...(req.files?.video || []),
-      ];
+      const images = [...(req.files?.images || []), ...(req.files?.image || [])];
+      const videos = [...(req.files?.videos || []), ...(req.files?.video || [])];
 
       if (images.length === 0 && videos.length === 0) {
         return res.status(400).json({
@@ -610,15 +686,11 @@ export const uploadItemMedia = async (req, res) => {
         });
       }
 
-      const category = await Catalog.findById(id);
-      if (!category) {
-        return res.status(404).json({
-          status: "error",
-          message: "Catalog category not found.",
-        });
-      }
+      const item = await CatalogItem.findOne({ _id: itemId, category: id }).populate({
+        path: "category",
+        select: "slug label",
+      });
 
-      const item = category.items.id(itemId);
       if (!item) {
         return res.status(404).json({
           status: "error",
@@ -627,7 +699,7 @@ export const uploadItemMedia = async (req, res) => {
       }
 
       const categoryFolder = slugify(
-        category.slug || category.label || String(category._id)
+        item.category?.slug || item.category?.label || String(id)
       );
       const itemFolder = slugify(item.slug || item.label || String(itemId));
 
@@ -648,18 +720,14 @@ export const uploadItemMedia = async (req, res) => {
 
       item.images.push(...uploadedImages);
       item.videos.push(...uploadedVideos);
-      await category.save();
+      await item.save();
 
       return res.status(200).json({
         status: "success",
         message: "Catalog media uploaded and attached successfully.",
         data: {
           itemId: item._id,
-          category: {
-            id: category._id,
-            slug: category.slug,
-            label: category.label,
-          },
+          category: item.category,
           itemPaths: {
             imageFolder,
             videoFolder,
@@ -680,37 +748,79 @@ export const uploadItemMedia = async (req, res) => {
 
 export const seedCatalog = async (req, res) => {
   try {
-    let created = 0;
-    let updated = 0;
+    let createdCategories = 0;
+    let updatedCategories = 0;
+    let upsertedItems = 0;
 
     for (const entry of catalogSeed) {
-      const existingCategory = await Catalog.findOne({ slug: entry.slug });
+      let category = await Catalog.findOne({ slug: entry.slug });
 
-      if (existingCategory) {
-        existingCategory.label = entry.label;
-        existingCategory.mainHeading = entry.mainHeading;
-        existingCategory.mainDescription = entry.mainDescription;
-        existingCategory.coverImage = entry.coverImage || "";
-        existingCategory.sortOrder = entry.sortOrder || 0;
-        existingCategory.isActive = true;
-        existingCategory.items = entry.items;
-        await existingCategory.save();
-        updated += 1;
+      if (!category) {
+        category = await Catalog.create({
+          sacid: entry.sacid,
+          label: entry.label,
+          slug: entry.slug,
+          mainHeading: entry.mainHeading,
+          mainDescription: entry.mainDescription,
+          coverImage: entry.coverImage || "",
+          sortOrder: entry.sortOrder || 0,
+          isActive: entry.isActive !== false,
+        });
+        createdCategories += 1;
       } else {
-        await Catalog.create(entry);
-        created += 1;
+        Object.assign(category, {
+          sacid: entry.sacid,
+          label: entry.label,
+          slug: entry.slug,
+          mainHeading: entry.mainHeading,
+          mainDescription: entry.mainDescription,
+          coverImage: entry.coverImage || "",
+          sortOrder: entry.sortOrder || 0,
+          isActive: entry.isActive !== false,
+        });
+        await category.save();
+        updatedCategories += 1;
       }
+
+      const incomingSacids = entry.items.map((item) => item.sacid);
+
+      for (const item of entry.items) {
+        await CatalogItem.findOneAndUpdate(
+          { sacid: item.sacid },
+          {
+            ...item,
+            category: category._id,
+            isActive: item.isActive !== false,
+          },
+          {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true,
+          }
+        );
+        upsertedItems += 1;
+      }
+
+      await CatalogItem.deleteMany({
+        category: category._id,
+        sacid: { $nin: incomingSacids },
+      });
     }
 
-    const totalCategories = await Catalog.countDocuments();
+    const [totalCategories, totalItems] = await Promise.all([
+      Catalog.countDocuments(),
+      CatalogItem.countDocuments(),
+    ]);
 
     res.status(200).json({
       status: "success",
       message: "Catalog seed executed successfully.",
       data: {
-        created,
-        updated,
+        createdCategories,
+        updatedCategories,
+        upsertedItems,
         totalCategories,
+        totalItems,
       },
     });
   } catch (error) {
