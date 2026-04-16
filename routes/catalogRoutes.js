@@ -14,6 +14,7 @@ import {
   seedCatalog,
   updateCategory,
   updateItem,
+  uploadCatalogMedia,
   uploadItemMedia,
 } from "../controller/catalogController.js";
 
@@ -28,7 +29,12 @@ router.post("/", ...ADMIN_MIDDLEWARE, createCategory);
 router.patch("/:id", ...ADMIN_MIDDLEWARE, updateCategory);
 router.delete("/:id", ...ADMIN_MIDDLEWARE, deleteCategory);
 router.post("/:id/items", ...ADMIN_MIDDLEWARE, addItem);
-router.post("/:id/items/:itemId/media", ...ADMIN_MIDDLEWARE, uploadItemMedia);
+router.post(
+  "/:id/items/:itemId/media",
+  ...ADMIN_MIDDLEWARE,
+  uploadCatalogMedia,
+  uploadItemMedia
+);
 router.patch("/:id/items/:itemId", ...ADMIN_MIDDLEWARE, updateItem);
 router.delete("/:id/items/:itemId", ...ADMIN_MIDDLEWARE, deleteItem);
 router.get("/:slug/items/:itemId", getItem);

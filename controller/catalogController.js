@@ -8,7 +8,7 @@ import {
   uploadCatalogFileToS3,
 } from "../services/catalogMediaService.js";
 
-const upload = multer({
+const uploadCatalogMedia = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 100 * 1024 * 1024,
@@ -20,6 +20,7 @@ const upload = multer({
   { name: "video", maxCount: 10 },
   { name: "videos", maxCount: 10 },
 ]);
+
 
 const ADMIN_MIDDLEWARE = [protect, restrictTo("admin", "plant-manager")];
 
@@ -669,81 +670,75 @@ export const deleteItem = async (req, res) => {
 };
 
 export const uploadItemMedia = async (req, res) => {
-  upload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ status: "error", message: err.message });
-    }
+  try {
+    const { id, itemId } = req.params;
+    const images = [...(req.files?.images || []), ...(req.files?.image || [])];
+    const videos = [...(req.files?.videos || []), ...(req.files?.video || [])];
 
-    try {
-      const { id, itemId } = req.params;
-      const images = [...(req.files?.images || []), ...(req.files?.image || [])];
-      const videos = [...(req.files?.videos || []), ...(req.files?.video || [])];
-
-      if (images.length === 0 && videos.length === 0) {
-        return res.status(400).json({
-          status: "error",
-          message: "At least one image or video file is required.",
-        });
-      }
-
-      const item = await CatalogItem.findOne({ _id: itemId, category: id }).populate({
-        path: "category",
-        select: "slug label",
-      });
-
-      if (!item) {
-        return res.status(404).json({
-          status: "error",
-          message: "Catalog item not found.",
-        });
-      }
-
-      const categoryFolder = slugify(
-        item.category?.slug || item.category?.label || String(id)
-      );
-      const itemFolder = slugify(item.slug || item.label || String(itemId));
-
-      const imageFolder = `catalog-photos/${categoryFolder}/${itemFolder}/images`;
-      const videoFolder = `catalog-photos/${categoryFolder}/${itemFolder}/videos`;
-
-      const uploadedImages = [];
-      for (const file of images) {
-        const uploaded = await uploadCatalogFileToS3(file, imageFolder);
-        uploadedImages.push(uploaded);
-      }
-
-      const uploadedVideos = [];
-      for (const file of videos) {
-        const uploaded = await uploadCatalogFileToS3(file, videoFolder);
-        uploadedVideos.push(uploaded);
-      }
-
-      item.images.push(...uploadedImages);
-      item.videos.push(...uploadedVideos);
-      await item.save();
-
-      return res.status(200).json({
-        status: "success",
-        message: "Catalog media uploaded and attached successfully.",
-        data: {
-          itemId: item._id,
-          category: item.category,
-          itemPaths: {
-            imageFolder,
-            videoFolder,
-          },
-          images: uploadedImages,
-          videos: uploadedVideos,
-          item,
-        },
-      });
-    } catch (error) {
-      return res.status(500).json({
+    if (images.length === 0 && videos.length === 0) {
+      return res.status(400).json({
         status: "error",
-        message: error.message,
+        message: "At least one image or video file is required.",
       });
     }
-  });
+
+    const item = await CatalogItem.findOne({ _id: itemId, category: id }).populate({
+      path: "category",
+      select: "slug label",
+    });
+
+    if (!item) {
+      return res.status(404).json({
+        status: "error",
+        message: "Catalog item not found.",
+      });
+    }
+
+    const categoryFolder = slugify(
+      item.category?.slug || item.category?.label || String(id)
+    );
+    const itemFolder = slugify(item.slug || item.label || String(itemId));
+
+    const imageFolder = `catalog-photos/${categoryFolder}/${itemFolder}/images`;
+    const videoFolder = `catalog-photos/${categoryFolder}/${itemFolder}/videos`;
+
+    const uploadedImages = [];
+    for (const file of images) {
+      const uploaded = await uploadCatalogFileToS3(file, imageFolder);
+      uploadedImages.push(uploaded);
+    }
+
+    const uploadedVideos = [];
+    for (const file of videos) {
+      const uploaded = await uploadCatalogFileToS3(file, videoFolder);
+      uploadedVideos.push(uploaded);
+    }
+
+    item.images.push(...uploadedImages);
+    item.videos.push(...uploadedVideos);
+    await item.save();
+
+    return res.status(200).json({
+      status: "success",
+      message: "Catalog media uploaded and attached successfully.",
+      data: {
+        itemId: item._id,
+        category: item.category,
+        itemPaths: {
+          imageFolder,
+          videoFolder,
+        },
+        images: uploadedImages,
+        videos: uploadedVideos,
+        item,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
 };
 
 export const seedCatalog = async (req, res) => {
@@ -851,4 +846,4 @@ export const cleanupMedia = async (req, res) => {
   }
 };
 
-export { ADMIN_MIDDLEWARE };
+export { ADMIN_MIDDLEWARE, uploadCatalogMedia };

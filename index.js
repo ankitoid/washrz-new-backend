@@ -107,6 +107,7 @@ const addSocketToRequest = (io) => {
 
 // NOTE: Body parser should be registered early so routes can use req.body
 app.use(express.json({ limit: "100mb" }));
+app.use("/api/v1/catalog", catalogRoutes);
 
 // Attach io to requests early if any route/middleware needs req.socket
 app.use(addSocketToRequest(io));
@@ -412,7 +413,6 @@ app.use("/api/v1/admincoupons",adminCoupons)
 app.use("/api/v1/customercoupons",customerCoupons)
 app.use("/api/v1/slots",slotRoutes)
 app.use("/api/v1/notifications", notificationRoutes);
-app.use("/api/v1/catalog", catalogRoutes);
 app.use("/api/v1/customer/notifications", customerNotificationRoutes);
 app.use("/api/v1/customer/push-tokens", customerPushTokenRoutes);
 app.all("*", (req, res, next) => {
