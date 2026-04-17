@@ -699,8 +699,8 @@ export const uploadItemMedia = async (req, res) => {
     );
     const itemFolder = slugify(item.slug || item.label || String(itemId));
 
-    const imageFolder = `catalog-photos/${categoryFolder}/${itemFolder}/images`;
-    const videoFolder = `catalog-photos/${categoryFolder}/${itemFolder}/videos`;
+    const imageFolder = `catalog-media/${categoryFolder}/${item.sku}/images`;
+    const videoFolder = `catalog-media/${categoryFolder}/${item.sku}/videos`;
 
     const uploadedImages = [];
     for (const file of images) {
