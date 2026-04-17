@@ -48,9 +48,9 @@ const catalogCategorySchema = new mongoose.Schema(
   }
 );
 
-catalogCategorySchema.index({ sacid: 1 }, { unique: true });
-catalogCategorySchema.index({ slug: 1 }, { unique: true });
-catalogCategorySchema.index({ label: 1, isActive: 1 });
+// catalogCategorySchema.index({ sacid: 1 }, { unique: true });
+// catalogCategorySchema.index({ slug: 1 }, { unique: true });
+// catalogCategorySchema.index({ label: 1, isActive: 1 });
 
 const Catalog = mongoose.model("Catalog", catalogCategorySchema);
 
