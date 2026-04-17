@@ -157,11 +157,11 @@ const validateItemPayload = (payload) => {
   return null;
 };
 
-const buildItemFilters = ({ search, type, minPrice, maxPrice, isActiveOnly = true }) => {
+const buildItemFilters = ({ search, type, minPrice, maxPrice, isActiveOnly }) => {
   const filter = {};
 
   if (isActiveOnly) {
-    filter.isActive = true;
+    filter.isActive = isActiveOnly;
   }
 
   const normalizedSearch = String(search || "").trim();
@@ -190,6 +190,7 @@ const buildItemFilters = ({ search, type, minPrice, maxPrice, isActiveOnly = tru
   if (Object.keys(priceFilter).length > 0) {
     filter.price = priceFilter;
   }
+
 
   return filter;
 };
@@ -264,25 +265,39 @@ export const getFullCatalog = async (req, res) => {
   try {
     const page = Math.max(toNumber(req.query.page, 1), 1);
     const limit = Math.min(Math.max(toNumber(req.query.limit, 10), 1), 100);
-    const includeInactive = toBoolean(req.query.includeInactive, false);
+    
+    // CHANGE 1: Replace includeInactive with isActive parameter
+    // Default is null (no filter on isActive field)
+    const isActive = req.query.isActive !== undefined 
+      ? toBoolean(req.query.isActive, null) 
+      : null;
+    
     const minPrice =
       req.query.minPrice !== undefined ? toNumber(req.query.minPrice, NaN) : NaN;
     const maxPrice =
       req.query.maxPrice !== undefined ? toNumber(req.query.maxPrice, NaN) : NaN;
 
+    // CHANGE 2: Remove isActiveOnly from buildItemFilters call
     const itemFilter = buildItemFilters({
       search: req.query.search,
       type: req.query.type,
       minPrice,
       maxPrice,
-      isActiveOnly: !includeInactive,
+      // Remove this line: isActiveOnly: !includeInactive,
     });
+
+    // CHANGE 3: Add isActive filter conditionally
+    if (isActive !== null) {
+      itemFilter.isActive = isActive;
+    }
+    // If isActive is null, don't add any isActive filter (return all items)
 
     const categorySlug = String(req.query.categorySlug || "").trim();
     if (categorySlug) {
+      // CHANGE 4: Remove category active filtering
       const category = await Catalog.findOne({
         slug: categorySlug,
-        ...(includeInactive ? {} : { isActive: true }),
+        // Remove this: ...(includeInactive ? {} : { isActive: true }),
       }).select("_id");
 
       if (!category) {
@@ -293,10 +308,13 @@ export const getFullCatalog = async (req, res) => {
       }
 
       itemFilter.category = category._id;
-    } else if (!includeInactive) {
-      const activeCategoryIds = await Catalog.find({ isActive: true }).distinct("_id");
-      itemFilter.category = { $in: activeCategoryIds };
-    }
+    } 
+    // CHANGE 5: Remove the else block that filtered active categories
+    // Delete this entire else block:
+    // } else if (!includeInactive) {
+    //   const activeCategoryIds = await Catalog.find({ isActive: true }).distinct("_id");
+    //   itemFilter.category = { $in: activeCategoryIds };
+    // }
 
     const [items, total] = await Promise.all([
       CatalogItem.find(itemFilter)
@@ -335,13 +353,16 @@ export const getCategory = async (req, res) => {
         .json({ status: "error", message: "Catalog category not found." });
     }
 
+    const isActiveStatus =  req.query.isActive
+
+
     const itemFilter = {
       ...buildItemFilters({
         search: req.query.search,
         type: req.query.type,
         minPrice,
         maxPrice,
-        isActiveOnly: true,
+        isActiveOnly: isActiveStatus,
       }),
       category: category._id,
     };
@@ -565,7 +586,7 @@ export const addItem = async (req, res) => {
     }
 
     const duplicateItem = await CatalogItem.findOne({
-      $or: [{ sku: payload.sku }, { sacid: payload.sacid }, { category: id, slug: payload.slug }],
+      $or: [{ sku: payload.sku }],
     }).lean();
 
     if (duplicateItem) {
