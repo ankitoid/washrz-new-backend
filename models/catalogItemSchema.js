@@ -109,7 +109,7 @@ const catalogItemSchema = new mongoose.Schema(
     },
     unit: {
       type: String,
-      enum: ["kg", "pc", "service", "set"],
+      enum: ["kg", "pc", "service", "set", "pair"],
       default: "pc",
     },
     type: {
