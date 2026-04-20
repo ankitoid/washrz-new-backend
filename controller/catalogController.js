@@ -617,6 +617,8 @@ export const updateItem = async (req, res) => {
     const { id, itemId } = req.params;
     const category = await getCategoryByIdOrFail(id);
 
+    console.log('this is the value===>',id,itemId,category)
+
     if (!category) {
       return res
         .status(404)
@@ -636,6 +638,8 @@ export const updateItem = async (req, res) => {
     });
     const validationError = validateItemPayload(payload);
 
+    console.log("this is the validationError==>>",validationError)
+
     if (validationError) {
       return res.status(400).json({ status: "error", message: validationError });
     }
@@ -649,11 +653,14 @@ export const updateItem = async (req, res) => {
       ],
     }).lean();
 
-    if (duplicateItem) {
+
+    console.log("duplicateItem",itemId,payload.sku,payload.sacid,id,payload.slug,duplicateItem)
+
+    if (!duplicateItem) {
       return res.status(409).json({
         status: "error",
         message:
-          "Another item with the same sku, sacid, or slug already exists.",
+          "you can't update sku, sacid, or slug",
       });
     }
 
