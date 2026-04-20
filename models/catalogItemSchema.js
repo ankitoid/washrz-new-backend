@@ -69,7 +69,7 @@ const catalogItemSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      unique: true,
+      // unique: true,
     },
     sku: {
       type: String,
@@ -109,7 +109,7 @@ const catalogItemSchema = new mongoose.Schema(
     },
     unit: {
       type: String,
-      enum: ["kg", "pc", "service", "set"],
+      enum: ["kg", "pc", "service", "set", "pair"],
       default: "pc",
     },
     type: {
@@ -143,7 +143,7 @@ const catalogItemSchema = new mongoose.Schema(
   }
 );
 
-catalogItemSchema.index({ category: 1, slug: 1 }, { unique: true });
+// catalogItemSchema.index({ category: 1, slug: 1 }, { unique: true });
 catalogItemSchema.index({ category: 1, sortOrder: 1, createdAt: -1 });
 catalogItemSchema.index({ category: 1, isActive: 1 });
 catalogItemSchema.index({ label: 1, mainHeading: 1, mainDescription: 1 });
