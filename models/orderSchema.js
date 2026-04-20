@@ -190,6 +190,10 @@ const orderSchema = new Schema(
     },
     deliveryDate: Date,
     deliveryTimeSlot: String,
+    pickupRider: {
+  name: { type: String, default: null },
+  assignedAt: { type: Date, default: null }
+},
     
     riderId: String,
     riderName: String,
