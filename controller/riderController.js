@@ -149,6 +149,10 @@ export const uploadFiles = (req, res, next) => {
         plantName: parsedCurrObj.plantName,
         orderLocation: parsedLocation,
         statusHistory,
+        pickupRider: {
+          name: pickup_details?.riderName || null,
+          assignedAt: pickup_details?.riderDate || new Date(),
+      },
       });
 
       await Pickup.findByIdAndUpdate(id, { PickupStatus: "complete" });
