@@ -10,6 +10,7 @@ import pickup from "../models/pickupSchema.js";
 import APIFeatures from "../utills/apiFeatures.js";
 import customerFcmService from "../services/customerFcmService.js";
 import { createCustomerNotification } from "./customerNotificationController.js";
+import CatalogItem from "../models/catalogItemSchema.js";
 
 // upload audio and voice
 // Configure AWS S3
