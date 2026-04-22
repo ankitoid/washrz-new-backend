@@ -230,6 +230,12 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       date,
       slot,
       note,
+      items, 
+// ✅ NEW //  Format:
+//  [
+//    { "itemId": "catalogItemId", "quantity": 2 },
+//    { "itemId": "catalogItemId2", "quantity": 1 }
+//  ]
     } = req.body;
 
     console.log("REQ BODY 👉", req.body);
@@ -244,12 +250,52 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     }
 
     const name = lastName ? `${firstName} ${lastName}` : firstName;
+    // -------------------------
+    // Validate Items (if provided)
+    // -------------------------
+    let processedItems = [];
+
+    if (items && Array.isArray(items) && items.length > 0) {
+      // quantity validation
+      if (items.some((i) => !i.itemId || !i.quantity || i.quantity < 1)) {
+        return res.status(400).json({
+          message: "Invalid items payload",
+        });
+      }
+
+      const itemIds = items.map((i) => i.itemId);
+
+      const catalogItems = await CatalogItem.find({
+        _id: { $in: itemIds },
+        isActive: true,
+      });
+
+      if (catalogItems.length !== itemIds.length) {
+        return res.status(400).json({
+          message: "Some items are invalid or inactive",
+        });
+      }
+
+      processedItems = items.map((reqItem) => {
+        const catalogItem = catalogItems.find(
+          (ci) => ci._id.toString() === reqItem.itemId
+        );
+
+        return {
+          itemId: catalogItem._id,
+          label: catalogItem.label,   // snapshot
+          price: catalogItem.price,   // snapshot
+          unit: catalogItem.unit,     // snapshot
+          quantity: reqItem.quantity,
+        };
+      });
+    }
 
     // -------------------------
     // Fetch addresses
     // -------------------------
     const addrRes = await fetch(
-      `https://live.drydash.in/v1/addresses?customerid=${appCustomerId}`,
+      `https://live.drydash.in/v1/addresses?customerid=${appCustomerId}`
     );
 
     const addrData = await addrRes.json();
@@ -265,14 +311,14 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     }
 
     // -------------------------
-    // Map pickup & delivery addresses by ID
+    // Map pickup & delivery addresses
     // -------------------------
     const pickupAddress = addresses.find(
-      (addr) => addr.id === tempPickupAdresssId,
+      (addr) => addr.id === tempPickupAdresssId
     );
 
     const deliveryAddress = addresses.find(
-      (addr) => addr.id === tempDeliveryAddressId,
+      (addr) => addr.id === tempDeliveryAddressId
     );
 
     if (!pickupAddress) {
@@ -300,6 +346,14 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     };
 
     // -------------------------
+    // Calculate total (optional)
+    // -------------------------
+    const totalAmount = processedItems.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+
+    // -------------------------
     // Create pickup payload
     // -------------------------
     const pickupPayload = {
@@ -321,7 +375,6 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       contactName: pickupAddress.contactName || null,
       contactPhone: pickupAddress.contactPhone || null,
 
-      // optional but useful
       deliveryAddress: buildFullAddress(deliveryAddress),
       deliveryLocation: {
         latitude: deliveryAddress.latitude,
@@ -333,21 +386,27 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       tempDeliveryAddressId,
 
       platform_type: "app",
+      items: processedItems, // ✅ NEW
+      totalAmount,           // ✅ OPTIONAL
     };
 
     if (slot) {
       pickupPayload.slot = slot;
       pickupPayload.pickup_date = new Date(date);
     }
+
     if (note) pickupPayload.note = note;
 
-    console.log("this is the pickupPayload==>>", pickupPayload);
+    console.log("FINAL PAYLOAD 👉", pickupPayload);
 
     // -------------------------
     // Save pickup
     // -------------------------
     const pickupData = await pickup.create(pickupPayload);
 
+    // -------------------------
+    // Notification
+    // -------------------------
     const notification = await createCustomerNotification({
       customerId: pickupData.appCustomerId,
       title: "Pickup Scheduled",
@@ -378,11 +437,14 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
           isRead: false,
         },
         unreadCount,
-      },
+      }
     );
 
     req.socket.emitToAdmin("addPickup", pickupData);
 
+    // -------------------------
+    // Push notification
+    // -------------------------
     const pushResult = await customerFcmService.sendToCustomer(
       String(appCustomerId),
       {
@@ -393,7 +455,7 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
         type: "pickup_Created",
         pickupId: String(pickupData._id),
         screen: "PickupDetails",
-      },
+      }
     );
 
     return res.status(200).json({

@@ -46,69 +46,125 @@ export const uploadFiles = (req, res, next) => {
       return res.status(400).json({ message: "Error uploading files.", err });
     }
 
+    
+
     console.log("req.files?", req.files);
-    const { id } = req.params;
+    const { id } = req.params; // ✅ this is pickupId
     const { image } = req.files;
     const voice = req.files?.voice || [];
     req.app.use(express.json({ limit: "100mb" }));
     const location = req.body?.location || null;
-    const { currObj, price } = req.body;
 
-    console.log(
-      "this is the response i  am getting ===>>",
-      id,
-      image,
-      voice,
-      location,
-      currObj,
-      price,
-    );
+//  Format:
+//  [
+//    { "itemId": "catalogItemId", "quantity": 2 },
+//    { "itemId": "catalogItemId2", "quantity": 1 }
+//  ]
 
-    if (!id || !image || !price) {
+//  NOTE:
+//  * - :id in URL = pickupId
+//  * - All customer + address data comes from Pickup DB
+//  * - Items are validated against Catalog
+//  * - Total price is auto-calculated
+
+    const { items } = req.body;
+
+    if (!id || !image || !items) {
       return res.status(400).json({
-        message: "Order ID, image, currObj, and price are required.",
+        message: "pickupId (in params), items and image are required.",
       });
     }
 
-    if (!currObj) {
-      return res.status(400).json({ message: "currObj is required." });
-    }
-
     try {
-      const parsedCurrObj = JSON.parse(currObj);
+      const parsedItems =
+        typeof items === "string" ? JSON.parse(items) : items;
 
-      const pickup_details_arr = await Pickup.find({ _id: parsedCurrObj.id });
-      const pickup_details = pickup_details_arr[0];
+      // -------------------------
+      // Fetch pickup using id
+      // -------------------------
+      const pickup_details = await Pickup.findById(id);
+
+      if (!pickup_details) {
+        return res.status(404).json({ message: "Pickup not found" });
+      }
+
+      // -------------------------
+      // Use data from pickup
+      // -------------------------
+      const contactNo = pickup_details.Contact;
+      const customerName = pickup_details.Name;
+      const plantName = pickup_details.plantName;
+
+      let address = pickup_details.Address;
 
       if (
         pickup_details?.appCustomerId ||
         pickup_details?.platform_type === "app"
       ) {
-        parsedCurrObj.address = pickup_details?.deliveryAddress;
+        address = pickup_details.deliveryAddress;
       }
 
-      let parsedLocation = null;
-
-      if (
-        pickup_details?.appCustomerId ||
-        pickup_details?.platform_type === "app"
-      ) {
-        parsedLocation = {
-          latitude: pickup_details?.deliveryLocation?.latitude,
-          longitude: pickup_details?.deliveryLocation?.longitude,
-        };
-      }
+      let parsedLocation = {
+        latitude: pickup_details?.deliveryLocation?.latitude,
+        longitude: pickup_details?.deliveryLocation?.longitude,
+      };
 
       if (location) {
-        parsedLocation = JSON.parse(location);
+        parsedLocation =
+          typeof location === "string" ? JSON.parse(location) : location;
       }
 
-      if (!parsedCurrObj || typeof parsedCurrObj !== "object") {
-        return res.status(400).json({ message: "Invalid currObj format." });
+      // -------------------------
+      // Validate + map items
+      // -------------------------
+      if (!Array.isArray(parsedItems) || parsedItems.length === 0) {
+        return res.status(400).json({ message: "Items are required" });
       }
 
+      const itemIds = parsedItems.map((i) => i.itemId);
+
+      const catalogItems = await CatalogItem.find({
+        _id: { $in: itemIds },
+        isActive: true,
+      });
+
+      const finalItems = parsedItems.map((reqItem) => {
+        const catalogItem = catalogItems.find(
+          (ci) => ci._id.toString() === reqItem.itemId
+        );
+
+        return {
+          itemId: catalogItem._id,
+          label: catalogItem.label,
+          price: catalogItem.price,
+          unit: catalogItem.unit,
+          quantity: reqItem.quantity,
+        };
+      });
+
+      // -------------------------
+      // Calculate price
+      // -------------------------
+      const totalPrice = finalItems.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      );
+
+      // -------------------------
+      // Update Pickup (items + total)
+      // -------------------------
+      await Pickup.findByIdAndUpdate(id, {
+        items: finalItems,
+        totalAmount: totalPrice,
+      });
+
+      // -------------------------
+      // Upload files
+      // -------------------------
       const imageUploads = await Promise.all(
-        image.map((img) => uploadToS3(img, process.env.AWS_S3_BUCKET_NAME)),
+        image.map((img) =>
+          uploadToS3(img, process.env.AWS_S3_BUCKET_NAME)
+        )
       );
       const imageUrls = imageUploads.map((upload) => upload.Location);
 
@@ -117,10 +173,13 @@ export const uploadFiles = (req, res, next) => {
         voiceUpload = await uploadToS3(
           voice[0],
           process.env.AWS_S3_BUCKET_NAME,
-          "intransiteOrderVoice",
+          "intransiteOrderVoice"
         );
       }
 
+      // -------------------------
+      // Order ID
+      // -------------------------
       const latestOrder = await Order.find().sort({ _id: -1 });
       let order_id = `WZ1001`;
       if (latestOrder.length > 0) {
@@ -137,16 +196,19 @@ export const uploadFiles = (req, res, next) => {
         cancelled: null,
       };
 
+      // -------------------------
+      // Create Order
+      // -------------------------
       await Order.create({
-        contactNo: parsedCurrObj.contactNo,
-        customerName: parsedCurrObj.customerName,
-        address: parsedCurrObj.address,
-        items: parsedCurrObj.items,
-        price: price,
+        contactNo,
+        customerName,
+        address,
+        items: finalItems,
+        price: totalPrice,
         order_id,
         intransitVoice: voiceUpload?.Location || null,
         intransitImage: imageUrls,
-        plantName: parsedCurrObj.plantName,
+        plantName,
         orderLocation: parsedLocation,
         statusHistory,
         pickupRider: {
@@ -155,6 +217,9 @@ export const uploadFiles = (req, res, next) => {
       },
       });
 
+      // -------------------------
+      // Mark pickup complete
+      // -------------------------
       await Pickup.findByIdAndUpdate(id, { PickupStatus: "complete" });
 
       const customerId = pickup_details?.appCustomerId
@@ -163,7 +228,7 @@ export const uploadFiles = (req, res, next) => {
 
       if (customerId) {
         await createCustomerNotification({
-          customerId: customerId,
+          customerId,
           title: "Pickup Completed",
           message: "Your pickup has been completed successfully.",
           type: "pickup_Completed",
@@ -183,7 +248,7 @@ export const uploadFiles = (req, res, next) => {
             type: "pickup_Completed",
             pickupId: String(id),
             screen: "PickupDetails",
-          },
+          }
         );
       }
 
