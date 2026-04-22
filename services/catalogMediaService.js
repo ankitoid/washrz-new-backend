@@ -25,7 +25,7 @@ export const uploadCatalogFileToS3 = async (
 
   const uploadResult = await s3
     .upload({
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Bucket: process.env.AWS_S3_BUCKET_NAME_CAT,
       Key: key,
       Body: file.buffer,
       ContentType: file.mimetype,
@@ -49,7 +49,7 @@ const listAllObjects = async (prefix) => {
   do {
     const response = await s3
       .listObjectsV2({
-        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Bucket: process.env.AWS_S3_BUCKET_NAME_CAT,
         Prefix: prefix,
         ContinuationToken: continuationToken,
       })
@@ -79,7 +79,7 @@ const deleteObjects = async (keys = []) => {
   for (const chunk of chunks) {
     const response = await s3
       .deleteObjects({
-        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Bucket: process.env.AWS_S3_BUCKET_NAME_CAT,
         Delete: {
           Objects: chunk.map((key) => ({ Key: key })),
           Quiet: true,

@@ -1,20 +1,44 @@
 import mongoose from "mongoose";
 const pickupSchema = mongoose.Schema;
 
+const pickupItemSchema = new mongoose.Schema(
+  {
+    itemId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CatalogItem",
+      required: true,
+    },
+    label: String, // snapshot
+    price: Number, // snapshot
+    unit: String,  // snapshot
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+  },
+  { _id: false }
+);
+
 const schema = new pickupSchema(
   {
-    appCustomerId : String,
+    appCustomerId: String,
     platform_type: {
       type: String,
-      enum: ["wati","app"],
+      enum: ["wati", "app"],
       default: "wati",
+    },
+    totalAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     tempPickupAdresssId: String,
     tempDeliveryAddressId: String,
     Name: String,
     Contact: String,
     Address: String,
-    deliveryAddress : String,
+    deliveryAddress: String,
     slot: { type: String, default: "NA" },
     PickupStatus: {
       type: String,
@@ -41,7 +65,7 @@ const schema = new pickupSchema(
     isRescheduled: { type: Boolean, default: false },
     pickup_date: { type: Date, default: null },
     plantName: { type: String },
-     pickupLocation: {
+    pickupLocation: {
       latitude: Number,
       longitude: Number,
     },
@@ -51,11 +75,15 @@ const schema = new pickupSchema(
     },
     contactName: String,
     contactPhone: String,
-    note : String,
+    note: String,
     riderName: String,
     riderDate: String,
+    items: {
+      type: [pickupItemSchema],
+      default: [],
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const pickup = mongoose.model("pickup", schema);
