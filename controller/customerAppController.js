@@ -1,3 +1,4 @@
+import Order from "../models/orderSchema.js";
 import order from "../models/orderSchema.js";
 import pickup from "../models/pickupSchema.js";
 import APIFeatures from "../utills/apiFeatures.js";
@@ -177,6 +178,85 @@ export const getCustomerSinglePickupDetails = async (req, res) => {
     console.error(error);
     return res.status(500).json({
       message: "Internal server error",
+    });
+  }
+};
+
+
+export const getActivePickupOrOrder = async (req, res) => {
+  try {
+    const { phone } = req.params;
+
+    console.log("this is the phone==>>", phone);
+
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required",
+      });
+    }
+
+    // Use findOne instead of find + limit
+    const latestPickup = await pickup.findOne({
+      Contact: phone,
+    }).sort({ createdAt: -1 });
+
+    console.log("this is the latestPickup--->>", latestPickup);
+
+    if (!latestPickup) {
+      return res.status(404).json({
+        success: false,
+        message: "No pickup detail found",
+      });
+    }
+
+    // Check pickup status
+    if (latestPickup.PickupStatus === "pending" || latestPickup.PickupStatus === "assigned") {
+      return res.status(200).json({
+        success: true,
+        message: "Active pickup found",
+        data: latestPickup,
+        type: "pickup"
+      });
+    }
+
+    // If pickup is complete, check for orders
+    if (latestPickup.PickupStatus === "complete") {
+      const latestOrder = await Order.findOne({
+        contactNo: phone
+      }).sort({ createdAt: -1 });
+
+      console.log("this is the latestOrder===>>>", latestOrder);
+
+      if (latestOrder) {
+        return res.status(200).json({
+          success: true,
+          message: "Order details found",
+          data: latestOrder,
+          type: "order"
+        });
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: "No order details found for completed pickup",
+        });
+      }
+    }
+
+    // Fallback for other statuses
+    return res.status(200).json({
+      success: true,
+      message: "Pickup details found",
+      data: latestPickup,
+      type: "pickup"
+    });
+
+  } catch (error) {
+    console.log("this is the error===>>>", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
