@@ -21,6 +21,7 @@ const customerNotificationSchema = new mongoose.Schema(
         "pickup_Created",
         "pickup_Assigned",
         "pickup_Rescheduled",
+        "pickup_Updated",
         "pickup_Completed",
         "out_for_Delivery",
         "order_Delivered",

@@ -13,6 +13,7 @@ import multer from "multer";
 import customerFcmService from "../services/customerFcmService.js";
 import { createCustomerNotification } from "./customerNotificationController.js";
 import CustomerNotification from "../models/customerNotificationSchema.js";
+import CatalogItem from "../models/catalogItemSchema.js";
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
@@ -472,6 +473,273 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     });
   }
 });
+
+export const updatePickup = catchAsync(async (req, res, next) => {
+  try {
+    const { pickupId } = req.params;
+    const { items } = req.body; // Array of items to update
+
+    // -------------------------
+    // Validation
+    // -------------------------
+    if (!pickupId) {
+      return res.status(400).json({
+        message: "Pickup ID is required",
+      });
+    }
+
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({
+        message: "Items array is required",
+      });
+    }
+
+    // -------------------------
+    // Find existing pickup
+    // -------------------------
+    const existingPickup = await pickup.findById(pickupId);
+
+    if (!existingPickup) {
+      return res.status(404).json({
+        message: "Pickup not found",
+      });
+    }
+
+    // Check if pickup can be edited (only pending pickups)
+    if (existingPickup.PickupStatus !== "pending") {
+      return res.status(400).json({
+        message: "Cannot update items for pickup that is already processed",
+        currentStatus: existingPickup.PickupStatus,
+      });
+    }
+
+    // -------------------------
+    // Process items update
+    // -------------------------
+    let updatedItems = [];
+    let operationLog = {
+      added: [],
+      removed: [],
+      updated: [],
+    };
+
+    // Get current items as a map for easy lookup
+    const currentItemsMap = new Map();
+    existingPickup.items.forEach((item) => {
+      currentItemsMap.set(item.itemId.toString(), {
+        ...item.toObject(),
+        oldQuantity: item.quantity,
+      });
+    });
+
+    // Process each item from request
+    for (const reqItem of items) {
+      // Validate required fields
+      if (!reqItem.itemId) {
+        return res.status(400).json({
+          message: "Each item must have itemId",
+        });
+      }
+
+      const catalogItem = await CatalogItem.findOne({
+        _id: reqItem.itemId,
+        isActive: true,
+      });
+
+      if (!catalogItem) {
+        return res.status(400).json({
+          message: `Item with ID ${reqItem.itemId} is invalid or inactive`,
+        });
+      }
+
+      const currentItem = currentItemsMap.get(reqItem.itemId);
+
+      // Case 1: Item exists in current pickup
+      if (currentItem) {
+        // If quantity is 0 or negative, remove the item
+        if (!reqItem.quantity || reqItem.quantity <= 0) {
+          operationLog.removed.push({
+            itemId: reqItem.itemId,
+            label: currentItem.label,
+            oldQuantity: currentItem.quantity,
+          });
+          currentItemsMap.delete(reqItem.itemId);
+        } 
+        // Update quantity
+        else if (reqItem.quantity !== currentItem.quantity) {
+          operationLog.updated.push({
+            itemId: reqItem.itemId,
+            label: currentItem.label,
+            oldQuantity: currentItem.quantity,
+            newQuantity: reqItem.quantity,
+          });
+          
+          currentItemsMap.set(reqItem.itemId, {
+            ...currentItem,
+            quantity: reqItem.quantity,
+          });
+        }
+        // Quantity unchanged, keep as is
+        else {
+          currentItemsMap.set(reqItem.itemId, currentItem);
+        }
+      } 
+      // Case 2: New item being added
+      else if (reqItem.quantity && reqItem.quantity > 0) {
+        operationLog.added.push({
+          itemId: reqItem.itemId,
+          label: catalogItem.label,
+          quantity: reqItem.quantity,
+        });
+        
+        currentItemsMap.set(reqItem.itemId, {
+          itemId: catalogItem._id,
+          label: catalogItem.label,
+          price: catalogItem.price,
+          unit: catalogItem.unit,
+          quantity: reqItem.quantity,
+        });
+      }
+    }
+
+    // Convert map back to array
+    updatedItems = Array.from(currentItemsMap.values());
+
+    // -------------------------
+    // Calculate new total amount
+    // -------------------------
+    const totalAmount = updatedItems.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+
+    // -------------------------
+    // Update pickup
+    // -------------------------
+    const updatedPickup = await pickup.findByIdAndUpdate(
+      pickupId,
+      {
+        items: updatedItems,
+        totalAmount: totalAmount,
+        $push: {
+          updateHistory: {
+            timestamp: new Date(),
+            operation: "items_updated",
+            changes: operationLog,
+            previousTotal: existingPickup.totalAmount,
+            newTotal: totalAmount,
+          },
+        },
+      },
+      { new: true, runValidators: true }
+    );
+
+    // -------------------------
+    // Send notification to customer
+    // -------------------------
+    const notificationMessage = getUpdateNotificationMessage(operationLog);
+    
+    if (notificationMessage) {
+      const notification = await createCustomerNotification({
+        customerId: existingPickup.appCustomerId,
+        title: "Pickup Updated",
+        message: notificationMessage,
+        type: "pickup_Updated",
+        data: {
+          pickupId: pickupId,
+          screen: "PickupDetails",
+          changes: operationLog,
+        },
+      });
+
+      const unreadCount = await CustomerNotification.countDocuments({
+        customerId: existingPickup.appCustomerId,
+        isRead: false,
+      });
+
+      req.socket.emitToUser(
+        String(existingPickup.appCustomerId),
+        "CUSTOMER_NOTIFICATION",
+        {
+          notification: {
+            id: notification._id,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            data: notification.data,
+            createdAt: notification.createdAt,
+            isRead: false,
+          },
+          unreadCount,
+        }
+      );
+
+      // Push notification
+      await customerFcmService.sendToCustomer(
+        String(existingPickup.appCustomerId),
+        {
+          title: "Pickup Order Updated 🧺",
+          body: notificationMessage,
+        },
+        {
+          type: "pickup_Updated",
+          pickupId: String(pickupId),
+          screen: "PickupDetails",
+        }
+      );
+    }
+
+    // Notify admin
+    req.socket.emitToAdmin("updatePickup", {
+      pickupId: pickupId,
+      changes: operationLog,
+      oldTotal: existingPickup.totalAmount,
+      newTotal: totalAmount,
+    });
+
+    // -------------------------
+    // Response
+    // -------------------------
+    return res.status(200).json({
+      message: "Pickup items updated successfully",
+      data: {
+        pickup: updatedPickup,
+        changes: operationLog,
+        oldTotal: existingPickup.totalAmount,
+        newTotal: totalAmount,
+      },
+    });
+
+  } catch (error) {
+    console.error("updatePickupItems ERROR ❌", error);
+    return res.status(500).json({
+      message: "Failed to update pickup items",
+      error: error.message,
+    });
+  }
+});
+
+// Helper function for notification message
+function getUpdateNotificationMessage(operationLog) {
+  const messages = [];
+  
+  if (operationLog.added.length > 0) {
+    const items = operationLog.added.map(i => `${i.label} (x${i.quantity})`).join(", ");
+    messages.push(`Added: ${items}`);
+  }
+  
+  if (operationLog.removed.length > 0) {
+    const items = operationLog.removed.map(i => i.label).join(", ");
+    messages.push(`Removed: ${items}`);
+  }
+  
+  if (operationLog.updated.length > 0) {
+    const items = operationLog.updated.map(i => `${i.label}: ${i.oldQuantity} → ${i.newQuantity}`).join(", ");
+    messages.push(`Updated: ${items}`);
+  }
+  
+  return messages.length > 0 ? messages.join(" | ") : null;
+}
 
 export const getPickups = catchAsync(async (req, res, next) => {
   const { date, status } = req.query; // Date filter from query and status filter
