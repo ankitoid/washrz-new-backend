@@ -145,3 +145,38 @@ try {
 //     message: "Orders Retrieved Successfully",
 //   });
 // });
+
+export const getCustomerSinglePickupDetails = async (req, res) => {
+  try {
+    const { pickup_id } = req.params;
+
+    if (!pickup_id) {
+      return res.status(400).json({
+        message: "pickupId is required",
+      });
+    }
+
+    console.log("this is pickup_id====>", pickup_id);
+
+    const pickup_details = await pickup.findById(pickup_id);
+
+    if (!pickup_details) {
+      return res.status(404).json({
+        message: "Pickup not found",
+      });
+    }
+
+    console.log("this is pickupdetails==>>", pickup_details);
+
+    return res.status(200).json({
+      pickup_details,
+      message: "Pickup Retrieved Successfully",
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
