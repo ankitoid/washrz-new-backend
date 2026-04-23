@@ -22,13 +22,15 @@ import {
   getSchedulePickups,
   updateOrderById,
   updatePickupById,
-  getOrdersByEmailAndDateRange
+  getOrdersByEmailAndDateRange,
+  updatePickup
 } from "../controller/customerController.js";
 import { customer_services } from "../services/customer.services.js";
 const router = express.Router();
 
 router.post("/addPickup", addPickup);
 router.post("/addPickupThroughApp",addPickupthroughApp)
+router.patch("/updatePickupThroughApp/:pickupId",updatePickup);   //update Pickup
 router.get("/getPickups", getPickups);
 router.get("/getAssignedPickups", getAssignedPickups);
 router.post("/addSchedulePickup", addSchedulePickup);
