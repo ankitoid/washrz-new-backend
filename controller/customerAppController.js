@@ -228,7 +228,8 @@ export const getActivePickupOrOrder = async (req, res) => {
 
       console.log("this is the latestOrder===>>>", latestOrder);
 
-      if (latestOrder) {
+     if(latestOrder?.status !== "delivered"){
+            if (latestOrder) {
         return res.status(200).json({
           success: true,
           message: "Order details found",
@@ -241,6 +242,14 @@ export const getActivePickupOrOrder = async (req, res) => {
           message: "No order details found for completed pickup",
         });
       }
+     }else{
+      return res.statu(200).json({
+        success : false,
+        message : "last order has been delivered!",
+        data : [],
+        type : "order"
+      })
+     }
     }
 
     // Fallback for other statuses
