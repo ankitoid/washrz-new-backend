@@ -65,6 +65,7 @@
 
 // controllers/adminSlots.controller.js
 
+import axios from "axios";
 import SlotConfig from "../models/SlotConfig.js";
 import Zone from "../models/Zone.js";
 
@@ -204,3 +205,125 @@ export const copySlots = async (req, res) => {
     res.status(500).json({ error: "Copy failed: " + err.message });
   }
 };
+
+
+
+export const CreateZone = async (req,res) =>{
+  try {
+    const { search } = req.body;
+
+    if (!search) {
+      return res.status(400).json({
+        success: false,
+        message: "search is required"
+      });
+    }
+
+    const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY;
+
+    console.log("this is the key==>>",GOOGLE_KEY)
+
+    // STEP 1: Search location using Google
+    const response = await axios.get(
+      "https://maps.googleapis.com/maps/api/place/findplacefromtext/json",
+      {
+        params: {
+          input: search,
+          inputtype: "textquery",
+          fields: "name,formatted_address,geometry",
+          key: `${GOOGLE_KEY}`
+        }
+      }
+    );
+
+    const place = response.data.candidates?.[0];
+
+    if (!place) {
+      return res.status(404).json({
+        success: false,
+        message: "Location not found"
+      });
+    }
+
+    // STEP 2: Build polygon using viewport
+    const polygon = buildPolygon(place.geometry.viewport);
+
+    // STEP 3: Generate zoneId
+    const zoneId = generateZoneId(place.name);
+
+    // STEP 4: Prevent duplicate zone
+    const exists = await Zone.findOne({ zoneId });
+
+    if (exists) {
+      return res.status(409).json({
+        success: false,
+        message: "Zone already exists"
+      });
+    }
+
+    // STEP 5: Save zone
+    const zone = await Zone.create({
+      name: place.name,
+      city: getCity(place.formatted_address),
+      zoneId,
+      geometry: {
+        type: "Polygon",
+        coordinates: [polygon]
+      }
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Zone created successfully",
+      data: zone
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+};
+
+/*
+========================================
+HELPERS
+========================================
+*/
+
+// Convert Google viewport to polygon
+function buildPolygon(viewport) {
+  const ne = viewport.northeast;
+  const sw = viewport.southwest;
+
+  return [
+    [sw.lng, sw.lat],
+    [ne.lng, sw.lat],
+    [ne.lng, ne.lat],
+    [sw.lng, ne.lat],
+    [sw.lng, sw.lat]
+  ];
+}
+
+// Create zone id
+function generateZoneId(name) {
+  return name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+// Extract city from address
+function getCity(address) {
+  const parts = address.split(",").map(i => i.trim());
+
+  if (parts.length >= 3) {
+    return parts[parts.length - 3];
+  }
+
+  return "";
+}

@@ -243,7 +243,7 @@ export const getActivePickupOrOrder = async (req, res) => {
         });
       }
      }else{
-      return res.statu(200).json({
+      return res.status(200).json({
         success : false,
         message : "last order has been delivered!",
         data : [],
