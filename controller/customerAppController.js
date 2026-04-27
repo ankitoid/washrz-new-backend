@@ -256,7 +256,7 @@ export const getActivePickupOrOrder = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Pickup details found",
-      data: latestPickup,
+      data: [],
       type: "pickup"
     });
 
