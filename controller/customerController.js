@@ -505,8 +505,8 @@ export const updatePickup = catchAsync(async (req, res, next) => {
       });
     }
 
-    // Check if pickup can be edited (only pending pickups)
-    if (existingPickup.PickupStatus !== "pending") {
+    // Check if pickup can be edited (pending pickups and assigned pickups)
+    if (existingPickup.PickupStatus !== "pending" || existingPickup.PickupStatus !== "assigned") {
       return res.status(400).json({
         message: "Cannot update items for pickup that is already processed",
         currentStatus: existingPickup.PickupStatus,
