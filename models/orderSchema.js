@@ -303,6 +303,7 @@ const orderSchema = new Schema(
     createdBy: { type: String, default: "customer" },
     updatedBy: String,
     isActive: { type: Boolean, default: true },
+    isArchived: { type: Boolean, default: false, index: true }
   },
   {
     timestamps: true,

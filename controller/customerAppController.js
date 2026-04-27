@@ -269,3 +269,54 @@ export const getActivePickupOrOrder = async (req, res) => {
     });
   }
 };
+
+
+export const removeDeliveredOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log("this is the iddd====>>>>", id);
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "id is required!",
+      });
+    }
+
+    const updatedOrder = await order.findOneAndUpdate(
+      { _id: id },
+      { isArchived: true },
+      { new: true } // Optional: returns the updated document
+    );
+
+    console.log("this is the updatedOrder===>>>", updatedOrder);
+
+
+    if (!updatedOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Order archived successfully",
+      data: updatedOrder,
+    });
+
+  } catch (error) {
+    console.log("this is the error==>>", error);
+    
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+
+
