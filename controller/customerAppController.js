@@ -254,10 +254,10 @@ export const getActivePickupOrOrder = async (req, res) => {
 
     // Fallback for other statuses
     return res.status(200).json({
-      success: true,
-      message: "Pickup details found",
+      success: false,
+      message: "nothing found",
       data: [],
-      type: "pickup"
+      type: "none"
     });
 
   } catch (error) {
