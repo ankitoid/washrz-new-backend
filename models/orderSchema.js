@@ -206,6 +206,7 @@ const orderSchema = new Schema(
     intransitVoice: String,
     image: [String],
     voice: String,
+    ready_for_delivery_images: [String],
     deliverImage: String,
     statusHistory: {
       intransit: { type: Date, default: null },
