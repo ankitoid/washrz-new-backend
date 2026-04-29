@@ -338,4 +338,13 @@ orderSchema.index({ riderId: 1, status: 1 });
 
 const Order = mongoose.model("Order", orderSchema);
 
+orderSchema.pre(/^find/, function (next) {
+  this.populate({
+    path: "items.itemId",
+    select: "images videos"
+  });
+  next();
+});
+
+
 export default Order;

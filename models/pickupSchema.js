@@ -28,6 +28,10 @@ const schema = new pickupSchema(
       enum: ["wati", "app"],
       default: "wati",
     },
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "OrderSchema",
+    },
     totalAmount: {
       type: Number,
       default: 0,
@@ -88,4 +92,14 @@ const schema = new pickupSchema(
 );
 
 const pickup = mongoose.model("pickup", schema);
+
+schema.pre(/^find/, function (next) {
+  this.populate({
+    path: "items.itemId",
+    select: "images videos",
+  });
+  next();
+});
+
+
 export default pickup;

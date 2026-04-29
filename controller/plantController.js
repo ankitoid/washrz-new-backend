@@ -415,7 +415,9 @@ cron.schedule("30 0 * * *", async () => {
 
     // Clear rider info from Orders
     await Order.updateMany(
-      {},
+      {
+         status: { $nin: ["delivered"] },
+      },
       {
         $unset: {
           riderName: "",

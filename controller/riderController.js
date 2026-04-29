@@ -200,7 +200,7 @@ export const uploadFiles = (req, res, next) => {
       // -------------------------
       // Create Order
       // -------------------------
-      await Order.create({
+      const order_details = await Order.create({
         contactNo,
         customerName,
         address,
@@ -221,7 +221,7 @@ export const uploadFiles = (req, res, next) => {
       // -------------------------
       // Mark pickup complete
       // -------------------------
-      await Pickup.findByIdAndUpdate(id, { PickupStatus: "complete" });
+      await Pickup.findByIdAndUpdate(id, { PickupStatus: "complete", orderId: order_details._id });
 
       const customerId = pickup_details?.appCustomerId
         ? String(pickup_details.appCustomerId)
