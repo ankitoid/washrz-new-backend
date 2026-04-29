@@ -91,7 +91,6 @@ const schema = new pickupSchema(
   { timestamps: true },
 );
 
-const pickup = mongoose.model("pickup", schema);
 
 schema.pre(/^find/, function (next) {
   this.populate({
@@ -100,6 +99,9 @@ schema.pre(/^find/, function (next) {
   });
   next();
 });
+
+
+const pickup = mongoose.model("pickup", schema);
 
 
 export default pickup;

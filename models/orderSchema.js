@@ -336,8 +336,6 @@ orderSchema.index({ "payment.paymentId": 1 });
 orderSchema.index({ "qrPayments.qrId": 1 });
 orderSchema.index({ riderId: 1, status: 1 });
 
-const Order = mongoose.model("Order", orderSchema);
-
 orderSchema.pre(/^find/, function (next) {
   this.populate({
     path: "items.itemId",
@@ -345,6 +343,8 @@ orderSchema.pre(/^find/, function (next) {
   });
   next();
 });
+
+const Order = mongoose.model("Order", orderSchema);
 
 
 export default Order;
