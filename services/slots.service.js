@@ -138,120 +138,145 @@
 
 import SlotConfig from "../models/SlotConfig.js";
 
-export const checkService = async (req, res) => {
-  try {
-    const { zoneId } = req.body;
+// export const checkService = async (req, res) => {
+//   try {
+//     const { zoneId } = req.body;
 
-    if (!zoneId) {
-      return res.status(400).json({
-        serviceAvailable: false,
-        error: "zoneId is required"
-      });
-    }
+//     if (!zoneId) {
+//       return res.status(400).json({
+//         serviceAvailable: false,
+//         error: "zoneId is required"
+//       });
+//     }
 
-    const now = new Date();
-    const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
-    const currentHours = now.getHours();
-    const currentMinutes = now.getMinutes();
-    const currentTimeInMinutes = (currentHours * 60) + currentMinutes;
+//     const now = new Date();
+//     const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
+//     const currentHours = now.getHours();
+//     const currentMinutes = now.getMinutes();
+//     const currentTimeInMinutes = (currentHours * 60) + currentMinutes;
 
-    console.log("Current time:", `${currentHours}:${currentMinutes}`, "Minutes:", currentTimeInMinutes);
-    console.log("Today:", today);
+//     console.log("Current time:", `${currentHours}:${currentMinutes}`, "Minutes:", currentTimeInMinutes);
+//     console.log("Today:", today);
 
-    const config = await SlotConfig.findOne({ date: today });
+//     const config = await SlotConfig.findOne({ date: today });
 
-    if (!config) {
-      return res.json({
-        serviceAvailable: false,
-        message: "No configuration found for today"
-      });
-    }
+//     if (!config) {
+//       return res.json({
+//         serviceAvailable: false,
+//         message: "No configuration found for today"
+//       });
+//     }
 
-    if (!config.serviceEnabled) {
-      return res.json({
-        serviceAvailable: false,
-        message: "Service is currently disabled"
-      });
-    }
+//     if (!config.serviceEnabled) {
+//       return res.json({
+//         serviceAvailable: false,
+//         message: "Service is currently disabled"
+//       });
+//     }
 
-    const zone = config.zones.find((z) => z.zoneId === zoneId);
+//     const zone = config.zones.find((z) => z.zoneId === zoneId);
 
-    if (!zone || !zone.enabled) {
-      return res.json({
-        serviceAvailable: false,
-        message: "Service is disabled in your area"
-      });
-    }
+//     if (!zone || !zone.enabled) {
+//       return res.json({
+//         serviceAvailable: false,
+//         message: "Service is disabled in your area"
+//       });
+//     }
 
-    // Function to convert time string to minutes
-    const timeToMinutes = (timeStr) => {
-      // Remove AM/PM and split
-      let time = timeStr.toUpperCase();
-      let hours = parseInt(time.match(/\d+/)[0]);
-      const isPM = time.includes('PM');
-      const isAM = time.includes('AM');
+//     // Function to convert time string to minutes
+//     const timeToMinutes = (timeStr) => {
+//       // Remove AM/PM and split
+//       let time = timeStr.toUpperCase();
+//       let hours = parseInt(time.match(/\d+/)[0]);
+//       const isPM = time.includes('PM');
+//       const isAM = time.includes('AM');
       
-      // Extract minutes if present (like 08:30AM)
-      let minutes = 0;
-      const minuteMatch = time.match(/\d+:(\d+)/);
-      if (minuteMatch) {
-        minutes = parseInt(minuteMatch[1]);
-      }
+//       // Extract minutes if present (like 08:30AM)
+//       let minutes = 0;
+//       const minuteMatch = time.match(/\d+:(\d+)/);
+//       if (minuteMatch) {
+//         minutes = parseInt(minuteMatch[1]);
+//       }
       
-      // Convert to 24-hour format
-      if (isPM && hours !== 12) {
-        hours += 12;
-      }
-      if (isAM && hours === 12) {
-        hours = 0;
-      }
+//       // Convert to 24-hour format
+//       if (isPM && hours !== 12) {
+//         hours += 12;
+//       }
+//       if (isAM && hours === 12) {
+//         hours = 0;
+//       }
       
-      return (hours * 60) + minutes;
-    };
+//       return (hours * 60) + minutes;
+//     };
 
-    // Find active time slot
-    let activeSlot = null;
+//     // Find active time slot
+//     let activeSlot = null;
     
-    for (const slot of zone.slots) {
-      if (!slot.enabled) continue;
+//     for (const slot of zone.slots) {
+//       if (!slot.enabled) continue;
       
-      const [startTime, endTime] = slot.time.split(" - ");
-      const startMinutes = timeToMinutes(startTime);
-      const endMinutes = timeToMinutes(endTime);
+//       const [startTime, endTime] = slot.time.split(" - ");
+//       const startMinutes = timeToMinutes(startTime);
+//       const endMinutes = timeToMinutes(endTime);
       
-      console.log(`Checking slot ${slot.time}: ${startMinutes} - ${endMinutes}, Current: ${currentTimeInMinutes}`);
+//       console.log(`Checking slot ${slot.time}: ${startMinutes} - ${endMinutes}, Current: ${currentTimeInMinutes}`);
       
-      if (currentTimeInMinutes >= startMinutes && currentTimeInMinutes <= endMinutes) {
-        activeSlot = slot;
-        break;
-      }
-    }
+//       if (currentTimeInMinutes >= startMinutes && currentTimeInMinutes <= endMinutes) {
+//         activeSlot = slot;
+//         break;
+//       }
+//     }
 
-    if (!activeSlot) {
-      // Return available slots for debugging
-      const availableSlots = zone.slots
-        .filter(s => s.enabled)
-        .map(s => s.time);
+//     if (!activeSlot) {
+//       // Return available slots for debugging
+//       const availableSlots = zone.slots
+//         .filter(s => s.enabled)
+//         .map(s => s.time);
       
-      return res.json({
-        serviceAvailable: false,
-        message: "No active time slot available for your location at this time",
-        currentTime: `${currentHours}:${currentMinutes}`,
-        availableSlots: availableSlots
-      });
-    }
+//       return res.json({
+//         serviceAvailable: false,
+//         message: "No active time slot available for your location at this time",
+//         currentTime: `${currentHours}:${currentMinutes}`,
+//         availableSlots: availableSlots
+//       });
+//     }
 
-    return res.json({
-      serviceAvailable: true,
-      message: "Service is available",
-      slot: activeSlot.time
-    });
+//     return res.json({
+//       serviceAvailable: true,
+//       message: "Service is available",
+//       slot: activeSlot.time
+//     });
 
-  } catch (err) {
-    console.error("Service check error:", err);
-    res.status(500).json({
-      serviceAvailable: false,
-      error: "Service check failed"
-    });
+//   } catch (err) {
+//     console.error("Service check error:", err);
+//     res.status(500).json({
+//       serviceAvailable: false,
+//       error: "Service check failed"
+//     });
+//   }
+// };
+
+
+export const pickEvenPoints = (points, count) => {
+  if (points.length <= count) return points;
+
+  const step = Math.floor(points.length / count);
+  const result = [];
+
+  for (let i = 0; i < points.length; i += step) {
+    result.push(points[i]);
+    if (result.length === count) break;
   }
+
+  return result;
+}
+
+export const createFallbackBoundary = (lat, lng, diff) => {
+  return [
+    [lng - diff, lat - diff],
+    [lng + diff, lat - diff],
+    [lng + diff, lat + diff],
+    [lng - diff, lat + diff],
+    [lng - diff, lat - diff],
+  ]
 };
