@@ -477,7 +477,7 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
 export const updatePickup = catchAsync(async (req, res, next) => {
   try {
     const { pickupId } = req.params;
-    const { items } = req.body; // Array of items to update
+    const { items, specialInstructions, isHeavy } = req.body;
 
     // -------------------------
     // Validation
@@ -506,7 +506,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     }
 
     // Check if pickup can be edited (pending pickups and assigned pickups)
-    if (existingPickup.PickupStatus !== "pending" || existingPickup.PickupStatus !== "assigned") {
+    if (existingPickup.PickupStatus !== "pending" && existingPickup.PickupStatus !== "assigned") {
       return res.status(400).json({
         message: "Cannot update items for pickup that is already processed",
         currentStatus: existingPickup.PickupStatus,
@@ -614,31 +614,126 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     );
 
     // -------------------------
+    // Prepare update object for note
+    // -------------------------
+    let updatedNote = existingPickup.note || "";
+    let noteUpdated = false;
+    let oldNote = updatedNote;
+
+    // Update note/specialInstructions if provided
+    if (specialInstructions !== undefined && specialInstructions !== null) {
+      if (specialInstructions === "") {
+        // Clear the note if empty string is sent
+        updatedNote = "";
+        noteUpdated = true;
+      } else {
+        // Check if the content already exists in the note to avoid duplicates
+        if (!updatedNote.includes(specialInstructions)) {
+          // Append the new text with a comma separator
+          if (updatedNote && updatedNote.trim() !== "") {
+            updatedNote = `${updatedNote}, ${specialInstructions}`;
+          } else {
+            updatedNote = specialInstructions;
+          }
+          noteUpdated = true;
+        }
+      }
+    }
+
+    // -------------------------
+    // Prepare update object for isHeavy
+    // -------------------------
+    let heavyStatusUpdated = false;
+    let oldHeavyStatus = existingPickup.isHeavy || false;
+    let newHeavyStatus = oldHeavyStatus;
+
+    // Update isHeavy if provided in request body
+    if (isHeavy !== undefined && isHeavy !== null) {
+      // Convert to boolean if it's a string or number
+      const booleanIsHeavy = typeof isHeavy === 'boolean' ? isHeavy : Boolean(isHeavy);
+      
+      if (booleanIsHeavy !== existingPickup.isHeavy) {
+        newHeavyStatus = booleanIsHeavy;
+        heavyStatusUpdated = true;
+      }
+    }
+
+    // -------------------------
+    // Prepare update data
+    // -------------------------
+    const updateData = {
+      items: updatedItems,
+      totalAmount: totalAmount,
+      $push: {
+        updateHistory: {
+          timestamp: new Date(),
+          operation: "items_updated",
+          changes: operationLog,
+          previousTotal: existingPickup.totalAmount,
+          newTotal: totalAmount,
+        },
+      },
+    };
+
+    // Add note to update if changed
+    if (noteUpdated) {
+      updateData.note = updatedNote;
+      
+      // Update the operation log to include note change
+      if (!updateData.$push.updateHistory.changes) {
+        updateData.$push.updateHistory.changes = {};
+      }
+      updateData.$push.updateHistory.changes.noteUpdated = {
+        oldNote: oldNote || "",
+        newNote: updatedNote,
+        appendedText: specialInstructions !== "" ? specialInstructions : null,
+      };
+    }
+
+    // Add isHeavy to update if changed
+    if (heavyStatusUpdated) {
+      updateData.isHeavy = newHeavyStatus;
+      
+      // Update the operation log to include heavy status change
+      if (!updateData.$push.updateHistory.changes) {
+        updateData.$push.updateHistory.changes = {};
+      }
+      updateData.$push.updateHistory.changes.heavyStatusUpdated = {
+        oldStatus: oldHeavyStatus,
+        newStatus: newHeavyStatus,
+      };
+    }
+
+    // -------------------------
     // Update pickup
     // -------------------------
     const updatedPickup = await pickup.findByIdAndUpdate(
       pickupId,
-      {
-        items: updatedItems,
-        totalAmount: totalAmount,
-        $push: {
-          updateHistory: {
-            timestamp: new Date(),
-            operation: "items_updated",
-            changes: operationLog,
-            previousTotal: existingPickup.totalAmount,
-            newTotal: totalAmount,
-          },
-        },
-      },
+      updateData,
       { new: true, runValidators: true }
     );
 
     // -------------------------
     // Send notification to customer
     // -------------------------
-    const notificationMessage = getUpdateNotificationMessage(operationLog);
+    let notificationMessage = getUpdateNotificationMessage(operationLog);
     
+    // Add note update to notification message if applicable
+    if (noteUpdated && specialInstructions && specialInstructions !== "") {
+      const noteMessage = `Special instructions updated: "${specialInstructions}" added to your notes`;
+      notificationMessage = notificationMessage 
+        ? `${notificationMessage}. ${noteMessage}`
+        : noteMessage;
+    }
+    
+    // Add heavy status update to notification message if applicable
+    if (heavyStatusUpdated) {
+      const heavyMessage = `Heavy item status changed to: ${newHeavyStatus ? "Yes (Heavy items)" : "No (Standard items)"}`;
+      notificationMessage = notificationMessage 
+        ? `${notificationMessage}. ${heavyMessage}`
+        : heavyMessage;
+    }
+
     if (notificationMessage) {
       const notification = await createCustomerNotification({
         customerId: existingPickup.appCustomerId,
@@ -649,6 +744,14 @@ export const updatePickup = catchAsync(async (req, res, next) => {
           pickupId: pickupId,
           screen: "PickupDetails",
           changes: operationLog,
+          noteUpdated: noteUpdated ? {
+            oldNote: oldNote,
+            newNote: updatedNote,
+          } : undefined,
+          heavyStatusUpdated: heavyStatusUpdated ? {
+            oldStatus: oldHeavyStatus,
+            newStatus: newHeavyStatus,
+          } : undefined,
         },
       });
 
@@ -695,25 +798,42 @@ export const updatePickup = catchAsync(async (req, res, next) => {
       changes: operationLog,
       oldTotal: existingPickup.totalAmount,
       newTotal: totalAmount,
+      noteUpdated: noteUpdated ? {
+        oldNote: oldNote,
+        newNote: updatedNote,
+        appendedText: specialInstructions,
+      } : false,
+      heavyStatusUpdated: heavyStatusUpdated ? {
+        oldStatus: oldHeavyStatus,
+        newStatus: newHeavyStatus,
+      } : false,
     });
 
     // -------------------------
     // Response
     // -------------------------
     return res.status(200).json({
-      message: "Pickup items updated successfully",
+      message: "Pickup updated successfully",
       data: {
         pickup: updatedPickup,
         changes: operationLog,
         oldTotal: existingPickup.totalAmount,
         newTotal: totalAmount,
+        noteUpdated: noteUpdated ? {
+          oldNote: oldNote,
+          newNote: updatedNote,
+        } : undefined,
+        heavyStatusUpdated: heavyStatusUpdated ? {
+          oldStatus: oldHeavyStatus,
+          newStatus: newHeavyStatus,
+        } : undefined,
       },
     });
 
   } catch (error) {
     console.error("updatePickupItems ERROR ❌", error);
     return res.status(500).json({
-      message: "Failed to update pickup items",
+      message: "Failed to update pickup",
       error: error.message,
     });
   }

@@ -78,6 +78,7 @@ const schema = new pickupSchema(
     note: String,
     riderName: String,
     riderDate: String,
+    isHeavy :{ type: Boolean, default: false },
     items: {
       type: [pickupItemSchema],
       default: [],
