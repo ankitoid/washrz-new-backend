@@ -265,6 +265,120 @@ export const uploadFiles = (req, res, next) => {
   });
 };
 
+export const addMoreIntransitImages = catchAsync(async (req, res, next) => {
+  upload(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ message: "Error uploading files.", err });
+    }
+
+    const { id } = req.params;
+    const images = req.files?.image || [];
+
+    if (!id) {
+      return res.status(400).json({
+        message: "Order ID is required.",
+      });
+    }
+
+    if (!images.length) {
+      return res.status(400).json({
+        message: "At least one image is required.",
+      });
+    }
+
+    try {
+      const imageUploads = await Promise.all(
+        images.map((img) => uploadToS3(img, process.env.AWS_S3_BUCKET_NAME))
+      );
+      const imageUrls = imageUploads.map((uploadData) => uploadData.Location);
+
+      const updatedOrder = await Order.findByIdAndUpdate(
+        id,
+        {
+          $push: {
+            intransitImage: { $each: imageUrls },
+          },
+        },
+        { new: true }
+      );
+
+      if (!updatedOrder) {
+        return res.status(404).json({ message: "Order not found." });
+      }
+
+      return res.status(200).json({
+        message: "Images added successfully.",
+        addedImages: imageUrls,
+        intransitImage: updatedOrder.intransitImage,
+      });
+    } catch (error) {
+      console.error("Error adding more intransit images:", error);
+      return res.status(500).json({ message: "Internal server error." });
+    }
+  });
+});
+
+export const uploadReadyForDeliveryImages = catchAsync(async (req, res, next) => {
+  upload(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ message: "Error uploading files.", err });
+    }
+
+    const { id } = req.params;
+    const images = req.files?.image || [];
+
+    if (!id) {
+      return res.status(400).json({
+        message: "Order ID is required.",
+      });
+    }
+
+    if (!images.length) {
+      return res.status(400).json({
+        message: "At least one image is required.",
+      });
+    }
+
+    try {
+      const imageUploads = await Promise.all(
+        images.map((img) =>
+          uploadToS3(
+            img,
+            process.env.AWS_S3_BUCKET_NAME,
+            "readyForDeliveryImages"
+          )
+        )
+      );
+
+      const imageUrls = imageUploads.map((uploadData) => uploadData.Location);
+
+      const updatedOrder = await Order.findByIdAndUpdate(
+        id,
+        {
+          $push: {
+            ready_for_delivery_images: { $each: imageUrls },
+          },
+        },
+        { new: true }
+      );
+
+      if (!updatedOrder) {
+        return res.status(404).json({ message: "Order not found." });
+      }
+
+      return res.status(200).json({
+        message: "Ready for delivery images uploaded successfully.",
+        addedImages: imageUrls,
+        ready_for_delivery_images: updatedOrder.ready_for_delivery_images,
+      });
+    } catch (error) {
+      console.error("Error uploading ready for delivery images:", error);
+      return res.status(500).json({ message: "Internal server error." });
+    }
+  });
+});
+
+// Reschedule Pickup Controller
 export const reschedulePickup = async (req, res) => {
   const { id } = req.params;
   const { newDate } = req.body;
