@@ -32,6 +32,9 @@ const schema = new pickupSchema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "OrderSchema",
     },
+
+    bookingId : {type:String , required : true},  // through booking id get all the booking details 
+
     totalAmount: {
       type: Number,
       default: 0,
@@ -83,6 +86,9 @@ const schema = new pickupSchema(
     riderName: String,
     riderDate: String,
     isHeavy :{ type: Boolean, default: false },
+
+    morning_delivery : {type: Boolean, default:true},   // for checking morning delivery or not
+
     items: {
       type: [pickupItemSchema],
       default: [],

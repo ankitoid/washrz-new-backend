@@ -68,6 +68,7 @@
 import axios from "axios";
 import SlotConfig from "../models/SlotConfig.js";
 import Zone from "../models/Zone.js";
+import Booking from "../models/slotBookingSchema.js";
 
 // const getAllTimeSlots = () => [
 //   "08AM - 11AM", "09AM - 12PM", "10AM - 01PM", "11AM - 02PM",
@@ -2221,21 +2222,14 @@ export const checkService = async (req, res) => {
       });
     }
 
-const now = new Date();
-// Use local date instead of UTC
-const year = now.getFullYear();
-const month = String(now.getMonth() + 1).padStart(2, '0');
-const day = String(now.getDate()).padStart(2, '0');
-const today = `${year}-${month}-${day}`;  // Local date string
-const currentHours = now.getHours();
-const currentMinutes = now.getMinutes();
-const currentTimeInMinutes = (currentHours * 60) + currentMinutes;
-
-// Add debug logs (optional - remove in production)
-console.log(`Service check - Zone: ${zoneId}`);
-console.log(`UTC Date: ${now.toISOString().split('T')[0]}`);
-console.log(`Local Date: ${today}`);
-console.log(`Current Time: ${currentHours}:${currentMinutes}`);
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const today = `${year}-${month}-${day}`;
+    const currentHours = now.getHours();
+    const currentMinutes = now.getMinutes();
+    const currentTimeInMinutes = (currentHours * 60) + currentMinutes;
 
     // Get zone with template
     const zone = await Zone.findOne({ zoneId: zoneId.toUpperCase() });
@@ -2258,15 +2252,32 @@ console.log(`Current Time: ${currentHours}:${currentMinutes}`);
     // Get date-specific overrides
     let config = await SlotConfig.findOne({ date: today });
     let zoneOverrides = new Map();
+    let zoneEnabled = true;
     
     if (config) {
       const zoneConfig = config.zones.find(z => z.zoneId === zoneId.toUpperCase());
-      if (zoneConfig && zoneConfig.overrides) {
-        zoneOverrides = new Map(
-          zoneConfig.overrides.map(o => [o.time, { enabled: o.enabled, capacity: o.capacity }])
-        );
+      if (zoneConfig) {
+        zoneEnabled = zoneConfig.enabled !== false;
+        if (zoneConfig.overrides) {
+          zoneOverrides = new Map(
+            zoneConfig.overrides.map(o => [o.time, { enabled: o.enabled, capacity: o.capacity }])
+          );
+        }
       }
     }
+
+    // Get ALL confirmed bookings for today in this zone
+    const bookings = await Booking.find({
+      zoneId: zoneId.toUpperCase(),
+      date: today,
+      status: 'confirmed'
+    });
+    
+    // Create map: slotTime -> bookedCount
+    const bookedMap = new Map();
+    bookings.forEach(booking => {
+      bookedMap.set(booking.slotTime, (bookedMap.get(booking.slotTime) || 0) + 1);
+    });
 
     const timeToMinutes = (timeStr) => {
       let time = timeStr.toUpperCase().trim();
@@ -2286,17 +2297,26 @@ console.log(`Current Time: ${currentHours}:${currentMinutes}`);
       return (hours * 60) + minutes;
     };
 
-    // Build slots from template + overrides
+    // Build slots from template + overrides + real bookings
     const allSlots = zone.slotTemplate.slots.map(templateSlot => {
       const override = zoneOverrides.get(templateSlot.time);
       const enabled = override?.enabled !== undefined ? override.enabled : templateSlot.defaultEnabled;
-      const capacity = override?.capacity !== undefined ? override.capacity : templateSlot.defaultCapacity;
+      const totalCapacity = override?.capacity !== undefined ? override.capacity : templateSlot.defaultCapacity;
+      const bookedCount = bookedMap.get(templateSlot.time) || 0;
+      const availableCapacity = totalCapacity - bookedCount;
       
       const [startTime, endTime] = templateSlot.time.split(" - ");
       const startMinutes = timeToMinutes(startTime.trim());
       const endMinutes = timeToMinutes(endTime.trim());
 
-      const isActive = enabled && currentTimeInMinutes >= startMinutes && currentTimeInMinutes <= endMinutes;
+      // Slot is active if:
+      // 1. It's enabled
+      // 2. Current time is within slot window
+      // 3. Available capacity > 0
+      const isActive = enabled && 
+                       currentTimeInMinutes >= startMinutes && 
+                       currentTimeInMinutes <= endMinutes &&
+                       availableCapacity > 0;
 
       let status;
       if (!enabled) {
@@ -2314,20 +2334,20 @@ console.log(`Current Time: ${currentHours}:${currentMinutes}`);
         startTime: startTime.trim(),
         endTime: endTime.trim(),
         enabled,
-        totalCapacity: capacity,
-        bookedCapacity: 0,
-        availableCapacity: capacity,
+        totalCapacity,
+        bookedCapacity: bookedCount,
+        availableCapacity,
         isActive,
         status,
-        bookingPercentage: 0
+        bookingPercentage: totalCapacity > 0 ? (bookedCount / totalCapacity) * 100 : 0
       };
     });
 
-    const activeSlot = allSlots.find(slot => slot.isActive && slot.enabled) || null;
+    const activeSlot = allSlots.find(slot => slot.isActive && slot.availableCapacity > 0) || null;
 
     const zoneInfo = {
       zoneId: zone.zoneId,
-      enabled: config?.zones?.find(z => z.zoneId === zoneId.toUpperCase())?.enabled !== false,
+      enabled: zoneEnabled,
       morningDelivery: zone.slotTemplate.morningDelivery || false,
       totalCapacity: zone.slotTemplate.totalCapacity,
       slotMinCapacity: zone.slotTemplate.slotMinCapacity
@@ -2341,13 +2361,14 @@ console.log(`Current Time: ${currentHours}:${currentMinutes}`);
       activeSlotCount: allSlots.filter(s => s.status === 'active').length,
       expiredSlots: allSlots.filter(s => s.status === 'expired').length,
       totalAvailableCapacity: allSlots.reduce((sum, s) => sum + (s.enabled ? s.availableCapacity : 0), 0),
-      totalBookedCapacity: allSlots.reduce((sum, s) => sum + (s.enabled ? s.bookedCapacity : 0), 0)
+      totalBookedCapacity: allSlots.reduce((sum, s) => sum + (s.enabled ? s.bookedCapacity : 0), 0),
+      totalCapacity: allSlots.reduce((sum, s) => sum + (s.enabled ? s.totalCapacity : 0), 0)
     };
 
     return res.json({
       serviceAvailable: activeSlot !== null,
       message: activeSlot
-        ? `Service is available. Current slot: ${activeSlot.time}`
+        ? `Service is available. Current slot: ${activeSlot.time} (${activeSlot.availableCapacity} spots left)`
         : "No active time slot available at this time",
       data: {
         zoneId: zone.zoneId,
