@@ -118,8 +118,6 @@ export const createBooking = async (req, res) => {
       date,
       slotTime,
       customerDetails,
-      pickupDetails = {},
-      pickupId,
     } = req.body;
     
     // Validation
@@ -196,12 +194,11 @@ export const createBooking = async (req, res) => {
       customerDetails: {
         name: customerDetails.name,
         phone: customerDetails.phone,
+        appCustomerId : customerDetails.appCustomerId
       },
     //   paymentStatus: paymentMethod === 'cash' ? 'pending' : 'pending',
     //   paymentMethod,
     //   paymentAmount,
-      pickupDetails,
-      pickupId,
       status: 'confirmed'
     });
     
