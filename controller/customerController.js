@@ -231,7 +231,10 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       date,
       slot,
       note,
-      items, 
+      items,
+      morning_delivery,
+      isHeavy,
+      bookingId
 // ✅ NEW //  Format:
 //  [
 //    { "itemId": "catalogItemId", "quantity": 2 },
@@ -397,6 +400,18 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     }
 
     if (note) pickupPayload.note = note;
+
+    if(isHeavy){
+      pickupPayload.isHeavy = isHeavy
+    }
+
+    if(morning_delivery){
+      pickupPayload.morning_delivery = morning_delivery
+    }
+
+    if(bookingId){
+      pickupPayload.bookingId = bookingId
+    }
 
     console.log("FINAL PAYLOAD 👉", pickupPayload);
 
