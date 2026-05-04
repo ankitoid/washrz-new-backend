@@ -73,7 +73,7 @@ export const uploadFiles = (req, res, next) => {
 // formadata
 // and body { "itemId": "catalogItemId", "quantity": 2 }, jaise app me bhej rhe ho
 
-    const items = req.items;
+    const items = req.files.items;
 
     if (!id || !image || !items) {
       return res.status(400).json({
