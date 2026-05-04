@@ -201,7 +201,12 @@ export const getActivePickupOrOrder = async (req, res) => {
       Contact: phone,
     })
     .sort({ createdAt: -1 })
-    .populate('bookingId'); // Populates the booking details from Booking table
+    .populate({
+      path: 'bookingId',
+      model: 'Booking',
+      foreignField: 'bookingId', // This tells Mongoose to match against the bookingId field in Booking model
+      select: '-__v' // Optional: exclude version field
+    }); // Populates the booking details from Booking table
 
     console.log("this is the latestPickup--->>", latestPickup);
 
