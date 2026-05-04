@@ -68,7 +68,12 @@ export const uploadFiles = (req, res, next) => {
 //  * - Items are validated against Catalog
 //  * - Total price is auto-calculated
 
-    const { items } = req.body;
+//two type data send karana padega
+
+// formadata
+// and body { "itemId": "catalogItemId", "quantity": 2 }, jaise app me bhej rhe ho
+
+    const items = req.items;
 
     if (!id || !image || !items) {
       return res.status(400).json({
