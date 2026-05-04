@@ -541,7 +541,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     // Get current items as a map for easy lookup
     const currentItemsMap = new Map();
     existingPickup.items.forEach((item) => {
-      currentItemsMap.set(item.itemId.toString(), {
+      currentItemsMap.set(item.itemId._id.toString(), {
         ...item.toObject(),
         oldQuantity: item.quantity,
       });
