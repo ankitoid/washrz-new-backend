@@ -55,7 +55,7 @@ export const uploadFiles = (req, res, next) => {
     const voice = req.files?.voice || [];
     req.app.use(express.json({ limit: "100mb" }));
     const location = req.body?.location || null;
-
+    const items = req.body.items;
 //  Format:
 //  [
 //    { "itemId": "catalogItemId", "quantity": 2 },
@@ -73,7 +73,6 @@ export const uploadFiles = (req, res, next) => {
 // formadata
 // and body { "itemId": "catalogItemId", "quantity": 2 }, jaise app me bhej rhe ho
 
-    const items = req.files.items;
 
     if (!id || !image || !items) {
       return res.status(400).json({
