@@ -196,10 +196,12 @@ export const getActivePickupOrOrder = async (req, res) => {
       });
     }
 
-    // Use findOne instead of find + limit
+    // Find pickup and populate booking details
     const latestPickup = await pickup.findOne({
       Contact: phone,
-    }).sort({ createdAt: -1 });
+    })
+    .sort({ createdAt: -1 })
+    .populate('bookingId'); // Populates the booking details from Booking table
 
     console.log("this is the latestPickup--->>", latestPickup);
 
@@ -228,8 +230,7 @@ export const getActivePickupOrOrder = async (req, res) => {
 
       console.log("this is the latestOrder===>>>", latestOrder);
 
-    //  if(latestOrder?.status !== "delivered"){
-        if (latestOrder) {
+      if (latestOrder) {
         return res.status(200).json({
           success: true,
           message: "Order details found",
@@ -243,16 +244,7 @@ export const getActivePickupOrOrder = async (req, res) => {
           message: "No order details found for completed pickup",
         });
       }
-     }
-    //  else{
-    //   return res.status(200).json({
-    //     success : true,
-    //     message : "last order has been delivered!",
-    //     data : latestOrder,
-    //     type : "order"
-    //   })
-    //  }
-    // }
+    }
 
     // Fallback for other statuses
     return res.status(200).json({
