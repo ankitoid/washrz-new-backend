@@ -33,7 +33,7 @@ const schema = new pickupSchema(
       ref: "OrderSchema",
     },
 
-    bookingId : {type:String , required : true},  // through booking id get all the booking details 
+    bookingId : {type:String , ref: 'Booking', required : true},  // through booking id get all the booking details 
 
     totalAmount: {
       type: Number,
