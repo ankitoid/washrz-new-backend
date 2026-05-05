@@ -148,7 +148,7 @@ coupons_service.remove = async (id) => {
 
 // GET AVAILABLE COUPONS
 coupons_service.getAvailable = async (query) => {
-  const { cartAmount, category } = query;
+  const { cartAmount} = query;
   const now = new Date();
 
 
@@ -160,7 +160,7 @@ coupons_service.getAvailable = async (query) => {
     startDate: { $lte: now },
     expiryDate: { $gte: now },
     minOrder: { $lte: Number(cartAmount) },
-    ...(category && { categories: { $in: [category.toUpperCase()] } }),
+    // ...(category && { categories: { $in: [category.toUpperCase()] } }),
     $expr: {
       $lt: [
         { $add: ["$usedCount", "$reservedCount"] },
