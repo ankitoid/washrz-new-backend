@@ -2391,6 +2391,215 @@ export const resetSlots = async (req, res) => {
 //   }
 // };
 
+// export const checkService = async (req, res) => {
+//   try {
+//     const { zoneId } = req.body;
+
+//     if (!zoneId) {
+//       return res.status(400).json({
+//         serviceAvailable: false,
+//         error: "zoneId is required"
+//       });
+//     }
+
+//     const now = new Date();
+//     const year = now.getFullYear();
+//     const month = String(now.getMonth() + 1).padStart(2, '0');
+//     const day = String(now.getDate()).padStart(2, '0');
+//     const today = `${year}-${month}-${day}`;
+//     const currentHours = now.getHours();
+//     const currentMinutes = now.getMinutes();
+//     const currentTimeInMinutes = (currentHours * 60) + currentMinutes;
+
+//     // Get zone with template
+//     const zone = await Zone.findOne({ zoneId: zoneId.toUpperCase() });
+    
+//     if (!zone || !zone.slotTemplate || !zone.slotTemplate.slots.length) {
+//       return res.json({
+//         serviceAvailable: false,
+//         message: "Zone not configured",
+//         data: {
+//           zoneId,
+//           currentTime: `${currentHours}:${String(currentMinutes).padStart(2, '0')}`,
+//           activeSlot: null,
+//           allSlots: [],
+//           zoneInfo: null,
+//           summary: null
+//         }
+//       });
+//     }
+
+//     // Get date-specific overrides
+//     let config = await SlotConfig.findOne({ date: today });
+//     let zoneOverrides = new Map();
+//     let zoneEnabled = true;
+//     let globalServiceEnabled = true; // Default to true if no config exists
+    
+//     if (config) {
+//       // ✅ Add check for global serviceEnabled
+//       globalServiceEnabled = config.serviceEnabled !== false; // If serviceEnabled is false, service is disabled globally
+      
+//       const zoneConfig = config.zones.find(z => z.zoneId === zoneId.toUpperCase());
+//       if (zoneConfig) {
+//         zoneEnabled = zoneConfig.enabled !== false;
+//         if (zoneConfig.overrides) {
+//           zoneOverrides = new Map(
+//             zoneConfig.overrides.map(o => [o.time, { enabled: o.enabled, capacity: o.capacity }])
+//           );
+//         }
+//       }
+//     }
+
+//     // ✅ If global service is disabled, return immediately
+//     if (!globalServiceEnabled) {
+//       return res.json({
+//         serviceAvailable: false,
+//         message: "Service is currently disabled for today",
+//         data: {
+//           zoneId: zone.zoneId,
+//           currentTime: `${currentHours}:${String(currentMinutes).padStart(2, '0')}`,
+//           currentTimestamp: now.toISOString(),
+//           activeSlot: null,
+//           allSlots: [],
+//           zoneInfo: {
+//             zoneId: zone.zoneId,
+//             enabled: zoneEnabled,
+//             globalServiceEnabled: false,
+//             morningDelivery: zone.slotTemplate.morningDelivery || false,
+//             totalCapacity: zone.slotTemplate.totalCapacity,
+//             slotMinCapacity: zone.slotTemplate.slotMinCapacity
+//           },
+//           summary: null
+//         }
+//       });
+//     }
+
+//     // Get ALL confirmed bookings for today in this zone
+//     const bookings = await Booking.find({
+//       zoneId: zoneId.toUpperCase(),
+//       date: today,
+//       status: 'confirmed'
+//     });
+    
+//     // Create map: slotTime -> bookedCount
+//     const bookedMap = new Map();
+//     bookings.forEach(booking => {
+//       bookedMap.set(booking.slotTime, (bookedMap.get(booking.slotTime) || 0) + 1);
+//     });
+
+//     const timeToMinutes = (timeStr) => {
+//       let time = timeStr.toUpperCase().trim();
+//       let hours = parseInt(time.match(/\d+/)[0]);
+//       const isPM = time.includes('PM');
+//       const isAM = time.includes('AM');
+
+//       let minutes = 0;
+//       const minuteMatch = time.match(/\d+:(\d+)/);
+//       if (minuteMatch) {
+//         minutes = parseInt(minuteMatch[1]);
+//       }
+
+//       if (isPM && hours !== 12) hours += 12;
+//       if (isAM && hours === 12) hours = 0;
+
+//       return (hours * 60) + minutes;
+//     };
+
+//     // Build slots from template + overrides + real bookings
+//     const allSlots = zone.slotTemplate.slots.map(templateSlot => {
+//       const override = zoneOverrides.get(templateSlot.time);
+//       const enabled = override?.enabled !== undefined ? override.enabled : templateSlot.defaultEnabled;
+//       const totalCapacity = override?.capacity !== undefined ? override.capacity : templateSlot.defaultCapacity;
+//       const bookedCount = bookedMap.get(templateSlot.time) || 0;
+//       const availableCapacity = totalCapacity - bookedCount;
+      
+//       const [startTime, endTime] = templateSlot.time.split(" - ");
+//       const startMinutes = timeToMinutes(startTime.trim());
+//       const endMinutes = timeToMinutes(endTime.trim());
+
+//       // Slot is active if:
+//       // 1. It's enabled
+//       // 2. Current time is within slot window
+//       // 3. Available capacity > 0
+//       const isActive = enabled && 
+//                        currentTimeInMinutes >= startMinutes && 
+//                        currentTimeInMinutes <= endMinutes &&
+//                        availableCapacity > 0;
+
+//       let status;
+//       if (!enabled) {
+//         status = 'disabled';
+//       } else if (isActive) {
+//         status = 'active';
+//       } else if (startMinutes > currentTimeInMinutes) {
+//         status = 'upcoming';
+//       } else {
+//         status = 'expired';
+//       }
+
+//       return {
+//         time: templateSlot.time,
+//         startTime: startTime.trim(),
+//         endTime: endTime.trim(),
+//         enabled,
+//         totalCapacity,
+//         bookedCapacity: bookedCount,
+//         availableCapacity,
+//         isActive,
+//         status,
+//         bookingPercentage: totalCapacity > 0 ? (bookedCount / totalCapacity) * 100 : 0
+//       };
+//     });
+
+//     const activeSlot = allSlots.find(slot => slot.isActive && slot.availableCapacity > 0) || null;
+
+//     const zoneInfo = {
+//       zoneId: zone.zoneId,
+//       enabled: zoneEnabled,
+//       globalServiceEnabled: true,
+//       morningDelivery: zone.slotTemplate.morningDelivery || false,
+//       totalCapacity: zone.slotTemplate.totalCapacity,
+//       slotMinCapacity: zone.slotTemplate.slotMinCapacity
+//     };
+
+//     const summary = {
+//       totalSlots: allSlots.length,
+//       enabledSlots: allSlots.filter(s => s.enabled).length,
+//       disabledSlots: allSlots.filter(s => s.status === 'disabled').length,
+//       upcomingSlots: allSlots.filter(s => s.status === 'upcoming').length,
+//       activeSlotCount: allSlots.filter(s => s.status === 'active').length,
+//       expiredSlots: allSlots.filter(s => s.status === 'expired').length,
+//       totalAvailableCapacity: allSlots.reduce((sum, s) => sum + (s.enabled ? s.availableCapacity : 0), 0),
+//       totalBookedCapacity: allSlots.reduce((sum, s) => sum + (s.enabled ? s.bookedCapacity : 0), 0),
+//       totalCapacity: allSlots.reduce((sum, s) => sum + (s.enabled ? s.totalCapacity : 0), 0)
+//     };
+
+//     return res.json({
+//       serviceAvailable: activeSlot !== null,
+//       message: activeSlot
+//         ? `Service is available. Current slot: ${activeSlot.time} (${activeSlot.availableCapacity} spots left)`
+//         : "No active time slot available at this time",
+//       data: {
+//         zoneId: zone.zoneId,
+//         currentTime: `${currentHours}:${String(currentMinutes).padStart(2, '0')}`,
+//         currentTimestamp: now.toISOString(),
+//         activeSlot,
+//         allSlots,
+//         zoneInfo,
+//         summary
+//       }
+//     });
+
+//   } catch (err) {
+//     console.error("Service check error:", err);
+//     res.status(500).json({
+//       serviceAvailable: false,
+//       error: "Service check failed: " + err.message,
+//       data: null
+//     });
+//   }
+// };
+
 export const checkService = async (req, res) => {
   try {
     const { zoneId } = req.body;
@@ -2436,8 +2645,7 @@ export const checkService = async (req, res) => {
     let globalServiceEnabled = true; // Default to true if no config exists
     
     if (config) {
-      // ✅ Add check for global serviceEnabled
-      globalServiceEnabled = config.serviceEnabled !== false; // If serviceEnabled is false, service is disabled globally
+      globalServiceEnabled = config.serviceEnabled !== false;
       
       const zoneConfig = config.zones.find(z => z.zoneId === zoneId.toUpperCase());
       if (zoneConfig) {
@@ -2465,6 +2673,30 @@ export const checkService = async (req, res) => {
             zoneId: zone.zoneId,
             enabled: zoneEnabled,
             globalServiceEnabled: false,
+            morningDelivery: zone.slotTemplate.morningDelivery || false,
+            totalCapacity: zone.slotTemplate.totalCapacity,
+            slotMinCapacity: zone.slotTemplate.slotMinCapacity
+          },
+          summary: null
+        }
+      });
+    }
+
+    // ✅ NEW: If zone is explicitly disabled for today, return immediately
+    if (!zoneEnabled) {
+      return res.json({
+        serviceAvailable: false,
+        message: `Zone ${zone.zoneId} is disabled for today`,
+        data: {
+          zoneId: zone.zoneId,
+          currentTime: `${currentHours}:${String(currentMinutes).padStart(2, '0')}`,
+          currentTimestamp: now.toISOString(),
+          activeSlot: null,
+          allSlots: [],   // or you could build allSlots and mark them all disabled
+          zoneInfo: {
+            zoneId: zone.zoneId,
+            enabled: false,
+            globalServiceEnabled: true,
             morningDelivery: zone.slotTemplate.morningDelivery || false,
             totalCapacity: zone.slotTemplate.totalCapacity,
             slotMinCapacity: zone.slotTemplate.slotMinCapacity
