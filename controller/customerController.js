@@ -389,6 +389,8 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       tempPickupAdresssId,
       tempDeliveryAddressId,
 
+      morning_delivery,   // for deciding the delivery needed before 11 AM or after 11 AM
+
       platform_type: "app",
       items: processedItems, // ✅ NEW
       totalAmount,           // ✅ OPTIONAL
@@ -405,9 +407,6 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       pickupPayload.isHeavy = isHeavy
     }
 
-    if(morning_delivery){
-      pickupPayload.morning_delivery = morning_delivery
-    }
 
     if(bookingId){
       pickupPayload.bookingId = bookingId
@@ -492,7 +491,7 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
 export const updatePickup = catchAsync(async (req, res, next) => {
   try {
     const { pickupId } = req.params;
-    const { items, specialInstructions, isHeavy } = req.body;
+    const { items, specialInstructions, isHeavy, morning_delivery } = req.body;
 
     // -------------------------
     // Validation
@@ -662,14 +661,28 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     let oldHeavyStatus = existingPickup.isHeavy || false;
     let newHeavyStatus = oldHeavyStatus;
 
-    // Update isHeavy if provided in request body
     if (isHeavy !== undefined && isHeavy !== null) {
-      // Convert to boolean if it's a string or number
       const booleanIsHeavy = typeof isHeavy === 'boolean' ? isHeavy : Boolean(isHeavy);
       
       if (booleanIsHeavy !== existingPickup.isHeavy) {
         newHeavyStatus = booleanIsHeavy;
         heavyStatusUpdated = true;
+      }
+    }
+
+    // -------------------------
+    // Prepare update object for morning_delivery (NEW)
+    // -------------------------
+    let morningDeliveryUpdated = false;
+    let oldMorningDelivery = existingPickup.morning_delivery || false;
+    let newMorningDelivery = oldMorningDelivery;
+
+    if (morning_delivery !== undefined && morning_delivery !== null) {
+      const booleanMorningDelivery = typeof morning_delivery === 'boolean' ? morning_delivery : Boolean(morning_delivery);
+      
+      if (booleanMorningDelivery !== existingPickup.morning_delivery) {
+        newMorningDelivery = booleanMorningDelivery;
+        morningDeliveryUpdated = true;
       }
     }
 
@@ -694,7 +707,6 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     if (noteUpdated) {
       updateData.note = updatedNote;
       
-      // Update the operation log to include note change
       if (!updateData.$push.updateHistory.changes) {
         updateData.$push.updateHistory.changes = {};
       }
@@ -709,13 +721,25 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     if (heavyStatusUpdated) {
       updateData.isHeavy = newHeavyStatus;
       
-      // Update the operation log to include heavy status change
       if (!updateData.$push.updateHistory.changes) {
         updateData.$push.updateHistory.changes = {};
       }
       updateData.$push.updateHistory.changes.heavyStatusUpdated = {
         oldStatus: oldHeavyStatus,
         newStatus: newHeavyStatus,
+      };
+    }
+
+    // Add morning_delivery to update if changed (NEW)
+    if (morningDeliveryUpdated) {
+      updateData.morning_delivery = newMorningDelivery;
+      
+      if (!updateData.$push.updateHistory.changes) {
+        updateData.$push.updateHistory.changes = {};
+      }
+      updateData.$push.updateHistory.changes.morningDeliveryUpdated = {
+        oldStatus: oldMorningDelivery,
+        newStatus: newMorningDelivery,
       };
     }
 
@@ -733,7 +757,6 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     // -------------------------
     let notificationMessage = getUpdateNotificationMessage(operationLog);
     
-    // Add note update to notification message if applicable
     if (noteUpdated && specialInstructions && specialInstructions !== "") {
       const noteMessage = `Special instructions updated: "${specialInstructions}" added to your notes`;
       notificationMessage = notificationMessage 
@@ -741,12 +764,19 @@ export const updatePickup = catchAsync(async (req, res, next) => {
         : noteMessage;
     }
     
-    // Add heavy status update to notification message if applicable
     if (heavyStatusUpdated) {
       const heavyMessage = `Heavy item status changed to: ${newHeavyStatus ? "Yes (Heavy items)" : "No (Standard items)"}`;
       notificationMessage = notificationMessage 
         ? `${notificationMessage}. ${heavyMessage}`
         : heavyMessage;
+    }
+
+    // Add morning delivery update to notification message (NEW)
+    if (morningDeliveryUpdated) {
+      const morningMessage = `Morning delivery preference changed to: ${newMorningDelivery ? "Yes" : "No"}`;
+      notificationMessage = notificationMessage 
+        ? `${notificationMessage}. ${morningMessage}`
+        : morningMessage;
     }
 
     if (notificationMessage) {
@@ -766,6 +796,10 @@ export const updatePickup = catchAsync(async (req, res, next) => {
           heavyStatusUpdated: heavyStatusUpdated ? {
             oldStatus: oldHeavyStatus,
             newStatus: newHeavyStatus,
+          } : undefined,
+          morningDeliveryUpdated: morningDeliveryUpdated ? {    // NEW
+            oldStatus: oldMorningDelivery,
+            newStatus: newMorningDelivery,
           } : undefined,
         },
       });
@@ -792,7 +826,6 @@ export const updatePickup = catchAsync(async (req, res, next) => {
         }
       );
 
-      // Push notification
       await customerFcmService.sendToCustomer(
         String(existingPickup.appCustomerId),
         {
@@ -822,6 +855,10 @@ export const updatePickup = catchAsync(async (req, res, next) => {
         oldStatus: oldHeavyStatus,
         newStatus: newHeavyStatus,
       } : false,
+      morningDeliveryUpdated: morningDeliveryUpdated ? {       // NEW
+        oldStatus: oldMorningDelivery,
+        newStatus: newMorningDelivery,
+      } : false,
     });
 
     // -------------------------
@@ -841,6 +878,10 @@ export const updatePickup = catchAsync(async (req, res, next) => {
         heavyStatusUpdated: heavyStatusUpdated ? {
           oldStatus: oldHeavyStatus,
           newStatus: newHeavyStatus,
+        } : undefined,
+        morningDeliveryUpdated: morningDeliveryUpdated ? {    // NEW
+          oldStatus: oldMorningDelivery,
+          newStatus: newMorningDelivery,
         } : undefined,
       },
     });
