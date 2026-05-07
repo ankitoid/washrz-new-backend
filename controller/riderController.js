@@ -74,6 +74,13 @@ export const uploadFiles = (req, res, next) => {
 // and body { "itemId": "catalogItemId", "quantity": 2 }, jaise app me bhej rhe ho
 
 
+  console.log("Received items data:", items);
+  console.log("Received images data:", image);
+  console.log("Received id data:", id);
+    
+
+
+
     if (!id || !image || !items) {
       return res.status(400).json({
         message: "pickupId (in params), items and image are required.",
