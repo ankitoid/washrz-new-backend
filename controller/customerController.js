@@ -74,6 +74,9 @@ export const getCustomers = catchAsync(async (req, res, next) => {
 
 export const addPickup = catchAsync(async (req, res, next) => {
   const { name, contact, address } = req.body;
+
+  console.log("this is the dataaaa===>>>>",name, contact, address)
+
   const pickupData = await pickup.create({
     Name: name,
     Contact: contact,
