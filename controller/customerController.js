@@ -86,8 +86,8 @@ export const addPickup = catchAsync(async (req, res, next) => {
     PickupStatus: "pending",
     pickup_date: new Date(),
   });
-  req.socket.emit("addPickup", pickupData);
-  // req.socket.emitToAdmin("addPickup", pickupData);
+  // req.socket.emit("addPickup", pickupData);
+  req.socket.emitToAll("addPickup", pickupData);
   res.status(200).json({
     message: "Pickup Added Sucessfully",
     data: pickupData,
@@ -458,8 +458,8 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       }
     );
 
-    // req.socket.emitToAdmin("addPickup", pickupData);
-      req.socket.emit("addPickup", pickupData);
+    req.socket.emitToAll("addPickup", pickupData);
+      // req.socket.emit("addPickup", pickupData);
 
     // -------------------------
     // Push notification
