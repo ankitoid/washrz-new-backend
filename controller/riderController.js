@@ -11,6 +11,7 @@ import APIFeatures from "../utills/apiFeatures.js";
 import customerFcmService from "../services/customerFcmService.js";
 import { createCustomerNotification } from "./customerNotificationController.js";
 import CatalogItem from "../models/catalogItemSchema.js";
+import slotBookingSchema from "../models/slotBookingSchema.js";
 
 // upload audio and voice
 // Configure AWS S3
@@ -548,7 +549,11 @@ export const deletePickup = catchAsync(async (req, res, next) => {
   if (!pickupData) {
     return next(new AppError("No pickup found with that ID", 404));
   }
-  res.status(200).json({
+  if(pickupData?.bookingId){
+    await slotBookingSchema.findOneAndUpdate({bookingId: pickupData.bookingId}, {status: 'cancelled'})
+  }
+
+    res.status(200).json({
     message: "Pickup Deleted Sucessfully",
   });
 });
