@@ -105,9 +105,9 @@ const addAppToRequest = (app) => {
   };
 };
 
-const addSocketToRequest = () => {
+const addSocketToRequest = (io) => {
   return (req, res, next) => {
-    req.socket = socketService;
+    req.socket = io;
     next();
   };
 };
@@ -117,7 +117,7 @@ app.use(express.json({ limit: "100mb" }));
 app.use("/api/v1/catalog", catalogRoutes);
 
 // Attach io to requests early if any route/middleware needs req.socket
-app.use(addSocketToRequest());
+app.use(addSocketToRequest(io));
 
 // If uploadFiles expects req.body or req.socket, it will now have them
 app.use("/api/v1/rider/uploadFiles/:id", addAppToRequest(app), uploadFiles);
