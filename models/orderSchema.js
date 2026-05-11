@@ -258,6 +258,7 @@ const orderSchema = new Schema(
     intransitVoice: String,
     image: [String],
     voice: String,
+    ready_for_delivery_images: [String],
     deliverImage: String,
     statusHistory: {
       intransit: { type: Date, default: null },
@@ -339,7 +340,7 @@ orderSchema.index({ riderId: 1, status: 1 });
 orderSchema.pre(/^find/, function (next) {
   this.populate({
     path: "items.itemId",
-    select: "images videos"
+    select: "images videos type"
   });
   next();
 });

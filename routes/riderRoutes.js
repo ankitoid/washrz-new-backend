@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  addMoreIntransitImages,
   deletePickup,
   getCancelMedia,
   getRescheduledOrders,
@@ -9,6 +10,7 @@ import {
   getRiderTasksById,
   rescheduleOrder,
   reschedulePickup,
+  uploadReadyForDeliveryImages,
   uploadCancelInfo,
   uploadDeliverImage,
   uploadFiles,
@@ -26,6 +28,8 @@ router.post("/uploadCancelInfo/:id", uploadCancelInfo);
 router.put("/rescheduleorder/:id", rescheduleOrder);
 router.get("/rescheduled-Orders", getRescheduledOrders);
 router.get("/getCancelMedia/:pickupId", getCancelMedia);
+router.patch("/orders/:id/intransit-images", addMoreIntransitImages);
+router.patch("/orders/:id/ready-for-delivery-images", uploadReadyForDeliveryImages);
 router.post("/uploadDeliverImage/:id", uploadDeliverImage);
 router.get("/rider-dashboard", getRiderDashboardData);
 router.get("/rider-tasks/:riderId", getRiderTasksById);

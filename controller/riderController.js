@@ -55,7 +55,7 @@ export const uploadFiles = (req, res, next) => {
     const voice = req.files?.voice || [];
     req.app.use(express.json({ limit: "100mb" }));
     const location = req.body?.location || null;
-
+    const items = req.body.items;
 //  Format:
 //  [
 //    { "itemId": "catalogItemId", "quantity": 2 },
@@ -68,7 +68,11 @@ export const uploadFiles = (req, res, next) => {
 //  * - Items are validated against Catalog
 //  * - Total price is auto-calculated
 
-    const { items } = req.body;
+//two type data send karana padega
+
+// formadata
+// and body { "itemId": "catalogItemId", "quantity": 2 }, jaise app me bhej rhe ho
+
 
     if (!id || !image || !items) {
       return res.status(400).json({
