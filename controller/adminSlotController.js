@@ -1928,6 +1928,8 @@ export const getSlots = async (req, res) => {
         slots: merged.slots
       });
     }
+
+    req.socket.emitToAll("slot_updated", { message: "please refetch the api for getting the slots." }); 
     
     res.json({
       date,
