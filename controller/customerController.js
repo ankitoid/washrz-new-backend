@@ -74,6 +74,9 @@ export const getCustomers = catchAsync(async (req, res, next) => {
 
 export const addPickup = catchAsync(async (req, res, next) => {
   const { name, contact, address } = req.body;
+
+  console.log("this is the dataaaa===>>>>",name, contact, address)
+
   const pickupData = await pickup.create({
     Name: name,
     Contact: contact,
@@ -84,7 +87,7 @@ export const addPickup = catchAsync(async (req, res, next) => {
     pickup_date: new Date(),
   });
   // req.socket.emit("addPickup", pickupData);
-  req.socket.emitToAdmin("addPickup", pickupData);
+  req.socket.emitToAll("addPickup", pickupData);
   res.status(200).json({
     message: "Pickup Added Sucessfully",
     data: pickupData,
@@ -455,7 +458,8 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       }
     );
 
-    req.socket.emitToAdmin("addPickup", pickupData);
+    req.socket.emitToAll("addPickup", pickupData);
+      // req.socket.emit("addPickup", pickupData);
 
     // -------------------------
     // Push notification
@@ -1185,10 +1189,10 @@ export const deletePickup = catchAsync(async (req, res, next) => {
       //   req.socket.emit("pickupCancelled", { pickupId: id, cancelledBy: userName });
       // }
 
-      req.socket.emitToAdmin("pickupCancelled", {
-        pickupId: id,
-        cancelledBy: userName,
-      });
+      // req.socket.emitToAdmin("pickupCancelled", {
+      //   pickupId: id,
+      //   cancelledBy: userName,
+      // });
 
       return res.status(200).json({
         message: "Pickup cancelled successfully",
