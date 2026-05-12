@@ -1929,7 +1929,6 @@ export const getSlots = async (req, res) => {
       });
     }
 
-    req.socket.emitToAll("slot_updated", { message: "please refetch the api for getting the slots." }); 
     
     res.json({
       date,
@@ -2026,6 +2025,8 @@ export const saveSlots = async (req, res) => {
         runValidators: true
       }
     );
+
+    req.socket.emitToAll("slot_updated", { message: "please refetch the api for getting the slots." }); 
 
     res.json({
       success: true,
