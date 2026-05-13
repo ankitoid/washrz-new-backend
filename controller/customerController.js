@@ -1225,9 +1225,7 @@ export const addSchedulePickup = catchAsync(async (req, res, next) => {
     name,
     contact,
     address,
-    slot,
-    pickup_date,
-    parsedPickupDate: new Date(pickup_date),
+    slot
   });
   
   const schedulePickupData = await pickup.create({
