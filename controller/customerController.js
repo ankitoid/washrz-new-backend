@@ -1220,6 +1220,16 @@ export const completePickup = catchAsync(async (req, res, next) => {
 
 export const addSchedulePickup = catchAsync(async (req, res, next) => {
   const { name, contact, address, slot } = req.body;
+
+  console.log("Parsed fields:", {
+    name,
+    contact,
+    address,
+    slot,
+    pickup_date,
+    parsedPickupDate: new Date(pickup_date),
+  });
+  
   const schedulePickupData = await pickup.create({
     Name: name,
     Contact: contact,
