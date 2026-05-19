@@ -20,6 +20,25 @@ const pickupItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const assignedRiderSchema = new mongoose.Schema(
+  {
+    riderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "users",
+      required: true,
+    },
+    riderName: {
+      type: String,
+      required: true,
+    },
+    assignedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
 const schema = new pickupSchema(
   {
     appCustomerId: String,
@@ -85,6 +104,14 @@ const schema = new pickupSchema(
     note: String,
     riderName: String,
     riderDate: String,
+
+    assignedRider: {
+      pickup: {
+        type: assignedRiderSchema,
+        default: null,
+      },
+    },
+
     isHeavy :{ type: Boolean, default: false },
 
     morning_delivery : {type: Boolean, default:true},   // for checking morning delivery or not

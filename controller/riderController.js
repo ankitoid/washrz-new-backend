@@ -203,6 +203,7 @@ export const uploadFiles = (req, res, next) => {
       let statusHistory = {
         intransit: null,
         processing: new Date(),
+        reprocessing: null,
         readyForDelivery: null,
         deliveryriderassigned: null,
         delivered: null,
@@ -213,22 +214,28 @@ export const uploadFiles = (req, res, next) => {
       // Create Order
       // -------------------------
       const order_details = await Order.create({
-        contactNo,
-        customerName,
-        address,
-        items: finalItems,
-        price: totalPrice,
-        order_id,
-        intransitVoice: voiceUpload?.Location || null,
-        intransitImage: imageUrls,
-        plantName,
-        orderLocation: parsedLocation,
-        statusHistory,
-        pickupRider: {
-          name: pickup_details?.riderName || null,
-          assignedAt: pickup_details?.riderDate || new Date(),
-      },
-      });
+  contactNo,
+  customerName,
+  address,
+  items: finalItems,
+  price: totalPrice,
+  order_id,
+  intransitVoice: voiceUpload?.Location || null,
+  intransitImage: imageUrls,
+  plantName,
+  orderLocation: parsedLocation,
+  statusHistory,
+  assignedRider: {
+    pickup: pickup_details?.assignedRider?.pickup
+      ? {
+          riderId: pickup_details.assignedRider.pickup.riderId,
+          riderName: pickup_details.assignedRider.pickup.riderName,
+          assignedAt: pickup_details.assignedRider.pickup.assignedAt,
+        }
+      : null,
+    delivery: null,
+  },
+});
 
       // -------------------------
       // Mark pickup complete
@@ -402,7 +409,9 @@ export const reschedulePickup = async (req, res) => {
 
     // Update the rescheduled date and mark as rescheduled
     pickup.rescheduledDate = newDate;
-    pickup.isRescheduled = true;
+    pickup.pickup_date = newDate;
+    pickup.PickupStatus = "pending";
+    // pickup.isRescheduled = true;
     pickup.type = "reschdule";
     await pickup.save();
 
