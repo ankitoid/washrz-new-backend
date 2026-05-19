@@ -528,6 +528,7 @@ export const updateOrderStatus = async (req, res) => {
     const statusHistoryMap = {
       intransit: "statusHistory.intransit",
       processing: "statusHistory.processing",
+      reprocessing: "statusHistory.reprocessing",
       "ready for delivery": "statusHistory.readyForDelivery",
       "delivery rider assigned": "statusHistory.deliveryriderassigned",
       delivered: "statusHistory.delivered",

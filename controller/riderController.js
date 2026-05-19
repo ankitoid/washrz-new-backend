@@ -11,6 +11,7 @@ import APIFeatures from "../utills/apiFeatures.js";
 import customerFcmService from "../services/customerFcmService.js";
 import { createCustomerNotification } from "./customerNotificationController.js";
 import CatalogItem from "../models/catalogItemSchema.js";
+import slotBookingSchema from "../models/slotBookingSchema.js";
 
 // upload audio and voice
 // Configure AWS S3
@@ -72,6 +73,13 @@ export const uploadFiles = (req, res, next) => {
 
 // formadata
 // and body { "itemId": "catalogItemId", "quantity": 2 }, jaise app me bhej rhe ho
+
+
+  console.log("Received items data:", items);
+  console.log("Received images data:", image);
+  console.log("Received id data:", id);
+    
+
 
 
     if (!id || !image || !items) {
@@ -195,6 +203,7 @@ export const uploadFiles = (req, res, next) => {
       let statusHistory = {
         intransit: null,
         processing: new Date(),
+        reprocessing: null,
         readyForDelivery: null,
         deliveryriderassigned: null,
         delivered: null,
@@ -205,22 +214,28 @@ export const uploadFiles = (req, res, next) => {
       // Create Order
       // -------------------------
       const order_details = await Order.create({
-        contactNo,
-        customerName,
-        address,
-        items: finalItems,
-        price: totalPrice,
-        order_id,
-        intransitVoice: voiceUpload?.Location || null,
-        intransitImage: imageUrls,
-        plantName,
-        orderLocation: parsedLocation,
-        statusHistory,
-        pickupRider: {
-          name: pickup_details?.riderName || null,
-          assignedAt: pickup_details?.riderDate || new Date(),
-      },
-      });
+  contactNo,
+  customerName,
+  address,
+  items: finalItems,
+  price: totalPrice,
+  order_id,
+  intransitVoice: voiceUpload?.Location || null,
+  intransitImage: imageUrls,
+  plantName,
+  orderLocation: parsedLocation,
+  statusHistory,
+  assignedRider: {
+    pickup: pickup_details?.assignedRider?.pickup
+      ? {
+          riderId: pickup_details.assignedRider.pickup.riderId,
+          riderName: pickup_details.assignedRider.pickup.riderName,
+          assignedAt: pickup_details.assignedRider.pickup.assignedAt,
+        }
+      : null,
+    delivery: null,
+  },
+});
 
       // -------------------------
       // Mark pickup complete
@@ -394,7 +409,9 @@ export const reschedulePickup = async (req, res) => {
 
     // Update the rescheduled date and mark as rescheduled
     pickup.rescheduledDate = newDate;
-    pickup.isRescheduled = true;
+    pickup.pickup_date = newDate;
+    pickup.PickupStatus = "pending";
+    // pickup.isRescheduled = true;
     pickup.type = "reschdule";
     await pickup.save();
 
@@ -541,7 +558,11 @@ export const deletePickup = catchAsync(async (req, res, next) => {
   if (!pickupData) {
     return next(new AppError("No pickup found with that ID", 404));
   }
-  res.status(200).json({
+  if(pickupData?.bookingId){
+    await slotBookingSchema.findOneAndUpdate({bookingId: pickupData.bookingId}, {status: 'cancelled'})
+  }
+
+    res.status(200).json({
     message: "Pickup Deleted Sucessfully",
   });
 });

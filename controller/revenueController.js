@@ -101,6 +101,7 @@ export const getRevenue = catchAsync(async (req, res, next) => {
   // Define the statuses for "order revenue" (processing-stage revenue)
   const orderRevenueStatuses = [
     "processing",
+    "reprocessing",
     "ready for delivery",
     "delivery rider assigned",
   ];
@@ -449,6 +450,7 @@ export const getRevenueComparison = catchAsync(async (req, res, next) => {
 
   const orderRevenueStatuses = [
     "processing",
+    "reprocessing",
     "ready for delivery",
     "delivery rider assigned",
   ];

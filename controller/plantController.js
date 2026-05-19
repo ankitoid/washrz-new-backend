@@ -212,7 +212,15 @@ export const assignRider = async (req, res) => {
 
     const order = await Order.findByIdAndUpdate(
       orderId,
-      { riderName, riderDate },
+      {
+        riderName,
+        riderDate,
+        "assignedRider.delivery": {
+          riderId,
+          riderName,
+          assignedAt: new Date(),
+        },
+      },
       { new: true },
     );
 
@@ -305,6 +313,11 @@ export const assignPickupRider = async (req, res) => {
         riderName,
         riderDate,
         PickupStatus: "assigned",
+        "assignedRider.pickup": {
+          riderId,
+          riderName,
+          assignedAt: new Date(),
+        },
       },
       { new: true },
     );
@@ -350,11 +363,10 @@ export const assignPickupRider = async (req, res) => {
     });
 
     if (pickup.appCustomerId) {
-     const done =  await createCustomerNotification({
+      const done = await createCustomerNotification({
         customerId: pickup.appCustomerId,
         title: "Rider Assigned",
-        message:
-          "Keep your items bagged & ready.",
+        message: "Keep your items bagged & ready.",
         type: "pickup_Assigned",
         data: {
           pickupId: String(pickup._id),
@@ -416,7 +428,7 @@ cron.schedule("30 0 * * *", async () => {
     // Clear rider info from Orders
     await Order.updateMany(
       {
-         status: { $nin: ["delivered"] },
+        status: { $nin: ["delivered"] },
       },
       {
         $unset: {
