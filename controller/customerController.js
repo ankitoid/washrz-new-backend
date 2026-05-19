@@ -1000,9 +1000,41 @@ export const getPickups = catchAsync(async (req, res, next) => {
   }
 
   if (status === "pending") {
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    let pendingDateFilter = {};
+
+    if (start && end) {
+      const rangeStart = new Date(start);
+      rangeStart.setHours(0, 0, 0, 0);
+      const rangeEnd = new Date(end);
+      rangeEnd.setHours(23, 59, 59, 999);
+
+      if (rangeStart > todayEnd) {
+        pendingDateFilter = { $gte: rangeStart, $lte: rangeEnd };
+      } else {
+        pendingDateFilter = { $lte: rangeEnd };
+      }
+    } else if (date) {
+      const singleStart = new Date(date);
+      singleStart.setHours(0, 0, 0, 0);
+      const singleEnd = new Date(date);
+      singleEnd.setHours(23, 59, 59, 999);
+
+      if (singleStart > todayEnd) {
+        pendingDateFilter = { $gte: singleStart, $lte: singleEnd };
+      } else {
+        pendingDateFilter = { $lte: singleEnd };
+      }
+    } else {
+      pendingDateFilter = { $lte: todayEnd };
+    }
+
     const baseFilter = {
       PickupStatus: "pending",
-      pickup_date: dateFilter,
+      isDeleted: false,
+      pickup_date: pendingDateFilter,
     };
 
     const [pickups, total] = await Promise.all([
