@@ -31,6 +31,7 @@ import customerNotificationRoutes from "./routes/customerNotificationRoutes.js";
 import customerPushTokenRoutes from "./routes/customerPushTokenRoutes.js";
 import slotBookingRoutes from "./routes/slotBookingRoutes.js"
 import slotRoutes from "./routes/slotsRoutes.js";
+import analyticsRoutes from "./routes/analyticsRoutes.js";
 import socketService from "./services/socketService.js";
 import { cleanupExpiredCoupons } from "./jobs/couponCleanup.js";
 
@@ -444,6 +445,7 @@ app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/customer/notifications", customerNotificationRoutes);
 app.use("/api/v1/customer/push-tokens", customerPushTokenRoutes);
 app.use('/api/v1/bookings',slotBookingRoutes);
+app.use("/api/v1/analytics", analyticsRoutes);
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
