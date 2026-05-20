@@ -5,7 +5,8 @@ import {
   checkPaymentStatus,
   markAsPaid,
   initiateRefund,
-  razorpayWebhook
+  razorpayWebhook,
+  confirmCODPayment
 } from "../controller/paymentController.js";
 
 const router = express.Router();
