@@ -646,3 +646,37 @@ export const razorpayWebhook = async (req, res) => {
     });
   }
 };
+
+
+export const confirmCODPayment = async (req, res) => {
+  try {
+    const { orderId } = req.params;   
+    const order = await Order.findOne({ order_id: orderId });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    order.isCODConfirmed = true;
+    
+    if(order?.morningDelivery){
+      order.morningDelivery = false;
+    }
+    await order.save(); 
+
+    return res.status(200).json({
+      success: true,
+      message: "COD payment confirmed",
+    });
+  } catch (error) {
+    console.error("🔥 Confirm COD error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};

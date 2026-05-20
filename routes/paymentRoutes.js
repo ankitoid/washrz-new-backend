@@ -27,4 +27,9 @@ router.get("/status/:orderId", checkPaymentStatus);
 router.post("/:orderId/mark-paid", markAsPaid);
 router.post("/:orderId/refund", initiateRefund);
 
+
+// ================== COD FLOW ==================
+
+router.post("/confirm-cod/:orderId",confirmCODPayment)
+
 export default router;
