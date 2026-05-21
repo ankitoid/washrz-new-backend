@@ -48,8 +48,6 @@ export const uploadFiles = (req, res, next) => {
       return res.status(400).json({ message: "Error uploading files.", err });
     }
 
-    
-
     console.log("req.files?", req.files);
     const { id } = req.params; // ✅ this is pickupId
     const { image } = req.files;
@@ -919,9 +917,7 @@ export const getRiderPickups = async (req, res) => {
       new APIFeatures(
         pickup.find({
           PickupStatus: "assigned",
-          type: "live",
           isDeleted: false,
-          isRescheduled: false,
           riderName: riderName,
         }),
         req.query,
@@ -931,9 +927,7 @@ export const getRiderPickups = async (req, res) => {
         .paginate().query,
       pickup.countDocuments({
         PickupStatus: "assigned",
-        type: "live",
         isDeleted: false,
-        isRescheduled: false,
         riderName: riderName,
       }),
     ]);
