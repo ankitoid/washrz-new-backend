@@ -513,6 +513,8 @@ export const updateOrderStatus = async (req, res) => {
 
   try {
     const orderId = req.params.id;
+    let customerNotificationResult = null;
+    let customerPushResult = null;
 
     if (!orderId || !status) {
       return res
@@ -554,7 +556,7 @@ export const updateOrderStatus = async (req, res) => {
       existingOrder.status !== "delivery rider assigned" &&
       updatedOrder.appCustomerId
     ) {
-      await createCustomerNotification({
+      const notification = await createCustomerNotification({
         customerId: updatedOrder.appCustomerId,
         title: "Out for Delivery 🚚",
         message: "Your items are heading home, clean and fresh.",
@@ -565,14 +567,21 @@ export const updateOrderStatus = async (req, res) => {
         },
       });
 
-      await customerFcmService.sendToCustomer(
+      customerNotificationResult = {
+        attempted: true,
+        success: !!notification,
+        type: "out_for_Delivery",
+        notificationId: notification?._id || null,
+      };
+
+      customerPushResult = await customerFcmService.sendToCustomer(
         String(updatedOrder.appCustomerId),
         {
           title: "All set 👌",
           body: "Your items are heading home, clean and fresh.",
         },
         {
-          type: "Out_for_Delivery",
+          type: "out_for_Delivery",
           orderId: String(updatedOrder._id),
           screen: "OrderDetails",
         },
@@ -584,7 +593,7 @@ export const updateOrderStatus = async (req, res) => {
       existingOrder.status !== "delivered" &&
       updatedOrder.appCustomerId
     ) {
-      await createCustomerNotification({
+      const notification = await createCustomerNotification({
         customerId: updatedOrder.appCustomerId,
         title: "Delivered ✨",
         message: "Freshly cleaned and delivered with care.",
@@ -595,7 +604,14 @@ export const updateOrderStatus = async (req, res) => {
         },
       });
 
-      await customerFcmService.sendToCustomer(
+      customerNotificationResult = {
+        attempted: true,
+        success: !!notification,
+        type: "order_Delivered",
+        notificationId: notification?._id || null,
+      };
+
+      customerPushResult = await customerFcmService.sendToCustomer(
         String(updatedOrder.appCustomerId),
         {
           title: "Delivered ✨",
@@ -609,9 +625,27 @@ export const updateOrderStatus = async (req, res) => {
       );
     }
 
+    if (
+      (status === "delivery rider assigned" || status === "delivered") &&
+      !updatedOrder.appCustomerId
+    ) {
+      customerNotificationResult = {
+        attempted: false,
+        success: false,
+        reason: "Order has no appCustomerId",
+      };
+      customerPushResult = {
+        attempted: false,
+        success: false,
+        reason: "Order has no appCustomerId",
+      };
+    }
+
     return res.status(200).json({
       message: "Order status updated successfully.",
       updatedOrder,
+      customerNotification: customerNotificationResult,
+      customerPush: customerPushResult,
     });
   } catch (error) {
     console.error("Error updating order status:", error);
