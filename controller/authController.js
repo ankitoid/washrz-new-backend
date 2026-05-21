@@ -558,7 +558,7 @@ export const updateOrderStatus = async (req, res) => {
         customerId: updatedOrder.appCustomerId,
         title: "Out for Delivery 🚚",
         message: "Your items are heading home, clean and fresh.",
-        type: "delivery_rider_assigned",
+        type: "out_for_Delivery",
         data: {
           orderId: String(updatedOrder._id),
           screen: "OrderDetails",
@@ -588,7 +588,7 @@ export const updateOrderStatus = async (req, res) => {
         customerId: updatedOrder.appCustomerId,
         title: "Delivered ✨",
         message: "Freshly cleaned and delivered with care.",
-        type: "order_delivered",
+        type: "order_Delivered",
         data: {
           orderId: String(updatedOrder._id),
           screen: "OrderDetails",
