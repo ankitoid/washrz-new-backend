@@ -654,9 +654,7 @@ export const updateItem = async (req, res) => {
     }).lean();
 
 
-    console.log("duplicateItem",itemId,payload.sku,payload.sacid,id,payload.slug,duplicateItem)
-
-    if (!duplicateItem) {
+    if (duplicateItem) {
       return res.status(409).json({
         status: "error",
         message:
