@@ -26,25 +26,49 @@
 import mongoose from "mongoose";
 
 // Slot template structure (permanent zone configuration)
+// const slotTemplateSchema = new mongoose.Schema({
+//   // Slot definitions
+//   slots: [{
+//     time: { type: String, required: true },        // "10AM-12PM"
+//     defaultEnabled: { type: Boolean, default: true },
+//     defaultCapacity: { type: Number, default: 7, min: 0 }
+//   }],
+  
+//   // Zone-level settings
+//   morningDelivery: { type: Boolean, default: false },
+//   totalCapacity: { type: Number, default: 100, min: 1 },
+//   slotMinCapacity: { type: Number, default: 6, min: 1 },
+  
+//   // Generation metadata (for reference)
+//   startTime: { type: String },
+//   endTime: { type: String },
+//   slotDuration: { type: Number },
+//   generatedAt: { type: Date, default: Date.now }
+// }, { _id: false });
+
+// Slot template structure (permanent zone configuration)
+
 const slotTemplateSchema = new mongoose.Schema({
-  // Slot definitions
-  slots: [{
-    time: { type: String, required: true },        // "10AM-12PM"
-    defaultEnabled: { type: Boolean, default: true },
-    defaultCapacity: { type: Number, default: 7, min: 0 }
-  }],
-  
-  // Zone-level settings
-  morningDelivery: { type: Boolean, default: false },
-  totalCapacity: { type: Number, default: 100, min: 1 },
-  slotMinCapacity: { type: Number, default: 6, min: 1 },
-  
-  // Generation metadata (for reference)
-  startTime: { type: String },
-  endTime: { type: String },
-  slotDuration: { type: Number },
-  generatedAt: { type: Date, default: Date.now }
+  slots: [{ time: String, defaultEnabled: Boolean, defaultCapacity: Number }],
+  morningDelivery: Boolean,
+  totalCapacity: Number,
+  slotMinCapacity: Number,
+  startTime: String,
+  endTime: String,
+  slotDuration: Number,
+  generatedAt: Date,
+  // NEW FIELDS
+  cutoffTimes: {
+    morningCutoff: { type: String, default: "11:00 AM" },
+    eveningCutoff: { type: String, default: "11:00 PM" }
+  },
+  deliveryDeadlines: {
+    sameDay: { type: String, default: "10:00 PM" },
+    nextDay: { type: String, default: "10:00 AM" }
+  }
 }, { _id: false });
+
+
 
 const zoneSchema = new mongoose.Schema({
   name: { type: String, required: true },        // South Delhi
