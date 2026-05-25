@@ -617,19 +617,13 @@ export const updateItem = async (req, res) => {
     const { id, itemId } = req.params;
     const category = await getCategoryByIdOrFail(id);
 
-    console.log('this is the value===>',id,itemId,category)
-
     if (!category) {
-      return res
-        .status(404)
-        .json({ status: "error", message: "Catalog category not found." });
+      return res.status(404).json({ status: "error", message: "Catalog category not found." });
     }
 
     const item = await CatalogItem.findOne({ _id: itemId, category: id });
     if (!item) {
-      return res
-        .status(404)
-        .json({ status: "error", message: "Catalog item not found." });
+      return res.status(404).json({ status: "error", message: "Catalog item not found." });
     }
 
     const payload = buildItemPayload({
@@ -637,30 +631,23 @@ export const updateItem = async (req, res) => {
       ...req.body,
     });
     const validationError = validateItemPayload(payload);
-
-    console.log("this is the validationError==>>",validationError)
-
     if (validationError) {
       return res.status(400).json({ status: "error", message: validationError });
     }
 
-    const duplicateItem = await CatalogItem.findOne({
-      _id: { $ne: itemId },
-      $or: [
-        { sku: payload.sku },
-        { sacid: payload.sacid },
-        { category: id, slug: payload.slug },
-      ],
-    }).lean();
+    // ✅ Only enforce SKU uniqueness (sacid and slug can be duplicated)
+    let duplicateItem = null;
+    if (payload.sku && payload.sku !== item.sku) {
+      duplicateItem = await CatalogItem.findOne({
+        _id: { $ne: itemId },
+        sku: payload.sku,
+      }).lean();
+    }
 
-
-    console.log("duplicateItem",itemId,payload.sku,payload.sacid,id,payload.slug,duplicateItem)
-
-    if (!duplicateItem) {
+    if (duplicateItem) {
       return res.status(409).json({
         status: "error",
-        message:
-          "you can't update sku, sacid, or slug",
+        message: "Another item already uses this SKU. Please use a unique SKU.",
       });
     }
 
@@ -676,7 +663,6 @@ export const updateItem = async (req, res) => {
     res.status(500).json({ status: "error", message: error.message });
   }
 };
-
 export const deleteItem = async (req, res) => {
   try {
     const { id, itemId } = req.params;

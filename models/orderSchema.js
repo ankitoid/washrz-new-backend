@@ -315,6 +315,15 @@ const orderSchema = new Schema(
       address: String,
     },
 
+
+  // ========== MORNING DELIVERY ==========
+    morningDelivery: { type: Boolean, default: true },
+     
+  //  ========== CONFIRM COD==========
+
+    isCODConfirmed: { type: Boolean, default: false },
+
+
     // ========== ADDITIONAL INFORMATION ==========
     notes: String,
     cancellationReason: String,

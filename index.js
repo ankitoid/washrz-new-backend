@@ -55,7 +55,8 @@ app.use(
       "http://localhost:5173",
       "https://new.drydash.in",
       "http://localhost:8081",
-      "https://testdrydash.netlify.app"
+      "https://testdrydash.netlify.app",
+      "https://test-drydash.netlify.app"
     ],
     methods: "GET, POST, PUT, DELETE, PATCH",
     credentials: true, // Allow credentials (cookies) to be sent with the request
@@ -85,7 +86,8 @@ const io = new Server(server, {
       "exp://192.168.10.215:8081", // Expo local development
       "http://192.168.10.215:8081", // Expo web
       "*",
-      "https://testdrydash.netlify.app"
+      "https://testdrydash.netlify.app",
+      "https://test-drydash.netlify.app"
     ],
     credentials: true,
     methods: ["GET", "POST"],

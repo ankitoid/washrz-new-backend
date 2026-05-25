@@ -105,6 +105,7 @@ export const uploadFiles = (req, res, next) => {
       const contactNo = pickup_details.Contact;
       const customerName = pickup_details.Name;
       const plantName = pickup_details.plantName;
+      const morning_delivery = pickup_details.morning_delivery || false;
 
       let address = pickup_details.Address;
 
@@ -215,6 +216,10 @@ export const uploadFiles = (req, res, next) => {
   contactNo,
   customerName,
   address,
+  appCustomerId: pickup_details?.appCustomerId || null,
+  tempPickupAdresssId: pickup_details?.tempPickupAdresssId || null,
+  tempDeliveryAddressId: pickup_details?.tempDeliveryAddressId || null,
+  platform_type: pickup_details?.platform_type || "wati",
   items: finalItems,
   price: totalPrice,
   order_id,
@@ -233,6 +238,7 @@ export const uploadFiles = (req, res, next) => {
       : null,
     delivery: null,
   },
+  morningDelivery: morning_delivery,
 });
 
       // -------------------------
