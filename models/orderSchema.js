@@ -33,6 +33,25 @@ const itemSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const assignedRiderSchema = new Schema(
+  {
+    riderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "users",
+      required: true,
+    },
+    riderName: {
+      type: String,
+      required: true,
+    },
+    assignedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false },
+);
+
 const paymentMethodDetailsSchema = new Schema(
   {
     cardType: String,
@@ -136,6 +155,7 @@ const statusHistorySchema = new Schema(
     pending: { type: Date, default: null },
     confirmed: { type: Date, default: null },
     processing: { type: Date, default: null },
+    reprocessing: { type: Date, default: null },
     ready_for_delivery: { type: Date, default: null },
     out_for_delivery: { type: Date, default: null },
     delivered: { type: Date, default: null },
@@ -228,6 +248,7 @@ const orderSchema = new Schema(
       enum: [
         "intransit",
         "processing",
+        "reprocessing",
         "ready for delivery",
         "delivery rider assigned",
         "delivered",
@@ -253,6 +274,17 @@ const orderSchema = new Schema(
     riderDate: String,
     riderAssignedAt: Date,
 
+    assignedRider: {
+      pickup: {
+        type: assignedRiderSchema,
+        default: null,
+      },
+      delivery: {
+        type: assignedRiderSchema,
+        default: null,
+      },
+    },
+
     // ========== TRACKING & MEDIA ==========
     intransitImage: [String],
     intransitVoice: String,
@@ -263,6 +295,7 @@ const orderSchema = new Schema(
     statusHistory: {
       intransit: { type: Date, default: null },
       processing: { type: Date, default: null },
+      reprocessing: { type: Date, default: null },
       readyForDelivery: { type: Date, default: null },
       deliveryriderassigned: { type: Date, default: null },
       delivered: { type: Date, default: null },
@@ -304,7 +337,7 @@ const orderSchema = new Schema(
     createdBy: { type: String, default: "customer" },
     updatedBy: String,
     isActive: { type: Boolean, default: true },
-    isArchived: { type: Boolean, default: false, index: true }
+    isArchived: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,
@@ -340,7 +373,7 @@ orderSchema.index({ riderId: 1, status: 1 });
 orderSchema.pre(/^find/, function (next) {
   this.populate({
     path: "items.itemId",
-    select: "images videos type"
+    select: "images videos type",
   });
   next();
 });

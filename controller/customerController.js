@@ -74,6 +74,9 @@ export const getCustomers = catchAsync(async (req, res, next) => {
 
 export const addPickup = catchAsync(async (req, res, next) => {
   const { name, contact, address } = req.body;
+
+  console.log("this is the dataaaa===>>>>", name, contact, address);
+
   const pickupData = await pickup.create({
     Name: name,
     Contact: contact,
@@ -84,7 +87,7 @@ export const addPickup = catchAsync(async (req, res, next) => {
     pickup_date: new Date(),
   });
   // req.socket.emit("addPickup", pickupData);
-  req.socket.emitToAdmin("addPickup", pickupData);
+  req.socket.emitToAll("addPickup", pickupData);
   res.status(200).json({
     message: "Pickup Added Sucessfully",
     data: pickupData,
@@ -234,12 +237,12 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       items,
       morning_delivery,
       isHeavy,
-      bookingId
-// ✅ NEW //  Format:
-//  [
-//    { "itemId": "catalogItemId", "quantity": 2 },
-//    { "itemId": "catalogItemId2", "quantity": 1 }
-//  ]
+      bookingId,
+      // ✅ NEW //  Format:
+      //  [
+      //    { "itemId": "catalogItemId", "quantity": 2 },
+      //    { "itemId": "catalogItemId2", "quantity": 1 }
+      //  ]
     } = req.body;
 
     console.log("REQ BODY 👉", req.body);
@@ -282,14 +285,14 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
 
       processedItems = items.map((reqItem) => {
         const catalogItem = catalogItems.find(
-          (ci) => ci._id.toString() === reqItem.itemId
+          (ci) => ci._id.toString() === reqItem.itemId,
         );
 
         return {
           itemId: catalogItem._id,
-          label: catalogItem.label,   // snapshot
-          price: catalogItem.price,   // snapshot
-          unit: catalogItem.unit,     // snapshot
+          label: catalogItem.label, // snapshot
+          price: catalogItem.price, // snapshot
+          unit: catalogItem.unit, // snapshot
           quantity: reqItem.quantity,
         };
       });
@@ -299,7 +302,7 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     // Fetch addresses
     // -------------------------
     const addrRes = await fetch(
-      `https://live.drydash.in/v1/addresses?customerid=${appCustomerId}`
+      `https://live.drydash.in/v1/addresses?customerid=${appCustomerId}`,
     );
 
     const addrData = await addrRes.json();
@@ -318,11 +321,11 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     // Map pickup & delivery addresses
     // -------------------------
     const pickupAddress = addresses.find(
-      (addr) => addr.id === tempPickupAdresssId
+      (addr) => addr.id === tempPickupAdresssId,
     );
 
     const deliveryAddress = addresses.find(
-      (addr) => addr.id === tempDeliveryAddressId
+      (addr) => addr.id === tempDeliveryAddressId,
     );
 
     if (!pickupAddress) {
@@ -354,7 +357,7 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     // -------------------------
     const totalAmount = processedItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
-      0
+      0,
     );
 
     // -------------------------
@@ -389,11 +392,11 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       tempPickupAdresssId,
       tempDeliveryAddressId,
 
-      morning_delivery,   // for deciding the delivery needed before 11 AM or after 11 AM
+      morning_delivery, // for deciding the delivery needed before 11 AM or after 11 AM
 
       platform_type: "app",
       items: processedItems, // ✅ NEW
-      totalAmount,           // ✅ OPTIONAL
+      totalAmount, // ✅ OPTIONAL
     };
 
     if (slot) {
@@ -403,13 +406,12 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
 
     if (note) pickupPayload.note = note;
 
-    if(isHeavy){
-      pickupPayload.isHeavy = isHeavy
+    if (isHeavy) {
+      pickupPayload.isHeavy = isHeavy;
     }
 
-
-    if(bookingId){
-      pickupPayload.bookingId = bookingId
+    if (bookingId) {
+      pickupPayload.bookingId = bookingId;
     }
 
     console.log("FINAL PAYLOAD 👉", pickupPayload);
@@ -452,10 +454,11 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
           isRead: false,
         },
         unreadCount,
-      }
+      },
     );
 
-    req.socket.emitToAdmin("addPickup", pickupData);
+    req.socket.emitToAll("addPickup", pickupData);
+    // req.socket.emit("addPickup", pickupData);
 
     // -------------------------
     // Push notification
@@ -470,7 +473,7 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
         type: "pickup_Created",
         pickupId: String(pickupData._id),
         screen: "PickupDetails",
-      }
+      },
     );
 
     return res.status(200).json({
@@ -520,7 +523,10 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     }
 
     // Check if pickup can be edited (pending pickups and assigned pickups)
-    if (existingPickup.PickupStatus !== "pending" && existingPickup.PickupStatus !== "assigned") {
+    if (
+      existingPickup.PickupStatus !== "pending" &&
+      existingPickup.PickupStatus !== "assigned"
+    ) {
       return res.status(400).json({
         message: "Cannot update items for pickup that is already processed",
         currentStatus: existingPickup.PickupStatus,
@@ -578,7 +584,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
             oldQuantity: currentItem.quantity,
           });
           currentItemsMap.delete(reqItem.itemId);
-        } 
+        }
         // Update quantity
         else if (reqItem.quantity !== currentItem.quantity) {
           operationLog.updated.push({
@@ -587,7 +593,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
             oldQuantity: currentItem.quantity,
             newQuantity: reqItem.quantity,
           });
-          
+
           currentItemsMap.set(reqItem.itemId, {
             ...currentItem,
             quantity: reqItem.quantity,
@@ -597,7 +603,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
         else {
           currentItemsMap.set(reqItem.itemId, currentItem);
         }
-      } 
+      }
       // Case 2: New item being added
       else if (reqItem.quantity && reqItem.quantity > 0) {
         operationLog.added.push({
@@ -605,7 +611,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
           label: catalogItem.label,
           quantity: reqItem.quantity,
         });
-        
+
         currentItemsMap.set(reqItem.itemId, {
           itemId: catalogItem._id,
           label: catalogItem.label,
@@ -624,7 +630,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     // -------------------------
     const totalAmount = updatedItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
-      0
+      0,
     );
 
     // -------------------------
@@ -662,8 +668,9 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     let newHeavyStatus = oldHeavyStatus;
 
     if (isHeavy !== undefined && isHeavy !== null) {
-      const booleanIsHeavy = typeof isHeavy === 'boolean' ? isHeavy : Boolean(isHeavy);
-      
+      const booleanIsHeavy =
+        typeof isHeavy === "boolean" ? isHeavy : Boolean(isHeavy);
+
       if (booleanIsHeavy !== existingPickup.isHeavy) {
         newHeavyStatus = booleanIsHeavy;
         heavyStatusUpdated = true;
@@ -678,8 +685,11 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     let newMorningDelivery = oldMorningDelivery;
 
     if (morning_delivery !== undefined && morning_delivery !== null) {
-      const booleanMorningDelivery = typeof morning_delivery === 'boolean' ? morning_delivery : Boolean(morning_delivery);
-      
+      const booleanMorningDelivery =
+        typeof morning_delivery === "boolean"
+          ? morning_delivery
+          : Boolean(morning_delivery);
+
       if (booleanMorningDelivery !== existingPickup.morning_delivery) {
         newMorningDelivery = booleanMorningDelivery;
         morningDeliveryUpdated = true;
@@ -706,7 +716,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     // Add note to update if changed
     if (noteUpdated) {
       updateData.note = updatedNote;
-      
+
       if (!updateData.$push.updateHistory.changes) {
         updateData.$push.updateHistory.changes = {};
       }
@@ -720,7 +730,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     // Add isHeavy to update if changed
     if (heavyStatusUpdated) {
       updateData.isHeavy = newHeavyStatus;
-      
+
       if (!updateData.$push.updateHistory.changes) {
         updateData.$push.updateHistory.changes = {};
       }
@@ -733,7 +743,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     // Add morning_delivery to update if changed (NEW)
     if (morningDeliveryUpdated) {
       updateData.morning_delivery = newMorningDelivery;
-      
+
       if (!updateData.$push.updateHistory.changes) {
         updateData.$push.updateHistory.changes = {};
       }
@@ -746,27 +756,26 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     // -------------------------
     // Update pickup
     // -------------------------
-    const updatedPickup = await pickup.findByIdAndUpdate(
-      pickupId,
-      updateData,
-      { new: true, runValidators: true }
-    );
+    const updatedPickup = await pickup.findByIdAndUpdate(pickupId, updateData, {
+      new: true,
+      runValidators: true,
+    });
 
     // -------------------------
     // Send notification to customer
     // -------------------------
     let notificationMessage = getUpdateNotificationMessage(operationLog);
-    
+
     if (noteUpdated && specialInstructions && specialInstructions !== "") {
       const noteMessage = `Special instructions updated: "${specialInstructions}" added to your notes`;
-      notificationMessage = notificationMessage 
+      notificationMessage = notificationMessage
         ? `${notificationMessage}. ${noteMessage}`
         : noteMessage;
     }
-    
+
     if (heavyStatusUpdated) {
       const heavyMessage = `Heavy item status changed to: ${newHeavyStatus ? "Yes (Heavy items)" : "No (Standard items)"}`;
-      notificationMessage = notificationMessage 
+      notificationMessage = notificationMessage
         ? `${notificationMessage}. ${heavyMessage}`
         : heavyMessage;
     }
@@ -774,7 +783,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     // Add morning delivery update to notification message (NEW)
     if (morningDeliveryUpdated) {
       const morningMessage = `Morning delivery preference changed to: ${newMorningDelivery ? "Yes" : "No"}`;
-      notificationMessage = notificationMessage 
+      notificationMessage = notificationMessage
         ? `${notificationMessage}. ${morningMessage}`
         : morningMessage;
     }
@@ -789,18 +798,25 @@ export const updatePickup = catchAsync(async (req, res, next) => {
           pickupId: pickupId,
           screen: "PickupDetails",
           changes: operationLog,
-          noteUpdated: noteUpdated ? {
-            oldNote: oldNote,
-            newNote: updatedNote,
-          } : undefined,
-          heavyStatusUpdated: heavyStatusUpdated ? {
-            oldStatus: oldHeavyStatus,
-            newStatus: newHeavyStatus,
-          } : undefined,
-          morningDeliveryUpdated: morningDeliveryUpdated ? {    // NEW
-            oldStatus: oldMorningDelivery,
-            newStatus: newMorningDelivery,
-          } : undefined,
+          noteUpdated: noteUpdated
+            ? {
+                oldNote: oldNote,
+                newNote: updatedNote,
+              }
+            : undefined,
+          heavyStatusUpdated: heavyStatusUpdated
+            ? {
+                oldStatus: oldHeavyStatus,
+                newStatus: newHeavyStatus,
+              }
+            : undefined,
+          morningDeliveryUpdated: morningDeliveryUpdated
+            ? {
+                // NEW
+                oldStatus: oldMorningDelivery,
+                newStatus: newMorningDelivery,
+              }
+            : undefined,
         },
       });
 
@@ -823,7 +839,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
             isRead: false,
           },
           unreadCount,
-        }
+        },
       );
 
       await customerFcmService.sendToCustomer(
@@ -836,7 +852,7 @@ export const updatePickup = catchAsync(async (req, res, next) => {
           type: "pickup_Updated",
           pickupId: String(pickupId),
           screen: "PickupDetails",
-        }
+        },
       );
     }
 
@@ -846,19 +862,26 @@ export const updatePickup = catchAsync(async (req, res, next) => {
       changes: operationLog,
       oldTotal: existingPickup.totalAmount,
       newTotal: totalAmount,
-      noteUpdated: noteUpdated ? {
-        oldNote: oldNote,
-        newNote: updatedNote,
-        appendedText: specialInstructions,
-      } : false,
-      heavyStatusUpdated: heavyStatusUpdated ? {
-        oldStatus: oldHeavyStatus,
-        newStatus: newHeavyStatus,
-      } : false,
-      morningDeliveryUpdated: morningDeliveryUpdated ? {       // NEW
-        oldStatus: oldMorningDelivery,
-        newStatus: newMorningDelivery,
-      } : false,
+      noteUpdated: noteUpdated
+        ? {
+            oldNote: oldNote,
+            newNote: updatedNote,
+            appendedText: specialInstructions,
+          }
+        : false,
+      heavyStatusUpdated: heavyStatusUpdated
+        ? {
+            oldStatus: oldHeavyStatus,
+            newStatus: newHeavyStatus,
+          }
+        : false,
+      morningDeliveryUpdated: morningDeliveryUpdated
+        ? {
+            // NEW
+            oldStatus: oldMorningDelivery,
+            newStatus: newMorningDelivery,
+          }
+        : false,
     });
 
     // -------------------------
@@ -871,21 +894,27 @@ export const updatePickup = catchAsync(async (req, res, next) => {
         changes: operationLog,
         oldTotal: existingPickup.totalAmount,
         newTotal: totalAmount,
-        noteUpdated: noteUpdated ? {
-          oldNote: oldNote,
-          newNote: updatedNote,
-        } : undefined,
-        heavyStatusUpdated: heavyStatusUpdated ? {
-          oldStatus: oldHeavyStatus,
-          newStatus: newHeavyStatus,
-        } : undefined,
-        morningDeliveryUpdated: morningDeliveryUpdated ? {    // NEW
-          oldStatus: oldMorningDelivery,
-          newStatus: newMorningDelivery,
-        } : undefined,
+        noteUpdated: noteUpdated
+          ? {
+              oldNote: oldNote,
+              newNote: updatedNote,
+            }
+          : undefined,
+        heavyStatusUpdated: heavyStatusUpdated
+          ? {
+              oldStatus: oldHeavyStatus,
+              newStatus: newHeavyStatus,
+            }
+          : undefined,
+        morningDeliveryUpdated: morningDeliveryUpdated
+          ? {
+              // NEW
+              oldStatus: oldMorningDelivery,
+              newStatus: newMorningDelivery,
+            }
+          : undefined,
       },
     });
-
   } catch (error) {
     console.error("updatePickupItems ERROR ❌", error);
     return res.status(500).json({
@@ -898,66 +927,174 @@ export const updatePickup = catchAsync(async (req, res, next) => {
 // Helper function for notification message
 function getUpdateNotificationMessage(operationLog) {
   const messages = [];
-  
+
   if (operationLog.added.length > 0) {
-    const items = operationLog.added.map(i => `${i.label} (x${i.quantity})`).join(", ");
+    const items = operationLog.added
+      .map((i) => `${i.label} (x${i.quantity})`)
+      .join(", ");
     messages.push(`Added: ${items}`);
   }
-  
+
   if (operationLog.removed.length > 0) {
-    const items = operationLog.removed.map(i => i.label).join(", ");
+    const items = operationLog.removed.map((i) => i.label).join(", ");
     messages.push(`Removed: ${items}`);
   }
-  
+
   if (operationLog.updated.length > 0) {
-    const items = operationLog.updated.map(i => `${i.label}: ${i.oldQuantity} → ${i.newQuantity}`).join(", ");
+    const items = operationLog.updated
+      .map((i) => `${i.label}: ${i.oldQuantity} → ${i.newQuantity}`)
+      .join(", ");
     messages.push(`Updated: ${items}`);
   }
-  
+
   return messages.length > 0 ? messages.join(" | ") : null;
 }
 
 export const getPickups = catchAsync(async (req, res, next) => {
-  const { date, status } = req.query; // Date filter from query and status filter
-  const startDate = date ? new Date(date) : new Date(); // Default to current date
-  startDate.setHours(0, 0, 0, 0);
-  const endDate = new Date();
+  const { date, startDate: start, endDate: end, status } = req.query;
 
-  // ✅ Base filter
-  const baseFilter = {
-    PickupStatus: status,
-    type: "live",
-    isRescheduled: false,
-  };
+  if (status === "assigned") {
+    const baseFilter = {
+      PickupStatus: "assigned",
+      isRescheduled: false,
+      isDeleted: false,
+    };
 
-  // ✅ Apply date filter ONLY when status is NOT deleted
-  if (status !== "deleted") {
-    baseFilter.pickup_date = { $gte: startDate, $lte: endDate };
+    const [pickups, total] = await Promise.all([
+      new APIFeatures(pickup.find(baseFilter), req.query)
+        .sort()
+        .limitFields()
+        .paginate().query,
+      pickup.countDocuments(baseFilter),
+    ]);
+
+    return res.status(200).json({
+      Pickups: pickups,
+      total,
+      message: "Assigned Pickups Retrieved Successfully",
+    });
+  }
+
+  let dateFilter = {};
+
+  if (start && end) {
+    // Date range provided
+    const rangeStart = new Date(start);
+    rangeStart.setHours(0, 0, 0, 0);
+    const rangeEnd = new Date(end);
+    rangeEnd.setHours(23, 59, 59, 999);
+    dateFilter = { $gte: rangeStart, $lte: rangeEnd };
+  } else if (date) {
+    // Single date provided
+    const singleStart = new Date(date);
+    singleStart.setHours(0, 0, 0, 0);
+    const singleEnd = new Date(date);
+    singleEnd.setHours(23, 59, 59, 999);
+    dateFilter = { $gte: singleStart, $lte: singleEnd };
+  } else {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    dateFilter = { $gte: todayStart, $lte: todayEnd };
+  }
+
+  if (status === "pending") {
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    let pendingDateFilter = {};
+
+    if (start && end) {
+      const rangeStart = new Date(start);
+      rangeStart.setHours(0, 0, 0, 0);
+      const rangeEnd = new Date(end);
+      rangeEnd.setHours(23, 59, 59, 999);
+
+      if (rangeStart > todayEnd) {
+        pendingDateFilter = { $gte: rangeStart, $lte: rangeEnd };
+      } else {
+        pendingDateFilter = { $lte: rangeEnd };
+      }
+    } else if (date) {
+      const singleStart = new Date(date);
+      singleStart.setHours(0, 0, 0, 0);
+      const singleEnd = new Date(date);
+      singleEnd.setHours(23, 59, 59, 999);
+
+      if (singleStart > todayEnd) {
+        pendingDateFilter = { $gte: singleStart, $lte: singleEnd };
+      } else {
+        pendingDateFilter = { $lte: singleEnd };
+      }
+    } else {
+      pendingDateFilter = { $lte: todayEnd };
+    }
+
+    const baseFilter = {
+      PickupStatus: "pending",
+      isDeleted: false,
+      pickup_date: pendingDateFilter,
+    };
+
+    const [pickups, total] = await Promise.all([
+      new APIFeatures(pickup.find(baseFilter), req.query)
+        .sort()
+        .limitFields()
+        .paginate().query,
+      pickup.countDocuments(baseFilter),
+    ]);
+
+    return res.status(200).json({
+      Pickups: pickups,
+      total,
+      message: "Pending Pickups Retrieved Successfully",
+    });
+  }
+
+  if (status === "complete") {
+    const baseFilter = {
+      PickupStatus: "complete",
+      isDeleted: false,
+      updatedAt: dateFilter,
+    };
+
+    const [pickups, total] = await Promise.all([
+      new APIFeatures(pickup.find(baseFilter), req.query)
+        .sort()
+        .limitFields()
+        .paginate().query,
+      pickup.countDocuments(baseFilter),
+    ]);
+
+    return res.status(200).json({
+      Pickups: pickups,
+      total,
+      message: "Completed Pickups Retrieved Successfully",
+    });
   }
 
   if (status === "deleted") {
-    ((baseFilter.type = ""), (baseFilter.isDeleted = true));
+    const baseFilter = {
+      isDeleted: true,
+      cancelledAt: dateFilter,
+    };
+
+    const [pickups, total] = await Promise.all([
+      new APIFeatures(pickup.find(baseFilter), req.query)
+        .sort()
+        .limitFields()
+        .paginate().query,
+      pickup.countDocuments(baseFilter),
+    ]);
+
+    return res.status(200).json({
+      Pickups: pickups,
+      total,
+      message: "Cancelled Pickups Retrieved Successfully",
+    });
   }
-
-  const [pickups, countTotal] = await Promise.all([
-    new APIFeatures(pickup.find(baseFilter), req.query)
-      .sort()
-      .limitFields()
-      .paginate().query,
-    pickup.countDocuments({
-      PickupStatus: status,
-      type: "live",
-      isDeleted: false,
-      isRescheduled: false,
-      pickup_date: { $gte: startDate, $lte: endDate },
-    }),
-  ]);
-
-  res.status(200).json({
-    Pickups: pickups,
-    total: countTotal,
-    message: "Pickup Retrieved Successfully",
-  });
+  return res.status(400).json({ message: "Invalid status provided" });
 });
 
 export const getPickupById = catchAsync(async (req, res, next) => {
@@ -1185,10 +1322,10 @@ export const deletePickup = catchAsync(async (req, res, next) => {
       //   req.socket.emit("pickupCancelled", { pickupId: id, cancelledBy: userName });
       // }
 
-      req.socket.emitToAdmin("pickupCancelled", {
-        pickupId: id,
-        cancelledBy: userName,
-      });
+      // req.socket.emitToAdmin("pickupCancelled", {
+      //   pickupId: id,
+      //   cancelledBy: userName,
+      // });
 
       return res.status(200).json({
         message: "Pickup cancelled successfully",
@@ -1200,7 +1337,6 @@ export const deletePickup = catchAsync(async (req, res, next) => {
     }
   });
 });
-
 
 export const completePickup = catchAsync(async (req, res, next) => {
   const pickupData = await pickup.findByIdAndUpdate(req.params.id, {
@@ -1215,7 +1351,10 @@ export const completePickup = catchAsync(async (req, res, next) => {
 });
 
 export const addSchedulePickup = catchAsync(async (req, res, next) => {
-  const { name, contact, address, slot } = req.body;
+  const { name, contact, address, slot, pickup_date } = req.body;
+  const date = pickup_date
+    ? new Date(pickup_date)
+    : new Date(new Date().setDate(new Date().getDate() + 1));
   const schedulePickupData = await pickup.create({
     Name: name,
     Contact: contact,
@@ -1224,45 +1363,45 @@ export const addSchedulePickup = catchAsync(async (req, res, next) => {
     plantName: "Delhi",
     type: "schedule",
     PickupStatus: "pending",
-    pickup_date: new Date(),
+    pickup_date: date,
   });
   // req.socket.emit("addSchedulePickup", schedulePickupData);
   req.socket.emitToAdmin("addSchedulePickup", schedulePickupData);
   res.status(200).json({
-    message: "SchedulePickup Added Sucessfully",
+    message: "SchedulePickup Added Successfully",
     data: schedulePickupData,
   });
 });
 
 // This function will be called every 24 hours
-const schedulePickuptolive = async () => {
-  try {
-    const currentDate = new Date();
+// const schedulePickuptolive = async () => {
+//   try {
+//     const currentDate = new Date();
 
-    // Find all pickups that are rescheduled and where the rescheduled date has passed or is today
-    const rescheduledPickups = await pickup.find({
-      type: "schedule",
-    });
+//     // Find all pickups that are rescheduled and where the rescheduled date has passed or is today
+//     const rescheduledPickups = await pickup.find({
+//       type: "schedule",
+//     });
 
-    // Update each rescheduled pickup back to "regular"
-    for (const pickupData of rescheduledPickups) {
-      pickupData.type = "live";
-      pickupData.isRescheduled = false;
-      pickupData.isDeleted = false;
-      pickupData.PickupStatus = "pending";
-      // pickupData.pickup_date = currentDate;
+//     // Update each rescheduled pickup back to "regular"
+//     for (const pickupData of rescheduledPickups) {
+//       pickupData.type = "live";
+//       pickupData.isRescheduled = false;
+//       pickupData.isDeleted = false;
+//       pickupData.PickupStatus = "pending";
+//       // pickupData.pickup_date = currentDate;
 
-      await pickupData.save(); // Save the changes
-    }
+//       await pickupData.save(); // Save the changes
+//     }
 
-    console.log("Rescheduled pickups have been updated successfully");
-  } catch (error) {
-    console.error("Error in reschedulePickupJob:", error);
-  }
-};
+//     console.log("Rescheduled pickups have been updated successfully");
+//   } catch (error) {
+//     console.error("Error in reschedulePickupJob:", error);
+//   }
+// };
 
 // Schedule the cron job to run every 24 hours (you can set it to run at midnight every day)
-cron.schedule("0 0 * * *", schedulePickuptolive); // This runs at 00:00 (midnight) every day
+// cron.schedule("0 0 * * *", schedulePickuptolive); // This runs at 00:00 (midnight) every day
 
 export const getSchedulePickups = catchAsync(async (req, res, next) => {
   const [pickups, countTotal] = await Promise.all([
@@ -1526,7 +1665,7 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
   // Use the user's plant name to filter pickups
   const plantName = user.plant;
 
-  if (req.query.status === "processing") {
+  if (req.query.status === "processing" || req.query.status === "reprocessing") {
     const status = req.query.status;
     const [orders, countTotal] = await Promise.all([
       new APIFeatures(order.find({ status, plantName: plantName }), req.query)
@@ -1877,6 +2016,7 @@ export const changeOrderStatus = catchAsync(async (req, res, next) => {
   const validStatuses = [
     "intransit",
     "processing",
+    "reprocessing",
     "ready for delivery",
     "cancelled",
     "delivery rider assigned",
