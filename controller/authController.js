@@ -12,6 +12,7 @@ import bcrypt from "bcryptjs/dist/bcrypt.js";
 import otp from "../models/otpSchema.js";
 import customerFcmService from "../services/customerFcmService.js";
 import { createCustomerNotification } from "./customerNotificationController.js";
+import { sendSmsthroughMSG91 } from "../utills/helpers.js";
 
 const signAccToken = (id, type) => {
   return jwt.sign({ id, userType: type }, process.env.JWT_SECRET, {
@@ -862,8 +863,11 @@ export const loginViaOtp = catchAsync(async (req, res, next) => {
       new: true, // return created/updated doc
     },
   );
+  console.log("this is the result sssss===>", result);
 
-  const otp_res = await sendOtpOnWhatsApp(phoneNumber, gen_otp);
+  // const otp_res = await sendOtpOnWhatsApp(phoneNumber, gen_otp);
+
+  const otp_res = await sendSmsthroughMSG91(phoneNumber, gen_otp, result._id.toString());
 
   // console.log("here is the result",otp_res)
 
