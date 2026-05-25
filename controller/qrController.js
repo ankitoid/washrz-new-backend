@@ -194,24 +194,45 @@ export const cancelQR = async (req, res) => {
 
     const { qrId } = req.params;
 
-    await razorpay.qrCodes.close(qrId);
-
     const order = await Order.findOne({
       "qrPayments.qrId": qrId
     });
 
-    if (order) {
-
-      const qr = order.qrPayments.find(q => q.qrId === qrId);
-
-      qr.status = "cancelled";
-
-      await order.save();
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "QR not found"
+      });
     }
+
+    const qr = order.qrPayments.find(q => q.qrId === qrId);
+
+    if (!qr) {
+      return res.status(404).json({
+        success: false,
+        message: "QR not found"
+      });
+    }
+
+    let providerClosed = false;
+
+    try {
+      await razorpay.qrCode.close(qrId);
+      providerClosed = true;
+    } catch (providerError) {
+      console.log("QR provider close skipped:", providerError?.message || providerError);
+    }
+
+    if (qr.status !== "paid") {
+      qr.status = "cancelled";
+    }
+
+    await order.save();
 
     res.json({
       success: true,
-      message: "QR cancelled"
+      message: "QR cancelled",
+      providerClosed
     });
 
   } catch (error) {

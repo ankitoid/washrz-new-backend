@@ -365,6 +365,18 @@ export const markAsPaid = async (req, res) => {
 
     await order.save();
 
+    if (req.socket) {
+      req.socket.emitToOrder(order.order_id, "paymentUpdate", {
+        orderId: order.order_id,
+        paymentStatus: "success",
+        isPaid: true,
+        orderStatus: order.status,
+        amount: order.totalAmount || order.price,
+        transactionId: order.payment?.transactionId || transactionId,
+        time: new Date(),
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: "Order marked as paid successfully",
