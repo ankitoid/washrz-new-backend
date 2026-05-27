@@ -190,6 +190,70 @@ const CouponManageSchema = new Schema(
   { _id: false },
 );
 
+
+// ========= INVOICE SCHEMA  ==========
+
+const invoiceSnapshotSchema = new mongoose.Schema(
+  {
+    // Invoice identification
+    invoiceNumber: { type: String, required: true, unique: true, sparse: true },
+    invoiceDate: { type: Date, default: Date.now },
+    invoiceGeneratedBy: { type: String, default: "system" },
+
+
+    //gst number
+    gstNumber: { type: String, default: "" },
+ 
+    // Customer details (captured at generation time)
+    customerName: String,
+    address: String,
+    contactNo: String,
+    email: String,
+ 
+    // Reference to the parent order
+    orderId: String,
+ 
+    // Frozen item list
+    items: [
+      {
+        label: String,
+        price: Number,
+        quantity: Number,
+        unit: String,
+        totalItemPrice: Number,   // price * quantity
+        sku: String,
+        sacid: String,
+      },
+    ],
+ 
+    // Pricing breakdown
+    subtotal: Number,
+    deliveryCharges: Number,
+    taxAmount: Number,
+    discountAmount: Number,
+    totalAmount: Number,
+ 
+    // Payment snapshot (always "paid" since invoice is generated after payment)
+    payment: {
+      mode: String,              // e.g., 'upi', 'card', 'cash'
+      transactionId: String,
+      status: String,            // 'success'
+      paidAt: Date,
+    },
+ 
+    // Document status
+    status: {
+      type: String,
+      enum: ["generated", "sent", "void"],
+      default: "generated",
+    },
+ 
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }   // _id: false because it's embedded inside the order
+);
+ 
+
 // ========== MAIN ORDER SCHEMA ==========
 
 const orderSchema = new Schema(
@@ -347,6 +411,8 @@ const orderSchema = new Schema(
     updatedBy: String,
     isActive: { type: Boolean, default: true },
     isArchived: { type: Boolean, default: false, index: true },
+
+    invoice: { type: invoiceSnapshotSchema, default: null }
   },
   {
     timestamps: true,
