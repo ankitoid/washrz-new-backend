@@ -242,7 +242,7 @@ const invoiceSnapshotSchema = new mongoose.Schema(
         price: Number,
         quantity: Number,
         unit: String,
-        totalItemPrice: Number,   // price * quantity
+        totalItemPrice: String,   // price * quantity
         sku: String,
         sacid: String,
       },

@@ -135,7 +135,7 @@ try{
         price: item.price,
         quantity: item.quantity,
         unit: item.unit || '',
-        totalItemPrice: +(item.price * item.quantity).toFixed(2),
+        totalItemPrice: +(item.price * item.quantity).toFixed(2).toString(),
         sku : item.itemId.sku || '',
         sacid : item.itemId.sacid || ''
       })),
