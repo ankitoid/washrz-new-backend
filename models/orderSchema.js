@@ -28,7 +28,7 @@ const itemStatusHistorySchema = new mongoose.Schema(
 );
 
 const itemSchema = new mongoose.Schema({
-  lineId: { type: String, required: true },
+  lineId: { type: String}, // Unique identifier for this item line (can be generated as orderId + index)
   itemId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "CatalogItem",
