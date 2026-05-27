@@ -12,6 +12,7 @@ import customerFcmService from "../services/customerFcmService.js";
 import { createCustomerNotification } from "./customerNotificationController.js";
 import CatalogItem from "../models/catalogItemSchema.js";
 import slotBookingSchema from "../models/slotBookingSchema.js";
+import { assignPickupToRider } from "../services/pickupAssignmentService.js";
 
 // upload audio and voice
 // Configure AWS S3
@@ -41,6 +42,82 @@ const uploadToS3 = (file, bucketName, folder = "intransiteOrderImage") => {
   return s3.upload(params).promise();
 };
 
+const ADDRESS_KEYS = ["addressLine1", "landmark", "city", "state", "pincode"];
+
+const buildFullAddress = (address = {}) =>
+  ADDRESS_KEYS.filter((key) => address?.[key])
+    .map((key) => address[key])
+    .join(" ");
+
+const fetchCustomerAddresses = async (appCustomerId) => {
+  const addrRes = await fetch(
+    `https://live.drydash.in/v1/addresses?customerid=${appCustomerId}`,
+  );
+
+  if (!addrRes.ok) {
+    throw new Error("Failed to fetch customer addresses");
+  }
+
+  const addrData = await addrRes.json();
+  return Array.isArray(addrData?.results) ? addrData.results : [];
+};
+
+const buildLocation = (address, fallback) => {
+  if (address?.latitude != null && address?.longitude != null) {
+    return {
+      latitude: address.latitude,
+      longitude: address.longitude,
+    };
+  }
+
+  if (fallback?.latitude != null && fallback?.longitude != null) {
+    return {
+      latitude: fallback.latitude,
+      longitude: fallback.longitude,
+    };
+  }
+
+  return undefined;
+};
+
+const createItemStatusHistory = (status) => ({
+  intransit: status === "intransit" ? new Date() : null,
+  processing: status === "processing" ? new Date() : null,
+  reprocessing: status === "reprocessing" ? new Date() : null,
+  readyForDelivery: status === "ready for delivery" ? new Date() : null,
+  deliveryriderassigned:
+    status === "delivery rider assigned" ? new Date() : null,
+  delivered: status === "delivered" ? new Date() : null,
+  cancelled: status === "cancelled" ? new Date() : null,
+});
+
+const buildOrderLineItems = ({ orderId, pickupItems, catalogItems, imageUrls }) =>
+  pickupItems.flatMap((reqItem) => {
+    const catalogItem = catalogItems.find(
+      (ci) => ci._id.toString() === String(reqItem.itemId),
+    );
+
+    if (!catalogItem) return [];
+
+    const quantity = Math.max(1, Number(reqItem.quantity || 1));
+    const skuBase = String(catalogItem.sku || catalogItem.sacid || catalogItem._id)
+      .trim()
+      .replace(/\s+/g, "-")
+      .toUpperCase();
+
+    return Array.from({ length: quantity }, (_, index) => ({
+      lineId: `${orderId}-${skuBase}-${index + 1}`,
+      itemId: catalogItem._id,
+      label: catalogItem.label,
+      price: catalogItem.price,
+      unit: catalogItem.unit,
+      intransitImages: [...imageUrls],
+      readyForDeliveryImages: [],
+      status: "intransit",
+      statusHistory: createItemStatusHistory("intransit"),
+    }));
+  });
+
 export const uploadFiles = (req, res, next) => {
   upload(req, res, async (err) => {
     console.log("this is the err:: ", err);
@@ -52,7 +129,6 @@ export const uploadFiles = (req, res, next) => {
     const { id } = req.params; // ✅ this is pickupId
     const { image } = req.files;
     const voice = req.files?.voice || [];
-    req.app.use(express.json({ limit: "100mb" }));
     const location = req.body?.location || null;
     const items = req.body.items;
 //  Format:
@@ -140,10 +216,14 @@ export const uploadFiles = (req, res, next) => {
         isActive: true,
       });
 
-      const finalItems = parsedItems.map((reqItem) => {
+      const finalPickupItems = parsedItems.map((reqItem) => {
         const catalogItem = catalogItems.find(
-          (ci) => ci._id.toString() === reqItem.itemId
+          (ci) => ci._id.toString() === reqItem.itemId,
         );
+
+        if (!catalogItem) {
+          throw new Error(`Catalog item not found for itemId ${reqItem.itemId}`);
+        }
 
         return {
           itemId: catalogItem._id,
@@ -157,16 +237,16 @@ export const uploadFiles = (req, res, next) => {
       // -------------------------
       // Calculate price
       // -------------------------
-      const totalPrice = finalItems.reduce(
+      const totalPrice = finalPickupItems.reduce(
         (sum, item) => sum + item.price * item.quantity,
-        0
+        0,
       );
 
       // -------------------------
       // Update Pickup (items + total)
       // -------------------------
       await Pickup.findByIdAndUpdate(id, {
-        items: finalItems,
+        items: finalPickupItems,
         totalAmount: totalPrice,
       });
 
@@ -189,19 +269,22 @@ export const uploadFiles = (req, res, next) => {
         );
       }
 
-      // -------------------------
-      // Order ID
-      // -------------------------
-      const latestOrder = await Order.find().sort({ _id: -1 });
-      let order_id = `WZ1001`;
+      const latestOrder = await Order.find().sort({ _id: -1 }).limit(1);
+      let order_id = "WZ1001";
       if (latestOrder.length > 0) {
-        order_id = latestOrder[0].order_id.split("WZ")[1] * 1 + 1;
-        order_id = "WZ" + order_id;
+        order_id = `WZ${Number(latestOrder[0].order_id.split("WZ")[1]) + 1}`;
       }
 
-      let statusHistory = {
-        intransit: null,
-        processing: new Date(),
+      const orderLineItems = buildOrderLineItems({
+        orderId: order_id,
+        pickupItems: parsedItems,
+        catalogItems,
+        imageUrls,
+      });
+      
+      const statusHistory = {
+        intransit: new Date(),
+        processing: null,
         reprocessing: null,
         readyForDelivery: null,
         deliveryriderassigned: null,
@@ -213,33 +296,34 @@ export const uploadFiles = (req, res, next) => {
       // Create Order
       // -------------------------
       const order_details = await Order.create({
-  contactNo,
-  customerName,
-  address,
-  appCustomerId: pickup_details?.appCustomerId || null,
-  tempPickupAdresssId: pickup_details?.tempPickupAdresssId || null,
-  tempDeliveryAddressId: pickup_details?.tempDeliveryAddressId || null,
-  platform_type: pickup_details?.platform_type || "wati",
-  items: finalItems,
-  price: totalPrice,
-  order_id,
-  intransitVoice: voiceUpload?.Location || null,
-  intransitImage: imageUrls,
-  plantName,
-  orderLocation: parsedLocation,
-  statusHistory,
-  assignedRider: {
-    pickup: pickup_details?.assignedRider?.pickup
-      ? {
-          riderId: pickup_details.assignedRider.pickup.riderId,
-          riderName: pickup_details.assignedRider.pickup.riderName,
-          assignedAt: pickup_details.assignedRider.pickup.assignedAt,
-        }
-      : null,
-    delivery: null,
-  },
-  morningDelivery: morning_delivery,
-});
+        contactNo,
+        customerName,
+        address,
+        appCustomerId: pickup_details?.appCustomerId || null,
+        tempPickupAdresssId: pickup_details?.tempPickupAdresssId || null,
+        tempDeliveryAddressId: pickup_details?.tempDeliveryAddressId || null,
+        platform_type: pickup_details?.platform_type || "wati",
+        items: orderLineItems,
+        price: totalPrice,
+        order_id,
+        status: "intransit",
+        intransitVoice: voiceUpload?.Location || null,
+        intransitImage: imageUrls,
+        plantName,
+        orderLocation: parsedLocation,
+        statusHistory,
+        assignedRider: {
+          pickup: pickup_details?.assignedRider?.pickup
+            ? {
+                riderId: pickup_details.assignedRider.pickup.riderId,
+                riderName: pickup_details.assignedRider.pickup.riderName,
+                assignedAt: pickup_details.assignedRider.pickup.assignedAt,
+              }
+            : null,
+          delivery: null,
+        },
+        morningDelivery: morning_delivery,
+      });
 
       // -------------------------
       // Mark pickup complete
@@ -266,18 +350,18 @@ export const uploadFiles = (req, res, next) => {
           customerId,
           {
             title: "✅ Item's = secured",
-            body: "Your laundry's escape plan is in motion. Sit tight, we’ll handle the rest!",
+            body: "Your laundry's escape plan is in motion. Sit tight, we'll handle the rest!",
           },
           {
             type: "pickup_Completed",
             pickupId: String(id),
             screen: "PickupDetails",
-          }
+          },
         );
       }
 
       res.status(200).json({
-        message: "Files uploaded and order status updated to processing.",
+        message: "Files uploaded and order created successfully.",
         imageUrls,
         voiceUrl: voiceUpload?.Location || null,
       });
@@ -311,7 +395,7 @@ export const addMoreIntransitImages = catchAsync(async (req, res, next) => {
 
     try {
       const imageUploads = await Promise.all(
-        images.map((img) => uploadToS3(img, process.env.AWS_S3_BUCKET_NAME))
+        images.map((img) => uploadToS3(img, process.env.AWS_S3_BUCKET_NAME)),
       );
       const imageUrls = imageUploads.map((uploadData) => uploadData.Location);
 
@@ -322,7 +406,7 @@ export const addMoreIntransitImages = catchAsync(async (req, res, next) => {
             intransitImage: { $each: imageUrls },
           },
         },
-        { new: true }
+        { new: true },
       );
 
       if (!updatedOrder) {
@@ -341,65 +425,67 @@ export const addMoreIntransitImages = catchAsync(async (req, res, next) => {
   });
 });
 
-export const uploadReadyForDeliveryImages = catchAsync(async (req, res, next) => {
-  upload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ message: "Error uploading files.", err });
-    }
-
-    const { id } = req.params;
-    const images = req.files?.image || [];
-
-    if (!id) {
-      return res.status(400).json({
-        message: "Order ID is required.",
-      });
-    }
-
-    if (!images.length) {
-      return res.status(400).json({
-        message: "At least one image is required.",
-      });
-    }
-
-    try {
-      const imageUploads = await Promise.all(
-        images.map((img) =>
-          uploadToS3(
-            img,
-            process.env.AWS_S3_BUCKET_NAME,
-            "readyForDeliveryImages"
-          )
-        )
-      );
-
-      const imageUrls = imageUploads.map((uploadData) => uploadData.Location);
-
-      const updatedOrder = await Order.findByIdAndUpdate(
-        id,
-        {
-          $push: {
-            ready_for_delivery_images: { $each: imageUrls },
-          },
-        },
-        { new: true }
-      );
-
-      if (!updatedOrder) {
-        return res.status(404).json({ message: "Order not found." });
+export const uploadReadyForDeliveryImages = catchAsync(
+  async (req, res, next) => {
+    upload(req, res, async (err) => {
+      if (err) {
+        return res.status(400).json({ message: "Error uploading files.", err });
       }
 
-      return res.status(200).json({
-        message: "Ready for delivery images uploaded successfully.",
-        addedImages: imageUrls,
-        ready_for_delivery_images: updatedOrder.ready_for_delivery_images,
-      });
-    } catch (error) {
-      console.error("Error uploading ready for delivery images:", error);
-      return res.status(500).json({ message: "Internal server error." });
-    }
-  });
-});
+      const { id } = req.params;
+      const images = req.files?.image || [];
+
+      if (!id) {
+        return res.status(400).json({
+          message: "Order ID is required.",
+        });
+      }
+
+      if (!images.length) {
+        return res.status(400).json({
+          message: "At least one image is required.",
+        });
+      }
+
+      try {
+        const imageUploads = await Promise.all(
+          images.map((img) =>
+            uploadToS3(
+              img,
+              process.env.AWS_S3_BUCKET_NAME,
+              "readyForDeliveryImages",
+            ),
+          ),
+        );
+
+        const imageUrls = imageUploads.map((uploadData) => uploadData.Location);
+
+        const updatedOrder = await Order.findByIdAndUpdate(
+          id,
+          {
+            $push: {
+              ready_for_delivery_images: { $each: imageUrls },
+            },
+          },
+          { new: true },
+        );
+
+        if (!updatedOrder) {
+          return res.status(404).json({ message: "Order not found." });
+        }
+
+        return res.status(200).json({
+          message: "Ready for delivery images uploaded successfully.",
+          addedImages: imageUrls,
+          ready_for_delivery_images: updatedOrder.ready_for_delivery_images,
+        });
+      } catch (error) {
+        console.error("Error uploading ready for delivery images:", error);
+        return res.status(500).json({ message: "Internal server error." });
+      }
+    });
+  },
+);
 
 // Reschedule Pickup Controller
 export const reschedulePickup = async (req, res) => {
@@ -562,11 +648,14 @@ export const deletePickup = catchAsync(async (req, res, next) => {
   if (!pickupData) {
     return next(new AppError("No pickup found with that ID", 404));
   }
-  if(pickupData?.bookingId){
-    await slotBookingSchema.findOneAndUpdate({bookingId: pickupData.bookingId}, {status: 'cancelled'})
+  if (pickupData?.bookingId) {
+    await slotBookingSchema.findOneAndUpdate(
+      { bookingId: pickupData.bookingId },
+      { status: "cancelled" },
+    );
   }
 
-    res.status(200).json({
+  res.status(200).json({
     message: "Pickup Deleted Sucessfully",
   });
 });
@@ -691,6 +780,155 @@ export const uploadDeliverImage = catchAsync(async (req, res) => {
       console.error("Error uploading files or updating pickup:", error);
       res.status(500).json({ message: "Internal server error." });
     }
+  });
+});
+
+export const createFollowupPickup = catchAsync(async (req, res) => {
+  const { orderId } = req.params;
+  const { riderId, riderName } = req.body;
+
+  if (!riderId || !riderName) {
+    return res.status(400).json({
+      message: "riderId and riderName are required",
+    });
+  }
+
+  const deliveredOrder = await Order.findById(orderId);
+
+  if (!deliveredOrder) {
+    return res.status(404).json({
+      message: "Order not found",
+    });
+  }
+
+  if (deliveredOrder.status !== "delivered") {
+    return res.status(400).json({
+      message: "Follow-up pickup can only be created for delivered orders",
+    });
+  }
+
+  const sourcePickup = await Pickup.findOne({ orderId: deliveredOrder._id });
+
+  const appCustomerId =
+    deliveredOrder.appCustomerId || sourcePickup?.appCustomerId || null;
+  const tempPickupAdresssId =
+    deliveredOrder.tempPickupAdresssId || sourcePickup?.tempPickupAdresssId || null;
+  const tempDeliveryAddressId =
+    deliveredOrder.tempDeliveryAddressId ||
+    sourcePickup?.tempDeliveryAddressId ||
+    null;
+
+  const customerName = deliveredOrder.customerName || sourcePickup?.Name;
+  const contactNo = deliveredOrder.contactNo || sourcePickup?.Contact;
+
+  if (!customerName || !contactNo) {
+    return res.status(400).json({
+      message: "Customer name or contact number is missing on the delivered order",
+    });
+  }
+
+  let pickupAddressRecord = null;
+  let deliveryAddressRecord = null;
+
+  if (appCustomerId && (tempPickupAdresssId || tempDeliveryAddressId)) {
+    const addresses = await fetchCustomerAddresses(appCustomerId);
+
+    if (tempPickupAdresssId) {
+      pickupAddressRecord =
+        addresses.find((addr) => addr.id === tempPickupAdresssId) || null;
+    }
+
+    if (tempDeliveryAddressId) {
+      deliveryAddressRecord =
+        addresses.find((addr) => addr.id === tempDeliveryAddressId) || null;
+    }
+  }
+
+  const pickupPayload = {
+    Name: customerName,
+    Contact: contactNo,
+    plantName: sourcePickup?.plantName || deliveredOrder.plantName || "Delhi",
+    type: "live",
+    PickupStatus: "pending",
+    pickup_date: new Date(),
+    platform_type:
+      appCustomerId != null
+        ? "app"
+        : sourcePickup?.platform_type || deliveredOrder.platform_type || "wati",
+    totalAmount: 0,
+    slot: "NA",
+    items: [],
+    isHeavy: sourcePickup?.isHeavy ?? false,
+    morning_delivery: sourcePickup?.morning_delivery ?? true,
+  };
+
+  if (appCustomerId) {
+    pickupPayload.appCustomerId = appCustomerId;
+  }
+
+  if (tempPickupAdresssId) {
+    pickupPayload.tempPickupAdresssId = tempPickupAdresssId;
+  }
+
+  if (tempDeliveryAddressId) {
+    pickupPayload.tempDeliveryAddressId = tempDeliveryAddressId;
+  }
+
+  pickupPayload.Address =
+    buildFullAddress(pickupAddressRecord) ||
+    sourcePickup?.Address ||
+    deliveredOrder.address;
+
+  pickupPayload.deliveryAddress =
+    buildFullAddress(deliveryAddressRecord) ||
+    sourcePickup?.deliveryAddress ||
+    deliveredOrder.address;
+
+  const pickupLocation = buildLocation(
+    pickupAddressRecord,
+    sourcePickup?.pickupLocation,
+  );
+  if (pickupLocation) {
+    pickupPayload.pickupLocation = pickupLocation;
+  }
+
+  const deliveryLocation = buildLocation(deliveryAddressRecord, {
+    latitude:
+      sourcePickup?.deliveryLocation?.latitude ??
+      deliveredOrder.orderLocation?.latitude,
+    longitude:
+      sourcePickup?.deliveryLocation?.longitude ??
+      deliveredOrder.orderLocation?.longitude,
+  });
+  if (deliveryLocation) {
+    pickupPayload.deliveryLocation = deliveryLocation;
+  }
+
+  pickupPayload.contactName =
+    deliveryAddressRecord?.contactName ||
+    sourcePickup?.contactName ||
+    deliveredOrder.contactName ||
+    null;
+
+  pickupPayload.contactPhone =
+    deliveryAddressRecord?.contactPhone ||
+    sourcePickup?.contactPhone ||
+    deliveredOrder.contactPhone ||
+    null;
+
+  const pickupData = await Pickup.create(pickupPayload);
+  const assignedPickup = await assignPickupToRider({
+    pickupId: pickupData._id,
+    riderId,
+    riderName,
+    socket: req.socket,
+  });
+
+  req.socket.emitToAll("addPickup", assignedPickup);
+
+  return res.status(201).json({
+    message: "Follow-up pickup created and assigned successfully",
+    data: assignedPickup,
   });
 });
 

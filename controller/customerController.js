@@ -37,6 +37,44 @@ const uploadToS3 = (file, folder = "pickupCancelVoices") => {
   return s3.upload(params).promise();
 };
 
+const createOrderItemStatusHistory = (status) => ({
+  intransit: status === "intransit" ? new Date() : null,
+  processing: status === "processing" ? new Date() : null,
+  reprocessing: status === "reprocessing" ? new Date() : null,
+  readyForDelivery: status === "ready for delivery" ? new Date() : null,
+  deliveryriderassigned:
+    status === "delivery rider assigned" ? new Date() : null,
+  delivered: status === "delivered" ? new Date() : null,
+  cancelled: status === "cancelled" ? new Date() : null,
+});
+
+const buildOrderLineItems = ({ orderId, requestItems, catalogItems }) =>
+  requestItems.flatMap((reqItem) => {
+    const catalogItem = catalogItems.find(
+      (ci) => ci._id.toString() === String(reqItem.itemId),
+    );
+
+    if (!catalogItem) return [];
+
+    const quantity = Math.max(1, Number(reqItem.quantity || 1));
+    const skuBase = String(catalogItem.sku || catalogItem.sacid || catalogItem._id)
+      .trim()
+      .replace(/\s+/g, "-")
+      .toUpperCase();
+
+    return Array.from({ length: quantity }, (_, index) => ({
+      lineId: `${orderId}-${skuBase}-${index + 1}`,
+      itemId: catalogItem._id,
+      label: catalogItem.label,
+      price: catalogItem.price,
+      unit: catalogItem.unit,
+      intransitImages: [],
+      readyForDeliveryImages: [],
+      status: "intransit",
+      statusHistory: createOrderItemStatusHistory("intransit"),
+    }));
+  });
+
 export const addCustomer = catchAsync(async (req, res, next) => {
   const { name, address, mobile, date } = req.body;
   const socket = req.socket;
@@ -1468,16 +1506,58 @@ export const addOrder = catchAsync(async (req, res, next) => {
       order_id = "WZ" + (lastNumber + 1);
     }
 
-    // -------------------------
-    // Create base order first
-    // -------------------------
-    await order.create({
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        message: "Items are required",
+      });
+    }
+
+    if (items.some((item) => !item.itemId || !item.quantity || item.quantity < 1)) {
+      return res.status(400).json({
+        message: "Invalid items payload",
+      });
+    }
+
+    const itemIds = items.map((item) => item.itemId);
+    const catalogItems = await CatalogItem.find({
+      _id: { $in: itemIds },
+      isActive: true,
+    });
+
+    if (catalogItems.length !== itemIds.length) {
+      return res.status(400).json({
+        message: "Some items are invalid or inactive",
+      });
+    }
+
+    const orderLineItems = buildOrderLineItems({
+      orderId: order_id,
+      requestItems: items,
+      catalogItems,
+    });
+
+    const totalPrice = orderLineItems.reduce(
+      (sum, item) => sum + Number(item.price || 0),
+      0,
+    );
+
+    const orderPayload = {
       contactNo,
       customerName,
-      items,
-      price,
+      items: orderLineItems,
+      price: totalPrice || price || 0,
       order_id,
-    });
+      status: "intransit",
+      statusHistory: {
+        intransit: new Date(),
+        processing: null,
+        reprocessing: null,
+        readyForDelivery: null,
+        deliveryriderassigned: null,
+        delivered: null,
+        cancelled: null,
+      },
+    };
 
     // -------------------------
     // If app customer → fetch delivery address
@@ -1524,31 +1604,22 @@ export const addOrder = catchAsync(async (req, res, next) => {
 
       const fullAddress = buildFullAddress(deliveryAddress);
 
-      // -------------------------
-      // Update order with delivery details
-      // -------------------------
-      await order.update(
-        {
-          address: fullAddress,
-
-          appCustomerId,
-          tempDeliveryAddressId,
-          tempPickupAdresssId,
-          platform_type: "app",
-
-          orderLocation: {
-            latitude: deliveryAddress.latitude,
-            longitude: deliveryAddress.longitude,
-          },
-
-          contactName: deliveryAddress.contactName || null,
-          contactPhone: deliveryAddress.contactPhone || null,
+      Object.assign(orderPayload, {
+        address: fullAddress,
+        appCustomerId,
+        tempDeliveryAddressId,
+        tempPickupAdresssId,
+        platform_type: "app",
+        orderLocation: {
+          latitude: deliveryAddress.latitude,
+          longitude: deliveryAddress.longitude,
         },
-        {
-          where: { order_id },
-        },
-      );
+        contactName: deliveryAddress.contactName || null,
+        contactPhone: deliveryAddress.contactPhone || null,
+      });
     }
+
+    await order.create(orderPayload);
 
     return res.status(200).json({
       message: "Order Added Successfully",

@@ -1,20 +1,26 @@
-import Orders from "../models/orderSchema.js"
-import User from "../models/userModel.js";
+import Orders from "../models/orderSchema.js";
 
-export const customer_services = {}
+export const customer_services = {};
 
+const getItemType = (item) => item?.itemId?.type || item?.type || null;
 
-customer_services.customerOrdersDetails = async (req,res) =>
-{ 
-  let phone = req.params.phone
+const getItemQuantity = (item) => {
+  const quantity = Number(item?.quantity);
+  return quantity > 0 ? quantity : 1;
+};
 
-  const check_phone =  phone.slice(0,2)
+const getItemTotalPrice = (item) =>
+  Number(item?.price || 0) * getItemQuantity(item);
 
-  if(check_phone !== "91"){
-    phone = "91" + phone
+customer_services.customerOrdersDetails = async (req, res) => {
+  let phone = req.params.phone;
+
+  const check_phone = phone.slice(0, 2);
+
+  if (check_phone !== "91") {
+    phone = "91" + phone;
   }
 
-  
   let total_cost_laundry = 0;
   let total_cost_dryclean = 0;
   let total_cost_shoespa = 0;
@@ -22,46 +28,47 @@ customer_services.customerOrdersDetails = async (req,res) =>
   let total_orders_value = 0;
   let avg_orders_value = 0;
 
-  console.log('phone',phone)
+  const orders = await Orders.find({ contactNo: phone }).populate({
+    path: "items.itemId",
+    select: "type",
+  });
+  console.log("this is the orders--->>>", orders);
 
+  orders.forEach((order) => {
+    order.items.forEach((item) => {
+      const itemType = getItemType(item);
+      const itemTotalPrice = getItemTotalPrice(item);
+      const itemQuantity = getItemQuantity(item);
 
+      total_number_of_orders = total_number_of_orders + itemQuantity;
 
-  const orders =  await Orders.find({contactNo:phone})
+      if (itemType === "shoespa") {
+        total_cost_shoespa = total_cost_shoespa + itemTotalPrice;
+      } else if (itemType === "laundry") {
+        total_cost_laundry = total_cost_laundry + itemTotalPrice;
+      } else if (itemType === "dryclean") {
+        total_cost_dryclean = total_cost_dryclean + itemTotalPrice;
+      }
+    });
+  });
 
-     console.log("this is the orders--->>>",orders)
+  total_orders_value =
+    total_cost_laundry + total_cost_dryclean + total_cost_shoespa;
 
-   const data =  orders.forEach((el)=>
-    { 
-        
-        el.items.forEach((el)=>{
-        total_number_of_orders = total_number_of_orders + 1
-        if(el.type == "shoespa")
-        {
-        total_cost_shoespa =  total_cost_shoespa + (el?.price * el?.quantity)
-        }
-        else if(el.type == "laundry")
-        {
-          total_cost_laundry =  total_cost_laundry + (el?.price * el?.quantity)
-        }
-        else if(el.type == "dryclean")
-        {
-          total_cost_dryclean =  total_cost_dryclean + (el?.price * el?.quantity)
-        }
-      })
-    })
-  total_orders_value = total_cost_laundry + total_cost_dryclean + total_cost_shoespa;
+  avg_orders_value =
+    total_number_of_orders > 0
+      ? Math.ceil(total_orders_value / total_number_of_orders)
+      : 0;
 
-  avg_orders_value = Math.ceil(total_orders_value/total_number_of_orders)
-
-
-   return res.status(200).json({data: {
-    total_cost_laundry : total_cost_laundry,
-    total_cost_dryclean : total_cost_dryclean,
-    total_cost_shoespa : total_cost_shoespa,
-    total_number_of_orders : total_number_of_orders,
-    avg_orders_value : avg_orders_value,
-    total_orders_value : total_orders_value,
-    orders : orders
-   }})
-}
-
+  return res.status(200).json({
+    data: {
+      total_cost_laundry,
+      total_cost_dryclean,
+      total_cost_shoespa,
+      total_number_of_orders,
+      avg_orders_value,
+      total_orders_value,
+      orders,
+    },
+  });
+};

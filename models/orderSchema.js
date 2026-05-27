@@ -14,24 +14,46 @@ const { Schema } = mongoose;
 //   type: {type: String, default: ''}
 // }, { _id: false });
 
-const itemSchema = new mongoose.Schema(
+const itemStatusHistorySchema = new mongoose.Schema(
   {
-    itemId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "CatalogItem",
-      required: true,
-    },
-    label: String, // snapshot
-    price: Number, // snapshot
-    unit: String, // snapshot
-    quantity: {
-      type: Number,
-      required: true,
-      min: 1,
-    },
+    intransit:             { type: Date, default: null },
+    processing:            { type: Date, default: null },
+    reprocessing:          { type: Date, default: null },
+    readyForDelivery:      { type: Date, default: null },
+    deliveryriderassigned: { type: Date, default: null },
+    delivered:             { type: Date, default: null },
+    cancelled:             { type: Date, default: null },
   },
   { _id: false },
 );
+
+const itemSchema = new mongoose.Schema({
+  lineId: { type: String, required: true },
+  itemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "CatalogItem",
+    required: true,
+  },
+  label:                  String,
+  price:                  Number,
+  unit:                   String,
+  intransitImages:        { type: [String], default: [] },
+  readyForDeliveryImages: { type: [String], default: [] },
+  status: {
+    type: String,
+    enum: [
+      "intransit",
+      "processing",
+      "reprocessing",
+      "ready for delivery",
+      "delivery rider assigned",
+      "delivered",
+      "cancelled",
+    ],
+    default: "intransit",
+  },
+  statusHistory: { type: itemStatusHistorySchema, default: () => ({}) },
+});
 
 const assignedRiderSchema = new Schema(
   {

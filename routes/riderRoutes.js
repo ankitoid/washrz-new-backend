@@ -1,6 +1,7 @@
 import express from "express";
 import {
   addMoreIntransitImages,
+  createFollowupPickup,
   deletePickup,
   getCancelMedia,
   getRescheduledOrders,
@@ -31,6 +32,7 @@ router.get("/getCancelMedia/:pickupId", getCancelMedia);
 router.patch("/orders/:id/intransit-images", addMoreIntransitImages);
 router.patch("/orders/:id/ready-for-delivery-images", uploadReadyForDeliveryImages);
 router.post("/uploadDeliverImage/:id", uploadDeliverImage);
+router.post("/orders/:orderId/followup-pickup", createFollowupPickup);
 router.get("/rider-dashboard", getRiderDashboardData);
 router.get("/rider-tasks/:riderId", getRiderTasksById);
 
