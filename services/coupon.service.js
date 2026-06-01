@@ -361,7 +361,12 @@ coupons_service.applyToOrder = async (userId, body) => {
       throw new Error("Cannot apply coupon to paid order");
     }
     
-    if (order.Coupon) throw new Error("Coupon already applied");
+    if (order.Coupon){
+      order.Coupon = null; // Clear existing coupon
+      order.discountAmount = 0;
+      order.totalAmount = order.price + (order.deliveryCharges || 0) + (order.taxAmount || 0);
+      await order.save();
+    }
     
     const now = new Date();
     
