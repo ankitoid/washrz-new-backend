@@ -2352,7 +2352,7 @@ export const getOrdersByEmailAndDateRange = catchAsync(
       {
         $group: {
           _id: null,
-          totalRevenue: { $sum: "$price" },
+          totalRevenue: { $sum: "$totalAmount" },
         },
       },
     ]);

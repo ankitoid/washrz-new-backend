@@ -371,8 +371,8 @@ export const markAsPaid = async (req, res) => {
         paymentStatus: "success",
         isPaid: true,
         orderStatus: order.status,
-        amount: order.totalAmount || order.price,
-        transactionId: order.payment?.transactionId || transactionId,
+        amount: order.totalAmount,
+        transactionId: order.payment?.transactionId || transactionId,    // need to look into this : 
         time: new Date(),
       });
     }
