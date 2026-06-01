@@ -397,12 +397,12 @@ coupons_service.applyToOrder = async (userId, body) => {
     }
     
     // Check category if applicable
-    const orderCategory = body.category || "LAUNDRY"; // Get from request or calculate
-    if (coupon.categories && coupon.categories.length > 0) {
-      if (!coupon.categories.includes(orderCategory.toUpperCase())) {
-        throw new Error("Coupon not applicable for this category");
-      }
-    }
+    // const orderCategory = body.category || "LAUNDRY"; // Get from request or calculate
+    // if (coupon.categories && coupon.categories.length > 0) {
+    //   if (!coupon.categories.includes(orderCategory.toUpperCase())) {
+    //     throw new Error("Coupon not applicable for this category");
+    //   }
+    // }
     
     // Calculate discount
     let discount = 0;
