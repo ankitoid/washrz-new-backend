@@ -26,10 +26,7 @@ const s3 = new AWS.S3({
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fieldSize: 100 * 1024 * 1024 },
-}).fields([
-  { name: "image", maxCount: 10 }, // Allow up to 10 images
-  { name: "voice", maxCount: 1 },
-]);
+}).any();
 
 // Function to upload files to S3
 const uploadToS3 = (file, bucketName, folder = "intransiteOrderImage") => {
@@ -91,8 +88,62 @@ const createItemStatusHistory = (status) => ({
   cancelled: status === "cancelled" ? new Date() : null,
 });
 
-const buildOrderLineItems = ({ orderId, pickupItems, catalogItems, imageUrls }) =>
-  pickupItems.flatMap((reqItem) => {
+const groupFilesByFieldname = (files = []) =>
+  files.reduce((acc, file) => {
+    if (!acc[file.fieldname]) {
+      acc[file.fieldname] = [];
+    }
+    acc[file.fieldname].push(file);
+    return acc;
+  }, {});
+
+const extractScopedFiles = (groupedFiles, prefix) => {
+  const scopedFiles = new Map();
+
+  Object.entries(groupedFiles).forEach(([fieldname, files]) => {
+    if (fieldname === prefix) {
+      scopedFiles.set("default", files);
+      return;
+    }
+
+    const bracketPrefix = `${prefix}[`;
+    const dotPrefix = `${prefix}.`;
+    const colonPrefix = `${prefix}:`;
+
+    let scopeKey = null;
+
+    if (fieldname.startsWith(bracketPrefix) && fieldname.endsWith("]")) {
+      scopeKey = fieldname.slice(bracketPrefix.length, -1);
+    } else if (fieldname.startsWith(dotPrefix)) {
+      scopeKey = fieldname.slice(dotPrefix.length);
+    } else if (fieldname.startsWith(colonPrefix)) {
+      scopeKey = fieldname.slice(colonPrefix.length);
+    }
+
+    if (scopeKey) {
+      scopedFiles.set(scopeKey, files);
+    }
+  });
+
+  return scopedFiles;
+};
+
+const getItemScopeKey = (item, index) =>
+  String(item.clientKey || item.scopeKey || item.tempId || item.itemKey || index);
+
+const flattenItemImageUrls = (itemImageUrlsByScopeKey) =>
+  [...itemImageUrlsByScopeKey.values()].flat();
+
+const buildOrderLineItems = ({
+  orderId,
+  pickupItems,
+  catalogItems,
+  itemImageUrlsByScopeKey,
+  splitByQuantity = false,
+}) => {
+  const skuCounters = new Map();
+
+  return pickupItems.flatMap((reqItem, reqIndex) => {
     const catalogItem = catalogItems.find(
       (ci) => ci._id.toString() === String(reqItem.itemId),
     );
@@ -100,23 +151,32 @@ const buildOrderLineItems = ({ orderId, pickupItems, catalogItems, imageUrls }) 
     if (!catalogItem) return [];
 
     const quantity = Math.max(1, Number(reqItem.quantity || 1));
+    const entryCount = splitByQuantity ? quantity : 1;
     const skuBase = String(catalogItem.sku || catalogItem.sacid || catalogItem._id)
       .trim()
       .replace(/\s+/g, "-")
       .toUpperCase();
+    const scopeKey = getItemScopeKey(reqItem, reqIndex);
+    const itemImageUrls = itemImageUrlsByScopeKey.get(scopeKey) || [];
 
-    return Array.from({ length: quantity }, (_, index) => ({
-      lineId: `${orderId}-${skuBase}-${index + 1}`,
-      itemId: catalogItem._id,
-      label: catalogItem.label,
-      price: catalogItem.price,
-      unit: catalogItem.unit,
-      intransitImages: [...imageUrls],
-      readyForDeliveryImages: [],
-      status: "intransit",
-      statusHistory: createItemStatusHistory("intransit"),
-    }));
+    return Array.from({ length: entryCount }, () => {
+      const nextSkuCount = (skuCounters.get(skuBase) || 0) + 1;
+      skuCounters.set(skuBase, nextSkuCount);
+
+      return {
+        lineId: `${skuBase}-${nextSkuCount}`,
+        itemId: catalogItem._id,
+        label: catalogItem.label,
+        price: catalogItem.price,
+        unit: catalogItem.unit,
+        intransitImages: [...itemImageUrls],
+        readyForDeliveryImages: [],
+        status: "intransit",
+        statusHistory: createItemStatusHistory("intransit"),
+      };
+    });
   });
+};
 
 export const uploadFiles = (req, res, next) => {
   upload(req, res, async (err) => {
@@ -126,9 +186,11 @@ export const uploadFiles = (req, res, next) => {
     }
 
     console.log("req.files?", req.files);
+    const groupedFiles = groupFilesByFieldname(req.files || []);
+    const sharedImages = groupedFiles.image || [];
+    const voice = groupedFiles.voice || [];
+    const itemImageFilesByScopeKey = extractScopedFiles(groupedFiles, "itemImages");
     const { id } = req.params; // ✅ this is pickupId
-    const { image } = req.files;
-    const voice = req.files?.voice || [];
     const location = req.body?.location || null;
     const items = req.body.items;
 //  Format:
@@ -150,15 +212,15 @@ export const uploadFiles = (req, res, next) => {
 
 
   console.log("Received items data:", items);
-  console.log("Received images data:", image);
-  console.log("Received id data:", id);
+    console.log("Received itemImages data:", [...itemImageFilesByScopeKey.keys()]);
+    console.log("Received id data:", id);
     
 
 
 
-    if (!id || !image || !items) {
+    if (!id || !items) {
       return res.status(400).json({
-        message: "pickupId (in params), items and image are required.",
+        message: "pickupId (in params) and items are required.",
       });
     }
 
@@ -209,14 +271,54 @@ export const uploadFiles = (req, res, next) => {
         return res.status(400).json({ message: "Items are required" });
       }
 
-      const itemIds = parsedItems.map((i) => i.itemId);
+      const hasExplicitScopeKeys = parsedItems.some(
+        (item) =>
+          item?.clientKey ||
+          item?.scopeKey ||
+          item?.tempId ||
+          item?.itemKey,
+      );
+
+      const normalizedItems = parsedItems.map((item, index) => ({
+        ...item,
+        quantity: hasExplicitScopeKeys
+          ? 1
+          : Math.max(1, Number(item.quantity || 1)),
+        scopeKey: getItemScopeKey(item, index),
+      }));
+
+      const canUseDefaultItemImages = normalizedItems.length === 1;
+      const canUseSharedLegacyImages = sharedImages.length > 0;
+
+      const missingImagesForItems = normalizedItems.filter((item) => {
+        const scopedFiles =
+          itemImageFilesByScopeKey.get(item.scopeKey) ||
+          (canUseDefaultItemImages
+            ? itemImageFilesByScopeKey.get("default") || []
+            : []);
+        const fallbackFiles = scopedFiles.length
+          ? scopedFiles
+          : canUseSharedLegacyImages
+            ? sharedImages
+            : [];
+        return fallbackFiles.length === 0;
+      });
+
+      if (missingImagesForItems.length > 0) {
+        return res.status(400).json({
+          message: "Each item must include at least one image.",
+          missingItemScopes: missingImagesForItems.map((item) => item.scopeKey),
+        });
+      }
+
+      const itemIds = normalizedItems.map((i) => i.itemId);
 
       const catalogItems = await CatalogItem.find({
         _id: { $in: itemIds },
         isActive: true,
       });
 
-      const finalPickupItems = parsedItems.map((reqItem) => {
+      const finalPickupItems = normalizedItems.map((reqItem) => {
         const catalogItem = catalogItems.find(
           (ci) => ci._id.toString() === reqItem.itemId,
         );
@@ -251,14 +353,31 @@ export const uploadFiles = (req, res, next) => {
       });
 
       // -------------------------
-      // Upload files
+      // Upload item images and optional voice
       // -------------------------
-      const imageUploads = await Promise.all(
-        image.map((img) =>
-          uploadToS3(img, process.env.AWS_S3_BUCKET_NAME)
-        )
-      );
-      const imageUrls = imageUploads.map((upload) => upload.Location);
+      const itemImageUrlsByScopeKey = new Map();
+
+      for (const reqItem of normalizedItems) {
+        const scopedItemFiles =
+          itemImageFilesByScopeKey.get(reqItem.scopeKey) ||
+          (canUseDefaultItemImages
+            ? itemImageFilesByScopeKey.get("default") || []
+            : []) ||
+          [];
+        const itemFiles =
+          scopedItemFiles.length > 0 ? scopedItemFiles : sharedImages;
+
+        const uploads = await Promise.all(
+          itemFiles.map((img) =>
+            uploadToS3(img, process.env.AWS_S3_BUCKET_NAME),
+          ),
+        );
+
+        itemImageUrlsByScopeKey.set(
+          reqItem.scopeKey,
+          uploads.map((uploadData) => uploadData.Location),
+        );
+      }
 
       let voiceUpload = null;
       if (voice.length > 0) {
@@ -277,10 +396,12 @@ export const uploadFiles = (req, res, next) => {
 
       const orderLineItems = buildOrderLineItems({
         orderId: order_id,
-        pickupItems: parsedItems,
+        pickupItems: normalizedItems,
         catalogItems,
-        imageUrls,
+        itemImageUrlsByScopeKey,
+        splitByQuantity: !hasExplicitScopeKeys,
       });
+      const allIntransitImageUrls = flattenItemImageUrls(itemImageUrlsByScopeKey);
       
       const statusHistory = {
         intransit: new Date(),
@@ -308,7 +429,8 @@ export const uploadFiles = (req, res, next) => {
         order_id,
         status: "intransit",
         intransitVoice: voiceUpload?.Location || null,
-        intransitImage: imageUrls,
+        // Keep a legacy mirror for old readers during rollout.
+        intransitImage: allIntransitImageUrls,
         plantName,
         orderLocation: parsedLocation,
         statusHistory,
@@ -362,7 +484,8 @@ export const uploadFiles = (req, res, next) => {
 
       res.status(200).json({
         message: "Files uploaded and order created successfully.",
-        imageUrls,
+        items: orderLineItems,
+        imageUrls: allIntransitImageUrls,
         voiceUrl: voiceUpload?.Location || null,
       });
     } catch (error) {
@@ -378,8 +501,10 @@ export const addMoreIntransitImages = catchAsync(async (req, res, next) => {
       return res.status(400).json({ message: "Error uploading files.", err });
     }
 
+    const groupedFiles = groupFilesByFieldname(req.files || []);
+    const images = groupedFiles.image || [];
     const { id } = req.params;
-    const images = req.files?.image || [];
+    const { lineId } = req.body;
 
     if (!id) {
       return res.status(400).json({
@@ -399,6 +524,33 @@ export const addMoreIntransitImages = catchAsync(async (req, res, next) => {
       );
       const imageUrls = imageUploads.map((uploadData) => uploadData.Location);
 
+      if (lineId) {
+        const updatedOrder = await Order.findOneAndUpdate(
+          { _id: id, "items.lineId": lineId },
+          {
+            $push: {
+              "items.$.intransitImages": { $each: imageUrls },
+              intransitImage: { $each: imageUrls },
+            },
+          },
+          { new: true },
+        );
+
+        if (!updatedOrder) {
+          return res.status(404).json({ message: "Order or line item not found." });
+        }
+
+        const updatedItem = updatedOrder.items.find((item) => item.lineId === lineId);
+
+        return res.status(200).json({
+          message: "Images added successfully.",
+          addedImages: imageUrls,
+          lineId,
+          intransitImages: updatedItem?.intransitImages || [],
+          intransitImage: updatedOrder.intransitImage || [],
+        });
+      }
+
       const updatedOrder = await Order.findByIdAndUpdate(
         id,
         {
@@ -414,9 +566,9 @@ export const addMoreIntransitImages = catchAsync(async (req, res, next) => {
       }
 
       return res.status(200).json({
-        message: "Images added successfully.",
+        message: "Images added successfully (legacy order-level fallback).",
         addedImages: imageUrls,
-        intransitImage: updatedOrder.intransitImage,
+        intransitImage: updatedOrder.intransitImage || [],
       });
     } catch (error) {
       console.error("Error adding more intransit images:", error);
@@ -432,8 +584,10 @@ export const uploadReadyForDeliveryImages = catchAsync(
         return res.status(400).json({ message: "Error uploading files.", err });
       }
 
+      const groupedFiles = groupFilesByFieldname(req.files || []);
+      const images = groupedFiles.image || [];
       const { id } = req.params;
-      const images = req.files?.image || [];
+      const { lineId } = req.body;
 
       if (!id) {
         return res.status(400).json({
@@ -460,6 +614,33 @@ export const uploadReadyForDeliveryImages = catchAsync(
 
         const imageUrls = imageUploads.map((uploadData) => uploadData.Location);
 
+        if (lineId) {
+          const updatedOrder = await Order.findOneAndUpdate(
+            { _id: id, "items.lineId": lineId },
+            {
+              $push: {
+                "items.$.readyForDeliveryImages": { $each: imageUrls },
+                ready_for_delivery_images: { $each: imageUrls },
+              },
+            },
+            { new: true },
+          );
+
+          if (!updatedOrder) {
+            return res.status(404).json({ message: "Order or line item not found." });
+          }
+
+          const updatedItem = updatedOrder.items.find((item) => item.lineId === lineId);
+
+          return res.status(200).json({
+            message: "Ready for delivery images uploaded successfully.",
+            addedImages: imageUrls,
+            lineId,
+            readyForDeliveryImages: updatedItem?.readyForDeliveryImages || [],
+            ready_for_delivery_images: updatedOrder.ready_for_delivery_images || [],
+          });
+        }
+
         const updatedOrder = await Order.findByIdAndUpdate(
           id,
           {
@@ -475,9 +656,10 @@ export const uploadReadyForDeliveryImages = catchAsync(
         }
 
         return res.status(200).json({
-          message: "Ready for delivery images uploaded successfully.",
+          message:
+            "Ready for delivery images uploaded successfully (legacy order-level fallback).",
           addedImages: imageUrls,
-          ready_for_delivery_images: updatedOrder.ready_for_delivery_images,
+          ready_for_delivery_images: updatedOrder.ready_for_delivery_images || [],
         });
       } catch (error) {
         console.error("Error uploading ready for delivery images:", error);
