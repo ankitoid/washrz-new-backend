@@ -674,29 +674,17 @@ export const updatePickup = catchAsync(async (req, res, next) => {
     // -------------------------
     // Prepare update object for note
     // -------------------------
-    let updatedNote = existingPickup.note || "";
-    let noteUpdated = false;
-    let oldNote = updatedNote;
+let updatedNote = existingPickup.note || "";
+let noteUpdated = false;
+let oldNote = updatedNote;
 
-    // Update note/specialInstructions if provided
-    if (specialInstructions !== undefined && specialInstructions !== null) {
-      if (specialInstructions === "") {
-        // Clear the note if empty string is sent
-        updatedNote = "";
-        noteUpdated = true;
-      } else {
-        // Check if the content already exists in the note to avoid duplicates
-        if (!updatedNote.includes(specialInstructions)) {
-          // Append the new text with a comma separator
-          if (updatedNote && updatedNote.trim() !== "") {
-            updatedNote = `${updatedNote}, ${specialInstructions}`;
-          } else {
-            updatedNote = specialInstructions;
-          }
-          noteUpdated = true;
-        }
-      }
-    }
+if (specialInstructions !== undefined && specialInstructions !== null) {
+  const newNote = specialInstructions === "" ? "" : specialInstructions.trim();
+  if (newNote !== oldNote) {
+    updatedNote = newNote;
+    noteUpdated = true;
+  }
+}
 
     // -------------------------
     // Prepare update object for isHeavy

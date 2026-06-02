@@ -244,6 +244,7 @@ export const uploadFiles = (req, res, next) => {
       const customerName = pickup_details.Name;
       const plantName = pickup_details.plantName;
       const morning_delivery = pickup_details.morning_delivery || false;
+      const cust_notes = pickup_details.notes || "";
 
       let address = pickup_details.Address;
 
@@ -445,6 +446,7 @@ export const uploadFiles = (req, res, next) => {
           delivery: null,
         },
         morningDelivery: morning_delivery,
+        notes : cust_notes,
       });
 
       // -------------------------
