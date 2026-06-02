@@ -233,6 +233,8 @@ export const uploadFiles = (req, res, next) => {
       // -------------------------
       const pickup_details = await Pickup.findById(id);
 
+      console.log("Fetched pickup details:", pickup_details);
+
       if (!pickup_details) {
         return res.status(404).json({ message: "Pickup not found" });
       }
@@ -244,7 +246,7 @@ export const uploadFiles = (req, res, next) => {
       const customerName = pickup_details.Name;
       const plantName = pickup_details.plantName;
       const morning_delivery = pickup_details.morning_delivery || false;
-      const cust_notes = pickup_details.notes || "";
+      const cust_notes = pickup_details.note || "";
 
       let address = pickup_details.Address;
 
