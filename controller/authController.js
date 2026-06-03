@@ -13,6 +13,10 @@ import otp from "../models/otpSchema.js";
 import customerFcmService from "../services/customerFcmService.js";
 import { createCustomerNotification } from "./customerNotificationController.js";
 import { sendSmsthroughMSG91 } from "../utills/helpers.js";
+import {
+  ORDER_STATUS,
+  updateOrderStatusByItems,
+} from "../services/orderStatusService.js";
 
 const signAccToken = (id, type) => {
   return jwt.sign({ id, userType: type }, process.env.JWT_SECRET, {
@@ -510,7 +514,7 @@ export const updateUserPassword = catchAsync(async (req, res, next) => {
 
 // Update order status
 export const updateOrderStatus = async (req, res) => {
-  const { status } = req.body;
+  const { status, lineId, orderItemId } = req.body;
 
   try {
     const orderId = req.params.id;
@@ -523,38 +527,21 @@ export const updateOrderStatus = async (req, res) => {
         .json({ message: "Order ID and status are required." });
     }
 
-    const existingOrder = await Order.findById(orderId);
-    if (!existingOrder) {
-      return res.status(404).json({ message: "Order not found." });
-    }
-
-    const statusHistoryMap = {
-      intransit: "statusHistory.intransit",
-      processing: "statusHistory.processing",
-      reprocessing: "statusHistory.reprocessing",
-      "ready for delivery": "statusHistory.readyForDelivery",
-      "delivery rider assigned": "statusHistory.deliveryriderassigned",
-      delivered: "statusHistory.delivered",
-      cancelled: "statusHistory.cancelled",
-    };
-
-    const updateData = { status };
-
-    if (statusHistoryMap[status]) {
-      updateData[statusHistoryMap[status]] = new Date();
-    }
-
-    const updatedOrder = await Order.findByIdAndUpdate(orderId, updateData, {
-      new: true,
+    const {
+      order: updatedOrder,
+      previousOrderStatus,
+      nextOrderStatus,
+      updatedItem,
+    } = await updateOrderStatusByItems({
+      orderId,
+      status,
+      lineId,
+      orderItemId,
     });
 
-    if (!updatedOrder) {
-      return res.status(404).json({ message: "Order not found." });
-    }
-
     if (
-      status === "delivery rider assigned" &&
-      existingOrder.status !== "delivery rider assigned" &&
+      nextOrderStatus === ORDER_STATUS.DELIVERY_RIDER_ASSIGNED &&
+      previousOrderStatus !== ORDER_STATUS.DELIVERY_RIDER_ASSIGNED &&
       updatedOrder.appCustomerId
     ) {
       const notification = await createCustomerNotification({
@@ -590,8 +577,8 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     if (
-      status === "delivered" &&
-      existingOrder.status !== "delivered" &&
+      nextOrderStatus === ORDER_STATUS.DELIVERED &&
+      previousOrderStatus !== ORDER_STATUS.DELIVERED &&
       updatedOrder.appCustomerId
     ) {
       const notification = await createCustomerNotification({
@@ -627,7 +614,8 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     if (
-      (status === "delivery rider assigned" || status === "delivered") &&
+      (nextOrderStatus === ORDER_STATUS.DELIVERY_RIDER_ASSIGNED ||
+        nextOrderStatus === ORDER_STATUS.DELIVERED) &&
       !updatedOrder.appCustomerId
     ) {
       customerNotificationResult = {
@@ -645,13 +633,26 @@ export const updateOrderStatus = async (req, res) => {
     return res.status(200).json({
       message: "Order status updated successfully.",
       updatedOrder,
+      updatedItem,
       customerNotification: customerNotificationResult,
       customerPush: customerPushResult,
     });
   } catch (error) {
     console.error("Error updating order status:", error);
-    return res.status(500).json({ message: "Internal server error." });
+    return res
+      .status(error.statusCode || 500)
+      .json({ message: error.message || "Internal server error." });
   }
+};
+
+export const updateOrderItemStatus = async (req, res) => {
+  req.body = {
+    ...req.body,
+    lineId: req.body.lineId,
+    orderItemId: req.body.orderItemId,
+  };
+
+  return updateOrderStatus(req, res);
 };
 
 const s3 = new AWS.S3({

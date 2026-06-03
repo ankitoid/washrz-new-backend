@@ -131,9 +131,6 @@ const extractScopedFiles = (groupedFiles, prefix) => {
 const getItemScopeKey = (item, index) =>
   String(item.clientKey || item.scopeKey || item.tempId || item.itemKey || index);
 
-const flattenItemImageUrls = (itemImageUrlsByScopeKey) =>
-  [...itemImageUrlsByScopeKey.values()].flat();
-
 const buildOrderLineItems = ({
   orderId,
   pickupItems,
@@ -404,7 +401,6 @@ export const uploadFiles = (req, res, next) => {
         itemImageUrlsByScopeKey,
         splitByQuantity: !hasExplicitScopeKeys,
       });
-      const allIntransitImageUrls = flattenItemImageUrls(itemImageUrlsByScopeKey);
       
       const statusHistory = {
         intransit: new Date(),
@@ -432,8 +428,6 @@ export const uploadFiles = (req, res, next) => {
         order_id,
         status: "intransit",
         intransitVoice: voiceUpload?.Location || null,
-        // Keep a legacy mirror for old readers during rollout.
-        intransitImage: allIntransitImageUrls,
         plantName,
         orderLocation: parsedLocation,
         statusHistory,
@@ -489,7 +483,7 @@ export const uploadFiles = (req, res, next) => {
       res.status(200).json({
         message: "Files uploaded and order created successfully.",
         items: orderLineItems,
-        imageUrls: allIntransitImageUrls,
+        imageUrls: orderLineItems.flatMap((item) => item.intransitImages || []),
         voiceUrl: voiceUpload?.Location || null,
       });
     } catch (error) {
@@ -516,6 +510,12 @@ export const addMoreIntransitImages = catchAsync(async (req, res, next) => {
       });
     }
 
+    if (!lineId) {
+      return res.status(400).json({
+        message: "lineId is required.",
+      });
+    }
+
     if (!images.length) {
       return res.status(400).json({
         message: "At least one image is required.",
@@ -528,51 +528,27 @@ export const addMoreIntransitImages = catchAsync(async (req, res, next) => {
       );
       const imageUrls = imageUploads.map((uploadData) => uploadData.Location);
 
-      if (lineId) {
-        const updatedOrder = await Order.findOneAndUpdate(
-          { _id: id, "items.lineId": lineId },
-          {
-            $push: {
-              "items.$.intransitImages": { $each: imageUrls },
-              intransitImage: { $each: imageUrls },
-            },
-          },
-          { new: true },
-        );
-
-        if (!updatedOrder) {
-          return res.status(404).json({ message: "Order or line item not found." });
-        }
-
-        const updatedItem = updatedOrder.items.find((item) => item.lineId === lineId);
-
-        return res.status(200).json({
-          message: "Images added successfully.",
-          addedImages: imageUrls,
-          lineId,
-          intransitImages: updatedItem?.intransitImages || [],
-          intransitImage: updatedOrder.intransitImage || [],
-        });
-      }
-
-      const updatedOrder = await Order.findByIdAndUpdate(
-        id,
+      const updatedOrder = await Order.findOneAndUpdate(
+        { _id: id, "items.lineId": lineId },
         {
           $push: {
-            intransitImage: { $each: imageUrls },
+            "items.$.intransitImages": { $each: imageUrls },
           },
         },
         { new: true },
       );
 
       if (!updatedOrder) {
-        return res.status(404).json({ message: "Order not found." });
+        return res.status(404).json({ message: "Order or line item not found." });
       }
 
+      const updatedItem = updatedOrder.items.find((item) => item.lineId === lineId);
+
       return res.status(200).json({
-        message: "Images added successfully (legacy order-level fallback).",
+        message: "Images added successfully.",
         addedImages: imageUrls,
-        intransitImage: updatedOrder.intransitImage || [],
+        lineId,
+        intransitImages: updatedItem?.intransitImages || [],
       });
     } catch (error) {
       console.error("Error adding more intransit images:", error);
@@ -599,6 +575,12 @@ export const uploadReadyForDeliveryImages = catchAsync(
         });
       }
 
+      if (!lineId) {
+        return res.status(400).json({
+          message: "lineId is required.",
+        });
+      }
+
       if (!images.length) {
         return res.status(400).json({
           message: "At least one image is required.",
@@ -618,52 +600,27 @@ export const uploadReadyForDeliveryImages = catchAsync(
 
         const imageUrls = imageUploads.map((uploadData) => uploadData.Location);
 
-        if (lineId) {
-          const updatedOrder = await Order.findOneAndUpdate(
-            { _id: id, "items.lineId": lineId },
-            {
-              $push: {
-                "items.$.readyForDeliveryImages": { $each: imageUrls },
-                ready_for_delivery_images: { $each: imageUrls },
-              },
-            },
-            { new: true },
-          );
-
-          if (!updatedOrder) {
-            return res.status(404).json({ message: "Order or line item not found." });
-          }
-
-          const updatedItem = updatedOrder.items.find((item) => item.lineId === lineId);
-
-          return res.status(200).json({
-            message: "Ready for delivery images uploaded successfully.",
-            addedImages: imageUrls,
-            lineId,
-            readyForDeliveryImages: updatedItem?.readyForDeliveryImages || [],
-            ready_for_delivery_images: updatedOrder.ready_for_delivery_images || [],
-          });
-        }
-
-        const updatedOrder = await Order.findByIdAndUpdate(
-          id,
+        const updatedOrder = await Order.findOneAndUpdate(
+          { _id: id, "items.lineId": lineId },
           {
             $push: {
-              ready_for_delivery_images: { $each: imageUrls },
+              "items.$.readyForDeliveryImages": { $each: imageUrls },
             },
           },
           { new: true },
         );
 
         if (!updatedOrder) {
-          return res.status(404).json({ message: "Order not found." });
+          return res.status(404).json({ message: "Order or line item not found." });
         }
 
+        const updatedItem = updatedOrder.items.find((item) => item.lineId === lineId);
+
         return res.status(200).json({
-          message:
-            "Ready for delivery images uploaded successfully (legacy order-level fallback).",
+          message: "Ready for delivery images uploaded successfully.",
           addedImages: imageUrls,
-          ready_for_delivery_images: updatedOrder.ready_for_delivery_images || [],
+          lineId,
+          readyForDeliveryImages: updatedItem?.readyForDeliveryImages || [],
         });
       } catch (error) {
         console.error("Error uploading ready for delivery images:", error);

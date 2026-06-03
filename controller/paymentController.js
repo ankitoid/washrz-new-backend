@@ -266,7 +266,7 @@ export const verifyRazorpayPayment = async (req, res) => {
       paymentStatus: "success",
       isPaid: true,
       orderStatus: order.status,
-      amount: order.totalAmount || order.price,
+      amount: order.totalAmount,
       transactionId: razorpay_payment_id,
       time: new Date(),
     });
@@ -307,7 +307,7 @@ export const checkPaymentStatus = async (req, res) => {
       paymentStatus: order.payment?.status || "pending",
       paymentMode: order.payment?.paymentMode,
       transactionId: order.payment?.razorpayPaymentId,
-      amount: order.totalAmount || order.price || 0,
+      amount: order.totalAmount,
       orderStatus: order.status,
       orderId: order.order_id,
       paymentId: order.payment?.paymentId,
@@ -344,7 +344,7 @@ export const markAsPaid = async (req, res) => {
     order.payment = {
       paymentId: `MANUAL${Date.now()}`,
       transactionId: transactionId || `CASH${Date.now()}`,
-      amount: order.totalAmount || order.price || 0,
+      amount: order.totalAmount,
       status: "success",
       paymentMode,
       methodDetails: {
@@ -417,7 +417,7 @@ export const initiateRefund = async (req, res) => {
 
     order.payment.refundStatus = "initiated";
     order.payment.refundAmount =
-      refundAmount || order.totalAmount || order.price;
+      refundAmount || order.totalAmount;
 
     order.payment.refundReason = reason;
     order.payment.refundInitiatedAt = new Date();
@@ -590,7 +590,7 @@ export const razorpayWebhook = async (req, res) => {
           paymentStatus: "success",
           isPaid: true,
           orderStatus: order.status,
-          amount: order.totalAmount || order.price,
+          amount: order.totalAmount,
           transactionId: razorpayPaymentId,
           time: new Date(),
         });

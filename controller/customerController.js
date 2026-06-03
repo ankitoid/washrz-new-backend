@@ -14,6 +14,11 @@ import customerFcmService from "../services/customerFcmService.js";
 import { createCustomerNotification } from "./customerNotificationController.js";
 import CustomerNotification from "../models/customerNotificationSchema.js";
 import CatalogItem from "../models/catalogItemSchema.js";
+import {
+  ORDER_STATUS,
+  normalizeOrderStatus,
+  updateOrderStatusByItems,
+} from "../services/orderStatusService.js";
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
@@ -1724,8 +1729,10 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
   // Use the user's plant name to filter pickups
   const plantName = user.plant;
 
-  if (req.query.status === "processing" || req.query.status === "reprocessing") {
-    const status = req.query.status;
+  const requestedStatus = normalizeOrderStatus(req.query.status) || req.query.status;
+
+  if (requestedStatus === "processing" || requestedStatus === "reprocessing") {
+    const status = requestedStatus;
     const [orders, countTotal] = await Promise.all([
       new APIFeatures(order.find({ status, plantName: plantName }), req.query)
         .sort()
@@ -1741,8 +1748,8 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
     });
   }
   //ready for intransit
-  if (req.query.status === "intransit") {
-    const status = req.query.status;
+  if (requestedStatus === "intransit") {
+    const status = requestedStatus;
     const [orders, countTotal] = await Promise.all([
       new APIFeatures(order.find({ status, plantName: plantName }), req.query)
         .sort()
@@ -1758,9 +1765,9 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
     });
   }
 
-  if (req.query.status === "ready for delivery") {
+  if (requestedStatus === "ready for delivery") {
     if (user.role === "admin" || user.role === "plant-manager") {
-      const status = req.query.status;
+      const status = requestedStatus;
       const [orders, countTotal] = await Promise.all([
         new APIFeatures(
           order.find({ status, isRescheduled: false, plantName: plantName }),
@@ -1814,7 +1821,7 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
     // }
     if (user.role === "rider") {
       const todayDate = new Date().toISOString().split("T")[0];
-      const status = req.query.status;
+      const status = requestedStatus;
       const riderName = user.name;
       const RiderDate = todayDate;
 
@@ -2071,37 +2078,24 @@ export const getCancelPickups = catchAsync(async (req, res, next) => {
 
 export const changeOrderStatus = catchAsync(async (req, res, next) => {
   const _id = req.params.id;
-  const status = req.body.status.toLowerCase();
-  const validStatuses = [
-    "intransit",
-    "processing",
-    "reprocessing",
-    "ready for delivery",
-    "cancelled",
-    "delivery rider assigned",
-    "delivered",
-  ];
+  const status = normalizeOrderStatus(req.body.status);
 
-  if (!validStatuses.includes(status)) {
+  if (!status) {
     return res.status(400).json({
       message: "Invalid status provided.",
     });
   }
 
-  const updatedOrder = await order.findOneAndUpdate(
-    { _id },
-    { status },
-    { new: true },
-  );
-
-  if (!updatedOrder) {
-    return res.status(404).json({
-      message: "Order not found.",
-    });
-  }
+  const { order: updatedOrder, updatedItem } = await updateOrderStatusByItems({
+    orderId: _id,
+    status,
+    lineId: req.body.lineId,
+    orderItemId: req.body.orderItemId,
+  });
 
   res.status(200).json({
     result: updatedOrder,
+    updatedItem,
     message: `Order status updated to ${status}`,
   });
 });
