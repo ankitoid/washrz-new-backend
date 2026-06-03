@@ -176,12 +176,14 @@ coupons_service.remove = async (id) => {
 // customer end logic starts here -->>
 
 // GET AVAILABLE COUPONS - FIXED to accept category
-coupons_service.getAvailable = async (query) => {
-  const { cartAmount, category,id } = query; // ← ADD category parameter
+coupons_service.getAvailable = async (query,body) => {
+  const { cartAmount, id } = query;
+  const { serviceTypes } = body;
   const now = new Date();
-  
-  // console.log("Fetching coupons for:", { cartAmount, category, now });
-  
+
+  // Helper function to normalize category (lowercase + remove hyphens)
+  const normalizeCategory = (cat) => cat.toLowerCase().replace(/-/g, '');
+
   let queryConditions = {
     isActive: true,
     startDate: { $lte: now },
@@ -194,58 +196,50 @@ coupons_service.getAvailable = async (query) => {
       ]
     }
   };
-  
-  // ONLY add category filter if category is provided and not empty
-  // if (category && category.trim() !== "") {
-  //   queryConditions.categories = { 
-  //     $in: [category.toUpperCase()] 
-  //   };
-  // }
 
-  let itemDetails = null;
+  let finalReqCategories = [];
 
-  if(id.startsWith("WZ")) {
-    const orderDetails = await Order.findOne({order_id:id}).lean();
+  // Case 1: id provided → fetch categories from order/pickup items
+  if (id) {
+    let itemDetails = null;
+    if (id.startsWith("WZ")) {
+      const orderDetails = await Order.findOne({ order_id: id }).lean();
+      itemDetails = orderDetails?.items || [];
+    } else {
+      const pickupDetails = await pickup.findById(id).lean();
+      itemDetails = pickupDetails?.items || [];
+    }
 
-    itemDetails = orderDetails?.items || [];
-  }else{
-    const pickupDetails = await pickup.findById(id).lean();
-
-    itemDetails = pickupDetails?.items || [];
+    const rawCategories = itemDetails.map(item => item?.itemId?.type).filter(Boolean);
+    finalReqCategories = [...new Set(rawCategories.map(normalizeCategory))];
   }
-
-
-  const requesCategories = await itemDetails.map(item => item?.itemId?.type);
-
-  const finalReqCategories = [...new Set(requesCategories)];
-
-  // console.log("this is the finalReqCategories-->>",finalReqCategories)
-  
-  const coupons = await Coupon.find(queryConditions).lean();
-
-  // console.log(`Found ${coupons.length} coupons`,coupons);
-
-  const matchedCoupons = coupons.filter((coupon) => {
-const couponCategories = [...new Set(
-    coupon.categories.map(cat => cat.toLowerCase())
-  )].sort();
-
-  const requestCategories = [...new Set(
-    finalReqCategories.map(cat => cat.toLowerCase())
-  )].sort();
-
-  return (
-    couponCategories.length === requestCategories.length &&
-    couponCategories.every((cat, index) => cat === requestCategories[index])
-  );
-});
-
-  // console.log(`Matched ${matchedCoupons.length} coupons after category filtering`, matchedCoupons);
-
-  if(matchedCoupons.length === 0) {
-    // console.log("No coupons matched the category criteria");
+  // Case 2: no id but serviceTypes provided → use serviceTypes directly (normalized)
+  else if (serviceTypes && Array.isArray(serviceTypes) && serviceTypes.length > 0) {
+    finalReqCategories = [...new Set(serviceTypes.map(normalizeCategory))];
+  }
+  // Case 3: neither → return empty
+  else {
     return [];
   }
+
+  // Fetch all coupons that satisfy basic conditions
+  const coupons = await Coupon.find(queryConditions).lean();
+
+  // Filter coupons by exact normalized category array match
+  const matchedCoupons = coupons.filter((coupon) => {
+    // Normalize coupon's categories (remove hyphens, lowercase, unique, sorted)
+    const couponCategories = [...new Set(
+      coupon.categories.map(normalizeCategory)
+    )].sort();
+
+    // Request categories are already normalized and sorted
+    const requestCategories = [...finalReqCategories].sort();
+    return (
+      couponCategories.length === requestCategories.length &&
+      couponCategories.every((cat, index) => cat === requestCategories[index])
+    );
+  });
+
   return matchedCoupons;
 };
 
@@ -367,7 +361,7 @@ coupons_service.applyToOrder = async (userId, body) => {
       order.totalAmount = order.price + (order.deliveryCharges || 0) + (order.taxAmount || 0);
       await order.save();
     }
-    
+
     const now = new Date();
     
     // First find the coupon to check all validations

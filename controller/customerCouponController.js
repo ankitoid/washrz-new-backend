@@ -8,7 +8,7 @@ const customerCoupons = {};
 
 // GET AVAILABLE COUPONS
 customerCoupons.getAvailableCoupons = catchAsync(async (req, res) => {
-  const data = await coupons_service.getAvailable(req.query);
+  const data = await coupons_service.getAvailable(req.query, req.body);
   res.send({ success: true, data });
 });
 
