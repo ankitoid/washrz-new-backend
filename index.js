@@ -219,6 +219,13 @@ io.on("connection", (socket) => {
     socket.customerId = customerId;
   });
 
+  socket.on("joinOrder", ({ orderId }) => {
+    if (!orderId) return;
+    socket.join(`order:${orderId}`);
+    socket.orderId = orderId;
+    console.log(`Socket joined order room: order:${orderId}`);
+  });
+
   socket.on("disconnect", () => {
     if (socket.customerId) socketService.removeUser(socket.customerId);
   });

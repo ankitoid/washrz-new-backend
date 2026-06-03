@@ -59,4 +59,8 @@ router.get("/getOrdersByEmailAndDateRange", getOrdersByEmailAndDateRange);
 
 router.get("/getCustomerOrderDetails/:phone",customer_services.customerOrdersDetails)
 
+
+// customer invoice route
+router.get("/generateInvoice/:orderId",customer_services.generateCustomerInvoice)
+
 export { router as default };

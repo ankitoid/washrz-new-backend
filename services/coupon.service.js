@@ -1,6 +1,7 @@
 import CouponReservation from "../models/couponReservationSchema.js";
 import Coupon from "../models/couponSchema.js";
 import Order from "../models/orderSchema.js";
+import pickup from "../models/pickupSchema.js";
 import catchAsync from "../utills/catchAsync.js";
 
 
@@ -176,10 +177,10 @@ coupons_service.remove = async (id) => {
 
 // GET AVAILABLE COUPONS - FIXED to accept category
 coupons_service.getAvailable = async (query) => {
-  const { cartAmount, category } = query; // ← ADD category parameter
+  const { cartAmount, category,id } = query; // ← ADD category parameter
   const now = new Date();
   
-  console.log("Fetching coupons for:", { cartAmount, category, now });
+  // console.log("Fetching coupons for:", { cartAmount, category, now });
   
   let queryConditions = {
     isActive: true,
@@ -195,16 +196,57 @@ coupons_service.getAvailable = async (query) => {
   };
   
   // ONLY add category filter if category is provided and not empty
-  if (category && category.trim() !== "") {
-    queryConditions.categories = { 
-      $in: [category.toUpperCase()] 
-    };
+  // if (category && category.trim() !== "") {
+  //   queryConditions.categories = { 
+  //     $in: [category.toUpperCase()] 
+  //   };
+  // }
+
+  let itemDetails = null;
+
+  if(id.startsWith("WZ")) {
+    const orderDetails = await Order.findOne({order_id:id}).lean();
+
+    itemDetails = orderDetails?.items || [];
+  }else{
+    const pickupDetails = await pickup.findById(id).lean();
+
+    itemDetails = pickupDetails?.items || [];
   }
+
+
+  const requesCategories = await itemDetails.map(item => item?.itemId?.type);
+
+  const finalReqCategories = [...new Set(requesCategories)];
+
+  // console.log("this is the finalReqCategories-->>",finalReqCategories)
   
   const coupons = await Coupon.find(queryConditions).lean();
-  console.log(`Found ${coupons.length} coupons`);
-  
-  return coupons;
+
+  // console.log(`Found ${coupons.length} coupons`,coupons);
+
+  const matchedCoupons = coupons.filter((coupon) => {
+const couponCategories = [...new Set(
+    coupon.categories.map(cat => cat.toLowerCase())
+  )].sort();
+
+  const requestCategories = [...new Set(
+    finalReqCategories.map(cat => cat.toLowerCase())
+  )].sort();
+
+  return (
+    couponCategories.length === requestCategories.length &&
+    couponCategories.every((cat, index) => cat === requestCategories[index])
+  );
+});
+
+  // console.log(`Matched ${matchedCoupons.length} coupons after category filtering`, matchedCoupons);
+
+  if(matchedCoupons.length === 0) {
+    // console.log("No coupons matched the category criteria");
+    return [];
+  }
+  return matchedCoupons;
 };
 
 // APPLY COUPON (RESERVE)
@@ -319,7 +361,12 @@ coupons_service.applyToOrder = async (userId, body) => {
       throw new Error("Cannot apply coupon to paid order");
     }
     
-    if (order.Coupon) throw new Error("Coupon already applied");
+    if (order.Coupon){
+      order.Coupon = null; // Clear existing coupon
+      order.discountAmount = 0;
+      order.totalAmount = order.price + (order.deliveryCharges || 0) + (order.taxAmount || 0);
+      await order.save();
+    }
     
     const now = new Date();
     
@@ -355,12 +402,12 @@ coupons_service.applyToOrder = async (userId, body) => {
     }
     
     // Check category if applicable
-    const orderCategory = body.category || "LAUNDRY"; // Get from request or calculate
-    if (coupon.categories && coupon.categories.length > 0) {
-      if (!coupon.categories.includes(orderCategory.toUpperCase())) {
-        throw new Error("Coupon not applicable for this category");
-      }
-    }
+    // const orderCategory = body.category || "LAUNDRY"; // Get from request or calculate
+    // if (coupon.categories && coupon.categories.length > 0) {
+    //   if (!coupon.categories.includes(orderCategory.toUpperCase())) {
+    //     throw new Error("Coupon not applicable for this category");
+    //   }
+    // }
     
     // Calculate discount
     let discount = 0;

@@ -128,7 +128,7 @@ const schema = new pickupSchema(
 schema.pre(/^find/, function (next) {
   this.populate({
     path: "items.itemId",
-    select: "images videos",
+    select: "images videos type",
   });
   next();
 });

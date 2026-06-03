@@ -14,24 +14,46 @@ const { Schema } = mongoose;
 //   type: {type: String, default: ''}
 // }, { _id: false });
 
-const itemSchema = new mongoose.Schema(
+const itemStatusHistorySchema = new mongoose.Schema(
   {
-    itemId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "CatalogItem",
-      required: true,
-    },
-    label: String, // snapshot
-    price: Number, // snapshot
-    unit: String, // snapshot
-    quantity: {
-      type: Number,
-      required: true,
-      min: 1,
-    },
+    intransit:             { type: Date, default: null },
+    processing:            { type: Date, default: null },
+    reprocessing:          { type: Date, default: null },
+    readyForDelivery:      { type: Date, default: null },
+    deliveryriderassigned: { type: Date, default: null },
+    delivered:             { type: Date, default: null },
+    cancelled:             { type: Date, default: null },
   },
   { _id: false },
 );
+
+const itemSchema = new mongoose.Schema({
+  lineId: { type: String}, // Unique identifier for this item line (can be generated as orderId + index)
+  itemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "CatalogItem",
+    required: true,
+  },
+  label:                  String,
+  price:                  Number,
+  unit:                   String,
+  intransitImages:        { type: [String], default: [] },
+  readyForDeliveryImages: { type: [String], default: [] },
+  status: {
+    type: String,
+    enum: [
+      "intransit",
+      "processing",
+      "reprocessing",
+      "ready for delivery",
+      "delivery rider assigned",
+      "delivered",
+      "cancelled",
+    ],
+    default: "intransit",
+  },
+  statusHistory: { type: itemStatusHistorySchema, default: () => ({}) },
+});
 
 const assignedRiderSchema = new Schema(
   {
@@ -190,6 +212,70 @@ const CouponManageSchema = new Schema(
   { _id: false },
 );
 
+
+// ========= INVOICE SCHEMA  ==========
+
+const invoiceSnapshotSchema = new mongoose.Schema(
+  {
+    // Invoice identification
+    invoiceNumber: { type: String, required: true, unique: true, sparse: true },
+    invoiceDate: { type: Date, default: Date.now },
+    invoiceGeneratedBy: { type: String, default: "system" },
+
+
+    //gst number
+    gstNumber: { type: String, default: "" },
+ 
+    // Customer details (captured at generation time)
+    customerName: String,
+    address: String,
+    contactNo: String,
+    email: String,
+ 
+    // Reference to the parent order
+    orderId: String,
+ 
+    // Frozen item list
+    items: [
+      {
+        label: String,
+        price: Number,
+        quantity: Number,
+        unit: String,
+        totalItemPrice: String,   // price * quantity
+        sku: String,
+        sacid: String,
+      },
+    ],
+ 
+    // Pricing breakdown
+    subtotal: Number,
+    deliveryCharges: Number,
+    taxAmount: Number,
+    discountAmount: Number,
+    totalAmount: Number,
+ 
+    // Payment snapshot (always "paid" since invoice is generated after payment)
+    payment: {
+      mode: String,              // e.g., 'upi', 'card', 'cash'
+      transactionId: String,
+      status: String,            // 'success'
+      paidAt: Date,
+    },
+ 
+    // Document status
+    status: {
+      type: String,
+      enum: ["generated", "sent", "void"],
+      default: "generated",
+    },
+ 
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }   // _id: false because it's embedded inside the order
+);
+ 
+
 // ========== MAIN ORDER SCHEMA ==========
 
 const orderSchema = new Schema(
@@ -347,6 +433,8 @@ const orderSchema = new Schema(
     updatedBy: String,
     isActive: { type: Boolean, default: true },
     isArchived: { type: Boolean, default: false, index: true },
+
+    invoice: { type: invoiceSnapshotSchema, default: null }
   },
   {
     timestamps: true,
@@ -382,7 +470,7 @@ orderSchema.index({ riderId: 1, status: 1 });
 orderSchema.pre(/^find/, function (next) {
   this.populate({
     path: "items.itemId",
-    select: "images videos type",
+    select: "images videos type sku sacid",
   });
   next();
 });
