@@ -5,7 +5,7 @@ import customerCoupons from "../controller/customerCouponController.js";
 const router = express.Router()
 
 // GET available coupons
-router.get("/", customerCoupons.getAvailableCoupons);
+router.post("/", customerCoupons.getAvailableCoupons);
 
 // // APPLY coupon
 router.post("/apply", customerCoupons.applyCouponToOrder);
