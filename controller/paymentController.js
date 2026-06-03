@@ -595,6 +595,16 @@ export const razorpayWebhook = async (req, res) => {
           time: new Date(),
         });
 
+        req.socket.emitToAll("webhook_trigger", {
+          orderId: order.order_id,
+          paymentStatus: "success",
+          isPaid: true,
+          orderStatus: order.status,
+          amount: order.totalAmount || order.price,
+          transactionId: razorpayPaymentId,
+          time: new Date(),
+        })
+
         req.socket.emitToOrder(order.order_id, "paymentUpdate", {
           orderId: order.order_id,
           paymentStatus: "success",
