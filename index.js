@@ -56,7 +56,8 @@ app.use(
       "https://new.drydash.in",
       "http://localhost:8081",
       "https://testdrydash.netlify.app",
-      "https://test-drydash.netlify.app"
+      "https://test-drydash.netlify.app",
+      "https://new.shiptos.com"
     ],
     methods: "GET, POST, PUT, DELETE, PATCH",
     credentials: true, // Allow credentials (cookies) to be sent with the request
@@ -87,7 +88,10 @@ const io = new Server(server, {
       "http://192.168.10.215:8081", // Expo web
       "*",
       "https://testdrydash.netlify.app",
-      "https://test-drydash.netlify.app"
+      "https://test-drydash.netlify.app",
+
+      // adding for hoistinger deployment
+      "https://new.shiptos.com",
     ],
     credentials: true,
     methods: ["GET", "POST"],
