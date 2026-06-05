@@ -173,6 +173,7 @@ export const getAllRoomsForAdmin = async (req, res) => {
 
         res.json({ success: true, rooms });
     } catch (error) {
+        console.error("Error fetching admin rooms:", error);
         res.status(500).json({ success: false });
     }
 };
