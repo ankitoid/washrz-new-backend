@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import CouponReservation from "../models/couponReservationSchema.js";
 import Coupon from "../models/couponSchema.js";
 import Order from "../models/orderSchema.js";
@@ -178,7 +179,7 @@ coupons_service.remove = async (id) => {
 // GET AVAILABLE COUPONS - FIXED to accept category
 coupons_service.getAvailable = async (query,body) => {
   const { cartAmount, id } = query;
-  const { serviceTypes } = body;
+  const { serviceTypes, userId  } = body;
   const now = new Date();
 
   // Helper function to normalize category (lowercase + remove hyphens)
@@ -239,6 +240,31 @@ coupons_service.getAvailable = async (query,body) => {
       couponCategories.every((cat, index) => cat === requestCategories[index])
     );
   });
+   
+  if (userId) {
+    const couponIds = matchedCoupons.map((c) => c._id); // already ObjectId
+
+    const userUsage = await CouponReservation.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(userId), // convert to ObjectId
+          couponId: { $in: couponIds },
+        },
+      },
+      { $group: { _id: "$couponId", count: { $sum: 1 } } },
+    ]);
+
+    const usageMap = new Map(userUsage.map((u) => [u._id.toString(), u.count]));
+
+    const availableAfterPerUser = matchedCoupons.filter((coupon) => {
+      const perUserLimit = coupon.perUser ?? 0; // if missing => unlimited
+      if (perUserLimit <= 0) return true;
+      const used = usageMap.get(coupon._id.toString()) || 0;
+      return used < perUserLimit;
+    });
+
+    return availableAfterPerUser;
+  }
 
   return matchedCoupons;
 };
