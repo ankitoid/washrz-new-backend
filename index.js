@@ -34,6 +34,13 @@ import slotRoutes from "./routes/slotsRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import socketService from "./services/socketService.js";
 import { cleanupExpiredCoupons } from "./jobs/couponCleanup.js";
+import faqRoutes from "./routes/faqRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
+import ChatRoom from "./models/ChatRoom.js";
+import Message from "./models/Message.js";
+import riderGroupRoutes from "./routes/riderGroupRoutes.js";
+import RiderGroup from "./models/RiderGroup.js";
+import RiderGroupMessage from "./models/RiderGroupMessage.js";
 
 const app = express();
 
@@ -375,7 +382,137 @@ io.on("connection", (socket) => {
       console.error("Error fetching rider location:", error);
     }
   });
+
+  // =============================
+  // CHAT SOCKET EVENTS
+  // =============================
+  
+  
 });
+
+io.on("connection", (socket) => {
+
+    console.log(
+        "SOCKET CONNECTED:",
+        socket.id
+    );
+
+    // =========================
+    // JOIN ROOM
+    // =========================
+
+    socket.on(
+
+        "joinChatRoom",
+
+        (roomId) => {
+
+            socket.join(roomId);
+
+            console.log(
+                "JOINED ROOM:",
+                roomId
+            );
+        }
+    );
+
+    // =========================
+    // SEND MESSAGE
+    // =========================
+
+    socket.on(
+
+        "sendChatMessage",
+
+        async (data) => {
+
+            try {
+
+                console.log(
+                    "MESSAGE RECEIVED:",
+                    data
+                );
+
+                const newMessage =
+                await Message.create({
+
+                    roomId:
+                        data.roomId,
+
+                    senderType:
+                        data.senderType,
+
+                    senderId:
+                        data.senderId,
+
+                    message:
+                        data.message
+                });
+
+                console.log(
+                    "MESSAGE SAVED:",
+                    newMessage._id
+                );
+
+                io.to(
+                    data.roomId.toString()
+                ).emit(
+
+                    "receiveChatMessage",
+
+                    newMessage
+                );
+
+                console.log(
+                    "MESSAGE EMITTED TO ROOM:",
+                    data.roomId
+                );
+
+                io.emit(
+                    "chatRoomsUpdated"
+                );
+
+            } catch (error) {
+
+                console.log(
+                    "SOCKET ERROR:",
+                    error
+                );
+            }
+        }
+    );
+
+    socket.on("disconnect", () => {
+
+        console.log(
+            "SOCKET DISCONNECTED:",
+            socket.id
+        );
+    });
+
+    socket.on("joinGroup", (groupId) => {
+        socket.join(`group_${groupId}`);
+        console.log(`Socket joined group: ${groupId}`);
+    });
+
+    socket.on("sendGroupMessage", async (data) => {
+        const { groupId, senderId, senderType, senderName, message } = data;
+        const newMessage = await RiderGroupMessage.create({ groupId, senderId, senderType, senderName, message });
+        await RiderGroup.findByIdAndUpdate(groupId, { lastMessage: message, lastMessageAt: new Date() });
+        io.to(`group_${groupId}`).emit("receiveGroupMessage", newMessage);
+    });
+
+    // Typing indicator – user started typing
+  socket.on("typing", (data) => {
+    console.log("📝 typing event received", data);
+    socket.to(data.roomId).emit("userTyping", { userId: data.userId, userName: data.userName });
+  });
+  socket.on("stopTyping", (roomId) => {
+    console.log("🛑 stopTyping received", roomId);
+    socket.to(roomId).emit("userStoppedTyping");
+  });
+});
+
 
 let isRunning = false;
 
@@ -463,6 +600,10 @@ app.use("/api/v1/customer/notifications", customerNotificationRoutes);
 app.use("/api/v1/customer/push-tokens", customerPushTokenRoutes);
 app.use('/api/v1/bookings',slotBookingRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
+app.use("/api/v1/faq", faqRoutes);
+app.use("/api/v1/chat", chatRoutes);
+app.use("/api/v1/rider-group", riderGroupRoutes);
+
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
