@@ -160,24 +160,23 @@ export const getOrCreateDirectChat = async (req, res) => {
 // Get all rooms for admin (both group and direct)
 export const getAllRoomsForAdmin = async (req, res) => {
     try {
-        let rooms = await RiderGroup.find({
+        const rooms = await RiderGroup.find({
             "members.userId": "admin",
             isActive: true
         }).sort({ updatedAt: -1 }).lean();
 
-        // Convert unreadCounts Map to plain object
-        rooms = rooms.map(room => ({
+        // unreadCounts is already a plain object; no conversion needed
+        const formattedRooms = rooms.map(room => ({
             ...room,
-            unreadCounts: room.unreadCounts ? Object.fromEntries(room.unreadCounts) : {}
+            unreadCounts: room.unreadCounts || {}
         }));
 
-        res.json({ success: true, rooms });
+        res.json({ success: true, rooms: formattedRooms });
     } catch (error) {
-        console.error("Error fetching admin rooms:", error);
-        res.status(500).json({ success: false });
+        console.error(error);
+        res.status(500).json({ success: false, message: error.message });
     }
 };
-
 
 // Get all rooms for a rider (both group and direct)
 export const getRoomsForRider = async (req, res) => {
@@ -186,10 +185,17 @@ export const getRoomsForRider = async (req, res) => {
         const rooms = await RiderGroup.find({
             "members.userId": riderId,
             isActive: true
-        }).sort({ updatedAt: -1 });
-        res.json({ success: true, rooms });
+        }).sort({ updatedAt: -1 }).lean();
+
+        const formattedRooms = rooms.map(room => ({
+            ...room,
+            unreadCounts: room.unreadCounts || {}
+        }));
+
+        res.json({ success: true, rooms: formattedRooms });
     } catch (error) {
-        res.status(500).json({ success: false });
+        console.error(error);
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
