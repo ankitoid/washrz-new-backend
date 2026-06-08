@@ -2039,6 +2039,7 @@ export const saveSlots = async (req, res) => {
         details: "Date and zones are required"
       });
     }
+    let isCapReched = false;
 
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(date)) {
@@ -2058,10 +2059,12 @@ export const saveSlots = async (req, res) => {
     const zoneConfigs = zones.map(zone => {
       const template = templateMap.get(zone.zoneId);
       const overrides = [];
+      let totalDefaultCap = 0;
       
       if (template && zone.slots) {
         // Compare each slot with template to find overrides
         zone.slots.forEach(slot => {
+          totalDefaultCap = totalDefaultCap + ((slot.capacity)*1)
           const templateSlot = template.slots.find(ts => ts.time === slot.time);
           
           // Check if enabled is different from template default
@@ -2086,6 +2089,12 @@ export const saveSlots = async (req, res) => {
           }
         });
       }
+
+      if((totalDefaultCap > zone.totalCapacity))
+      {
+        console.log("zone", zone)
+      }
+      if((zone.totalCapacity && totalDefaultCap) && (totalDefaultCap > zone.totalCapacity)) isCapReched = true;
       
       return {
         zoneId: zone.zoneId,
@@ -2095,7 +2104,16 @@ export const saveSlots = async (req, res) => {
         overrides: overrides.length > 0 ? overrides : undefined
       };
     });
-    
+
+    if(isCapReched)
+    {
+      return res.status(400).json({
+      success: true,
+      data: [],
+      message: "Slot capacity reached. Please increase your total cap or adjust other."
+      });
+    }
+
     // Upsert configuration
     const result = await SlotConfig.findOneAndUpdate(
       { date },
