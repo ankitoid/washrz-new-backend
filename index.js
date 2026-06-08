@@ -449,6 +449,13 @@ io.on("connection", (socket) => {
                         data.message
                 });
 
+               await ChatRoom.findByIdAndUpdate(data.roomId, {
+
+                    lastMessage:
+                        data.message,
+                      lastMessageAt: new Date(),
+                });
+
                 console.log(
                     "MESSAGE SAVED:",
                     newMessage._id
