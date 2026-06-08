@@ -315,7 +315,7 @@ export const adminChatrooms = async (req, res) => {
 
         const rooms = await ChatRoom.find()
         .sort({
-            updatedAt: -1
+            lastMessageAt: -1
         });
 
         const formattedRooms = await Promise.all(
