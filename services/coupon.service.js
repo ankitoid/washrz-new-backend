@@ -257,10 +257,12 @@ coupons_service.getAvailable = async (query,body) => {
     const usageMap = new Map(userUsage.map((u) => [u._id.toString(), u.count]));
 
     const availableAfterPerUser = matchedCoupons.filter((coupon) => {
+      let shouldInclude = (coupon.type === 'discount' && cartAmount >= ((cartAmount*coupon.discount)/100)) || (coupon.type === 'flat' && cartAmount >= coupon.discount);
+
       const perUserLimit = coupon.perUser ?? 0; // if missing => unlimited
-      if (perUserLimit <= 0) return true;
+      if (perUserLimit <= 0 && !shouldInclude) return true;
       const used = usageMap.get(coupon._id.toString()) || 0;
-      return used < perUserLimit;
+      return (used < perUserLimit) && !shouldInclude;
     });
 
     return availableAfterPerUser;
@@ -440,6 +442,11 @@ coupons_service.applyToOrder = async (userId, body) => {
       if (coupon.maxCap) {
         discount = Math.min(discount, coupon.maxCap);
       }
+    }
+
+
+    if (cartAmount <= discount) {
+      throw new Error("You are not allow to use this coupon");
     }
     
     // Safety - discount cannot exceed order amount
