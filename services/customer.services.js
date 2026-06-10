@@ -103,6 +103,8 @@ customer_services.generateCustomerInvoice = async (req,res) => {
 try{
   const { orderId } = req.params;
 
+  const currentTime = new Date();
+
   const gstNumber = "09AAKCG0890R1ZR"
 
   if (!orderId) {
@@ -111,8 +113,12 @@ try{
 
   const order = await Orders.findOne({ order_id: orderId })
    
-  if(order?.status !== "delivered" && !order?.isPaid){
+  if(order?.status !== "delivered"){
     return res.status(400).json({ message: "Invoice can only be generated for delivered and paid orders" });
+  }
+
+  if(currentTime - order.statusHistory.delivered < 15 * 60 * 1000){
+    return res.status(400).json({ message: "Invoice can be generated after 15 minutes of delivery" });
   }
 
   if(order?.invoice){
