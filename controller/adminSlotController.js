@@ -1480,11 +1480,10 @@ function generateZoneId(name) {
 }
 
 function getCity(address) {
+  if (!address) return "";
   const parts = address.split(",").map(i => i.trim());
-  if (parts.length >= 3) {
-    return parts[parts.length - 3];
-  }
-  return "";
+   if(parts.length <= 2) return parts[0]
+   if(parts.length > 2)  return parts[parts.length - 2]
 }
 
 // =====================================================
@@ -1661,6 +1660,7 @@ export const CreateZone = async (req, res) => {
         timeout: 5000
       }
     );
+
 
     const place = response.data.candidates?.[0];
 
