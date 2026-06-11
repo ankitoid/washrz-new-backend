@@ -1686,7 +1686,7 @@ export const getOrders = catchAsync(async (req, res, next) => {
   }
 
   // Use the user's plant name to filter orders
-  const plantName = user.plant;
+  const plantName = user.plantName || user.plant;
 
   const startDate = date ? new Date(date) : new Date(); // Default to current date
   startDate.setHours(0, 0, 0, 0);
@@ -1727,7 +1727,7 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
   }
 
   // Use the user's plant name to filter pickups
-  const plantName = user.plant;
+  const plantName = user.plantName || user.plant;
 
   const requestedStatus = normalizeOrderStatus(req.query.status) || req.query.status;
 
@@ -2036,7 +2036,7 @@ export const getCancelPickups = catchAsync(async (req, res, next) => {
     return res.status(404).json({ message: "User or Plant not found" });
   }
 
-  const plantName = user.plant;
+  const plantName = user.plantName || user.plant;
 
   // Fetch pickups that match the plant name and are marked as deleted
   const [pickups, countTotal] = await Promise.all([
@@ -2234,7 +2234,7 @@ export const getOrdersByEmailAndDate = catchAsync(async (req, res, next) => {
     return next(new AppError("User or Plant not found", 404));
   }
 
-  const plantName = user.plant;
+  const plantName = user.plantName || user.plant;
 
   const startDate = new Date(date);
   startDate.setHours(0, 0, 0, 0);
@@ -2289,7 +2289,7 @@ export const getOrdersByEmailAndDateRange = catchAsync(
       return next(new AppError("User or Plant not found", 404));
     }
 
-    const plantName = user.plant;
+    const plantName = user.plantName || user.plant;
 
     let filter = { plantName };
 

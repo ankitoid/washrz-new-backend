@@ -51,7 +51,7 @@ export const getRevenue = catchAsync(async (req, res, next) => {
     return res.status(403).json({ message: "Forbidden: admins only" });
   }
 
-  const plantName = user.plant;
+  const plantName = user.plantName || user.plant;
 
   let start, end;
   const today = startOfDay(new Date());
@@ -401,7 +401,7 @@ export const getRevenueComparison = catchAsync(async (req, res, next) => {
     return res.status(403).json({ message: "Forbidden: admins only" });
   }
 
-  const plantName = user.plant;
+  const plantName = user.plantName || user.plant;
   const today = startOfDay(new Date());
 
   let currentStart, currentEnd, previousStart, previousEnd;

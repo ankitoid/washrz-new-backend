@@ -1,10 +1,12 @@
 import crypto from "crypto";
+import mongoose from "mongoose";
 import { promisify } from "util";
 import jwt from "jsonwebtoken";
 import catchAsync from "../utills/catchAsync.js";
 import AppError from "../utills/appError.js";
 import User from "../models/userModel.js";
 import Order from "../models/orderSchema.js";
+import Plant from "../models/plantSchema.js";
 import AWS from "aws-sdk";
 import multer from "multer";
 import Pickup from "../models/pickupSchema.js";
@@ -155,6 +157,24 @@ export const signup = catchAsync(async (req, res, next) => {
 
   console.log("==============================================>> ", req.body);
 
+  let resolvedPlantName = "";
+  let resolvedPlantLocation = "";
+
+  if (plant) {
+    let plantDoc = null;
+    if (mongoose.Types.ObjectId.isValid(plant)) {
+      plantDoc = await Plant.findById(plant);
+    }
+    if (!plantDoc) {
+      plantDoc = await Plant.findOne({ name: plant });
+    }
+
+    if (plantDoc) {
+      resolvedPlantName = plantDoc.name;
+      resolvedPlantLocation = plantDoc.location;
+    }
+  }
+
   const newUser = await User.create({
     name: fullName,
     email,
@@ -163,6 +183,8 @@ export const signup = catchAsync(async (req, res, next) => {
     phone: mobileNumber,
     role,
     plant,
+    plantName: resolvedPlantName,
+    plantLocation: resolvedPlantLocation,
     avatar: "",
     addharCardNo: aadhaarCard,
     drivingLicence,
