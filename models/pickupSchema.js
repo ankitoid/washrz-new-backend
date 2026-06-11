@@ -39,6 +39,32 @@ const assignedRiderSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const navigationTimelineSchema = new mongoose.Schema(
+  {
+    event: {
+      type: String,
+      enum: ["navigation_started", "location_update", "reached_location"],
+      required: true,
+    },
+    trackingLegId: String,
+    taskType: {
+      type: String,
+      enum: ["pickup", "delivery", "return_to_plant"],
+      default: "pickup",
+    },
+    riderId: String,
+    riderName: String,
+    location: {
+      latitude: Number,
+      longitude: Number,
+    },
+    totalDistanceKm: { type: Number, default: 0 },
+    message: String,
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const schema = new pickupSchema(
   {
     appCustomerId: String,
@@ -118,6 +144,10 @@ const schema = new pickupSchema(
 
     items: {
       type: [pickupItemSchema],
+      default: [],
+    },
+    navigationTimeline: {
+      type: [navigationTimelineSchema],
       default: [],
     },
   },
