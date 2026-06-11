@@ -41,6 +41,11 @@ import Message from "./models/Message.js";
 import riderGroupRoutes from "./routes/riderGroupRoutes.js";
 import RiderGroup from "./models/RiderGroup.js";
 import RiderGroupMessage from "./models/RiderGroupMessage.js";
+import {
+  completeTaskTrackingLeg,
+  startTaskTrackingLeg,
+  upsertTaskTrackingFromLocation,
+} from "./services/taskTrackingService.js";
 
 const app = express();
 
@@ -246,7 +251,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("riderLocationUpdate", async (data) => {
-    const { riderId, location, speed, bearing, batteryLevel } = data;
+    const { riderId, location, speed, bearing, batteryLevel, taskTracking } = data;
     if (!riderId || !location) {
       console.log("Invalid location update:", data);
       return;
@@ -287,6 +292,16 @@ io.on("connection", (socket) => {
         { upsert: true, new: true },
       );
 
+      await upsertTaskTrackingFromLocation({
+        riderId,
+        lat: location.lat,
+        lng: location.lng,
+        speed,
+        bearing,
+        batteryLevel,
+        taskTracking,
+      });
+
       console.log(
         `📍 Updated rider ${riderId}, location = ${locationData.lat}, ${locationData.lng}`,
       );
@@ -300,7 +315,29 @@ io.on("connection", (socket) => {
       ...locationData,
       name: user?.name || "Unknown Rider",
       phone: user?.phone || "N/A",
+      taskTracking,
     });
+  });
+
+  socket.on("taskNavigationStarted", async (data) => {
+    try {
+      await startTaskTrackingLeg(data);
+      socketService.emitToAdmin("taskNavigationStarted", data);
+    } catch (error) {
+      console.error("Error starting task tracking leg:", error);
+    }
+  });
+
+  socket.on("taskNavigationEnded", async (data) => {
+    try {
+      const trackingLeg = await completeTaskTrackingLeg(data);
+      socketService.emitToAdmin("taskNavigationEnded", {
+        ...data,
+        trackingLeg,
+      });
+    } catch (error) {
+      console.error("Error ending task tracking leg:", error);
+    }
   });
 
   // Update status (active/idle/offline/etc.)
