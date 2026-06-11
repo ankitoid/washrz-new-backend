@@ -752,7 +752,7 @@ export const getRescheduledPickups = async (req, res) => {
     }
 
     // Use the user's plant name to filter rescheduled pickups
-    const plantName = user.plant;
+    const plantName = user.plantName || user.plant;
 
     // Query to find rescheduled pickups for the specific plant
     const rescheduledPickups = await Pickup.find({
@@ -1110,7 +1110,7 @@ export const getRescheduledOrders = async (req, res) => {
     }
 
     // Use the user's plant name to filter pickups
-    const plantName = user.plant;
+    const plantName = user.plantName || user.plant;
 
     const page = parseInt(req.query.page) || 1;
     const pageSize = parseInt(req.query.pageSize) || 8;

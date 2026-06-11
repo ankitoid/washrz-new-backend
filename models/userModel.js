@@ -47,6 +47,12 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, "Please Select your plant"],
   },
+  plantName: {
+    type: String,
+  },
+  plantLocation: {
+    type: String,
+  },
 
   totalKm: {
     type: Number,

@@ -1,4 +1,5 @@
 import Order from "../models/orderSchema.js";
+import mongoose from "mongoose";
 import Pickup from "../models/pickupSchema.js";
 import Plant from "../models/plantSchema.js";
 import User from "../models/userModel.js";
@@ -50,7 +51,13 @@ export const getRiderPlantDestination = async (req, res) => {
       return res.status(404).json({ error: "Rider not found." });
     }
 
-    const plant = await Plant.findOne({ name: rider.plant }).lean();
+    let plant = null;
+    if (mongoose.Types.ObjectId.isValid(rider.plant)) {
+      plant = await Plant.findById(rider.plant).lean();
+    }
+    if (!plant) {
+      plant = await Plant.findOne({ name: rider.plant }).lean();
+    }
 
     if (!plant) {
       return res.status(404).json({ error: "Plant not found for rider." });
