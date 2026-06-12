@@ -182,6 +182,7 @@ coupons_service.getAvailable = async (query,body) => {
   const { serviceTypes, userId  } = body;
   const now = new Date();
 
+
   // Helper function to normalize category (lowercase + remove hyphens)
   const normalizeCategory = (cat) => cat.toLowerCase().replace(/-/g, '');
 
@@ -240,7 +241,7 @@ coupons_service.getAvailable = async (query,body) => {
       couponCategories.every((cat, index) => cat === requestCategories[index])
     );
   });
-   
+  
   if (userId) {
     const couponIds = matchedCoupons.map((c) => c._id); // already ObjectId
 
@@ -257,12 +258,12 @@ coupons_service.getAvailable = async (query,body) => {
     const usageMap = new Map(userUsage.map((u) => [u._id.toString(), u.count]));
 
     const availableAfterPerUser = matchedCoupons.filter((coupon) => {
-      let shouldInclude = (coupon.type === 'discount' && cartAmount >= ((cartAmount*coupon.discount)/100)) || (coupon.type === 'flat' && cartAmount >= coupon.discount);
+      let shouldInclude = (coupon.type === 'discount' && cartAmount*1 > ((cartAmount*coupon.discount)/100)) || (coupon.type === 'flat' && cartAmount > coupon.discount);
 
       const perUserLimit = coupon.perUser ?? 0; // if missing => unlimited
-      if (perUserLimit <= 0 && !shouldInclude) return true;
+      if (perUserLimit <= 0 && shouldInclude) return true;
       const used = usageMap.get(coupon._id.toString()) || 0;
-      return (used < perUserLimit) && !shouldInclude;
+      return (used < perUserLimit) && shouldInclude;
     });
 
     return availableAfterPerUser;
