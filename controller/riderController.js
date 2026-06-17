@@ -48,7 +48,7 @@ const buildFullAddress = (address = {}) =>
 
 const fetchCustomerAddresses = async (appCustomerId) => {
   const addrRes = await fetch(
-    `https://live.drydash.in/v1/addresses?customerid=${appCustomerId}`,
+    `https://customer.shiptos.com/v1/addresses?customerid=${appCustomerId}`,
   );
 
   if (!addrRes.ok) {
