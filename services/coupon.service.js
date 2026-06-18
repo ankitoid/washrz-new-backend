@@ -446,9 +446,9 @@ coupons_service.applyToOrder = async (userId, body) => {
     }
 
 
-    if (cartAmount <= discount) {
-      throw new Error("You are not allow to use this coupon");
-    }
+    // if (cartAmount <= discount) {
+    //   throw new Error("You are not allow to use this coupon");
+    // }
     
     // Safety - discount cannot exceed order amount
     discount = Math.min(discount, baseAmount);
