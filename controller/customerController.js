@@ -1360,7 +1360,7 @@ export const deletePickup = catchAsync(async (req, res, next) => {
 
       if (req.socket) {
 
-  req.socket.emit("pickupCancelled", { pickupId: id, cancelledBy: userName });
+  req.socket.emitToAll("pickupCancelled", { pickupId: id, cancelledBy: userName });
       
 
   req.socket.emitToAdmin("pickupDeleted", {
