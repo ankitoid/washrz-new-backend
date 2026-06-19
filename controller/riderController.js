@@ -787,7 +787,7 @@ export const deletePickup = catchAsync(async (req, res, next) => {
   const pickupData = await Pickup.findByIdAndUpdate(req.params.id, {
     isDeleted: true,
     PickupStatus: "deleted",
-    createdAt: new Date(),
+    cancelledAt: new Date(),
     cancelNote : "cancelled by customer",
     cancelledBy: {
         name : "",
@@ -806,12 +806,12 @@ export const deletePickup = catchAsync(async (req, res, next) => {
 
   if(req.socket)
   {
-    req.socket.emitToAll("pickupCancelled", { pickupId: id, cancelledBy: "Customer" });
+    req.socket.emitToAll("pickupCancelled", { pickupId: pickupData?._id, cancelledBy: "Customer" });
 
-    req.socket.emitToAdmin("pickupDeleted", {
-    message: "customer deleted pickup successfully",
-    role: "Customer"
-  });
+  //   req.socket.emitToAdmin("pickupDeleted", {
+  //   message: "customer deleted pickup successfully",
+  //   role: "Customer"
+  // });
   }
 
 
