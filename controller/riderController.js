@@ -786,7 +786,13 @@ export const getRescheduledPickups = async (req, res) => {
 export const deletePickup = catchAsync(async (req, res, next) => {
   const pickupData = await Pickup.findByIdAndUpdate(req.params.id, {
     isDeleted: true,
-    PickupStatus: "cancelled",
+    PickupStatus: "deleted",
+    createdAt: new Date(),
+    cancelNote : "cancelled by customer",
+    cancelledBy: {
+        name : "",
+        role : "Customer"
+      }
   });
   if (!pickupData) {
     return next(new AppError("No pickup found with that ID", 404));
@@ -797,6 +803,17 @@ export const deletePickup = catchAsync(async (req, res, next) => {
       { status: "cancelled" },
     );
   }
+
+  if(req.socket)
+  {
+    req.socket.emit("pickupCancelled", { pickupId: id, cancelledBy: "Customer" });
+
+    req.socket.emitToAdmin("pickupDeleted", {
+    message: "customer deleted pickup successfully",
+    role: "Customer"
+  });
+  }
+
 
   res.status(200).json({
     message: "Pickup Deleted Sucessfully",

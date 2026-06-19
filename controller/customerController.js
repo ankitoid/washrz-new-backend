@@ -1328,6 +1328,15 @@ export const deletePickup = catchAsync(async (req, res, next) => {
           ),
         );
       }
+
+      const pickupDetails = await pickup.findById(id).lean()
+
+      console.log("this is the pickup detailssss--->>>>",pickupDetails)
+
+      const custId = pickupDetails?.appCustomerId
+      
+      console.log("this is the custId-->>>",custId)
+
       const updated = await pickup.findByIdAndUpdate(
         id,
         {
@@ -1349,14 +1358,30 @@ export const deletePickup = catchAsync(async (req, res, next) => {
         return next(new AppError("No pickup found with that ID", 404));
       }
 
-      // if (req.socket) {
-      //   req.socket.emit("pickupCancelled", { pickupId: id, cancelledBy: userName });
-      // }
+      if (req.socket) {
 
-      // req.socket.emitToAdmin("pickupCancelled", {
-      //   pickupId: id,
-      //   cancelledBy: userName,
-      // });
+  req.socket.emit("pickupCancelled", { pickupId: id, cancelledBy: userName });
+      
+
+  req.socket.emitToAdmin("pickupDeleted", {
+    message:  "pickup deleted successfully",
+    role: `Rider-${userName}`
+  });
+
+   if(custId){
+      const notification = await createCustomerNotification({
+      customerId: custId,
+      title: "Pickup Cancelled",
+      message: "Your pickup has been Cancelled",
+      type: "pickup_Created",
+      data: {
+        pickupId: pickupDetails?._id,
+        screen: "PickupDetails",
+      },
+    });
+   }
+
+}
 
       return res.status(200).json({
         message: "Pickup cancelled successfully",
