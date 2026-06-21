@@ -1225,10 +1225,10 @@ const deleteOrderRelatedFiles = async () => {
 };
 
 // Schedule cron job to run every Sunday at midnight 0 0 * * 0
-cron.schedule("0 1 * * 0", () => {
-  console.log("Running a task every Sunday at midnight");
-  deleteOrderRelatedFiles();
-});
+// cron.schedule("0 1 * * 0", () => {
+//   console.log("Running a task every Sunday at midnight");
+//   deleteOrderRelatedFiles();
+// });
 
 // Rider Dashboard Data Controller
 // export const getRiderDashboardData = async (req, res) => {
