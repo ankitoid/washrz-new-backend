@@ -5,6 +5,7 @@ import Customer from "../models/customerSchema.js";
 import Order from "../models/orderSchema.js";
 import Pickup from "../models/pickupSchema.js";
 import Faq from "../models/Faq.js";
+import customerFcmService from "../services/customerFcmService.js";
 
 export const createRoom = async (req, res) => {
     try {
@@ -411,7 +412,7 @@ export const sendMessage = async (req, res) => {
             roomId, senderType, senderId, message
         });
 
-        await ChatRoom.findByIdAndUpdate(roomId, {
+        const updatedRoom = await ChatRoom.findByIdAndUpdate(roomId, {
             lastMessage: message,
             lastMessageAt: new Date(),
             lastMessageSender: senderType,
@@ -419,7 +420,26 @@ export const sendMessage = async (req, res) => {
                 unreadAdminCount: senderType === "customer" ? 1 : 0,
                 unreadCustomerCount: senderType === "admin" ? 1 : 0
             }
-        });
+        }, { new: true });
+        // fcm emit (ss)
+        if (updatedRoom && senderType === "admin") {
+            try {
+                await customerFcmService.sendToCustomer(
+                    updatedRoom.customerId,
+                    {
+                        title: "New Support Message",
+                        body: message,
+                    },
+                    {
+                        roomId: roomId.toString(),
+                        type: "chat",
+                        senderId: senderId ? senderId.toString() : "admin",
+                    }
+                );
+            } catch (fcmError) {
+                console.error("Failed to send chat FCM:", fcmError);
+            }
+        }
 
         const io = req.app.locals.io;
         if (io) {
@@ -573,12 +593,31 @@ export const botReply = async (req, res) => {
             message: answer
         });
 
-        await ChatRoom.findByIdAndUpdate(roomId, {
+        const updatedRoom = await ChatRoom.findByIdAndUpdate(roomId, {
             lastMessage: answer,
             lastMessageAt: new Date(),
             lastMessageSender: "admin",
             $inc: { unreadCustomerCount: 1 }
-        });
+        }, { new: true });
+        //fcm emit(ss)
+        if (updatedRoom) {
+            try {
+                await customerFcmService.sendToCustomer(
+                    updatedRoom.customerId,
+                    {
+                        title: "Support Bot Reply",
+                        body: answer,
+                    },
+                    {
+                        roomId: roomId.toString(),
+                        type: "chat",
+                        senderId: "bot",
+                    }
+                );
+            } catch (fcmError) {
+                console.error("Failed to send bot FCM:", fcmError);
+            }
+        }
 
         const io = req.app.locals.io;
         if (io) {
