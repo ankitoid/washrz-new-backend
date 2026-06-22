@@ -1362,11 +1362,11 @@ export const deletePickup = catchAsync(async (req, res, next) => {
 
   req.socket.emitToAll("pickupCancelled", { pickupId: id, cancelledBy: userName });
       
-
-  req.socket.emitToAdmin("pickupDeleted", {
-    message:  "pickup deleted successfully",
-    role: `Rider-${userName}`
-  });
+   //not using 
+  // req.socket.emitToAdmin("pickupDeleted", {
+  //   message:  "pickup deleted successfully",
+  //   role: `Rider-${userName}`
+  // });
 
    if(custId){
       const notification = await createCustomerNotification({
@@ -1379,6 +1379,18 @@ export const deletePickup = catchAsync(async (req, res, next) => {
         screen: "PickupDetails",
       },
     });
+      const fcmnotification = await customerFcmService.sendToCustomer(
+           String(custId),
+           {
+             title: "Pickup Cancelled 😔",
+             body: "Uh oh! Your pickup wasn't confirmed. Want to try a different time?",
+           },
+           {
+             type: "pickup_cancelled",
+             pickupId: String(id),
+             screen: "PickupDetails",
+           },
+         );
    }
 
 }
