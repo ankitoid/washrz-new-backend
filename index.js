@@ -34,6 +34,7 @@ import slotRoutes from "./routes/slotsRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import socketService from "./services/socketService.js";
 import { cleanupExpiredCoupons } from "./jobs/couponCleanup.js";
+import { syncPlayStoreDownloads } from "./jobs/playStoreSync.js";
 import faqRoutes from "./routes/faqRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import ChatRoom from "./models/ChatRoom.js";
@@ -572,6 +573,25 @@ setInterval(async () => {
     isRunning = false;
   }
 }, 30000);
+
+
+// Schedule Google Play Store downloads sync (Runs every 12 hours)
+setInterval(async () => {
+  try {
+    await syncPlayStoreDownloads();
+  } catch (err) {
+    console.error("Google Play sync interval error:", err);
+  }
+}, 12 * 60 * 60 * 1000);
+
+// Run once immediately on startup after a small delay (10 seconds to allow DB to connect)
+setTimeout(async () => {
+  try {
+    await syncPlayStoreDownloads();
+  } catch (err) {
+    console.error("Google Play initial sync error:", err);
+  }
+}, 10000);
 
 
 // Periodic cleanup: mark riders offline if no update for 2 minutes

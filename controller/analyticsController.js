@@ -1,4 +1,5 @@
 import AnalyticsEvent from "../models/analyticsEventSchema.js";
+import DownloadStat from "../models/downloadStatSchema.js";
 
 const INDIA_TIMEZONE = "Asia/Kolkata";
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -216,6 +217,23 @@ const getEventMetricSum = async ({ match, eventName }) => {
   });
 };
 
+const getDownloadSum = async ({ start, end, platform }) => {
+  const match = {
+    date: {
+      $gte: startOfDay(start),
+      $lte: endOfDay(end),
+    },
+  };
+  if (platform && platform !== "all") {
+    match.platform = platform;
+  }
+  const result = await DownloadStat.aggregate([
+    { $match: match },
+    { $group: { _id: null, total: { $sum: "$downloads" } } },
+  ]);
+  return result[0]?.total || 0;
+};
+
 const getTrendSeries = async ({ buckets, platform, locationFilters }) => {
   const rows = await Promise.all(
     buckets.map(async (bucket) => {
@@ -228,7 +246,7 @@ const getTrendSeries = async ({ buckets, platform, locationFilters }) => {
 
       const [activeUsers, downloads] = await Promise.all([
         getDistinctIdentityCountForEvents(match, ACTIVE_USER_EVENTS),
-        getEventMetricSum({ match, eventName: DOWNLOAD_EVENT }),
+        getDownloadSum({ start: bucket.start, end: bucket.end, platform }),
       ]);
 
       return {
@@ -415,33 +433,39 @@ export const getAnalyticsOverview = async (req, res) => {
       activeUserLocations,
       trend,
     ] = await Promise.all([
-      getEventMetricSum({
-        match: currentMatch,
-        eventName: DOWNLOAD_EVENT,
+      getDownloadSum({
+        start,
+        end,
+        platform,
       }),
-      getEventMetricSum({
-        match: previousMatch,
-        eventName: DOWNLOAD_EVENT,
+      getDownloadSum({
+        start: previous.start,
+        end: previous.end,
+        platform,
       }),
       getDistinctIdentityCountForEvents(currentMatch, ACTIVE_USER_EVENTS),
       getDistinctIdentityCountForEvents(previousMatch, ACTIVE_USER_EVENTS),
       getDistinctIdentityCount(currentMatch, SIGNUP_EVENT),
       getDistinctIdentityCount(previousMatch, SIGNUP_EVENT),
-      getEventMetricSum({
-        match: { ...currentMatch, platform: "ios" },
-        eventName: DOWNLOAD_EVENT,
+      getDownloadSum({
+        start,
+        end,
+        platform: "ios",
       }),
-      getEventMetricSum({
-        match: { ...previousMatch, platform: "ios" },
-        eventName: DOWNLOAD_EVENT,
+      getDownloadSum({
+        start: previous.start,
+        end: previous.end,
+        platform: "ios",
       }),
-      getEventMetricSum({
-        match: { ...currentMatch, platform: "android" },
-        eventName: DOWNLOAD_EVENT,
+      getDownloadSum({
+        start,
+        end,
+        platform: "android",
       }),
-      getEventMetricSum({
-        match: { ...previousMatch, platform: "android" },
-        eventName: DOWNLOAD_EVENT,
+      getDownloadSum({
+        start: previous.start,
+        end: previous.end,
+        platform: "android",
       }),
       getDistinctIdentityByPlatform(currentMatch),
       getLatestUserLocations({
@@ -506,6 +530,87 @@ export const getAnalyticsOverview = async (req, res) => {
         zone: row.label,
         users: row.users,
       })),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const upsertDailyDownloads = async (req, res) => {
+  try {
+    const { date, platform, downloads } = req.body;
+
+    if (!date || !platform || downloads === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "date, platform, and downloads are required",
+      });
+    }
+
+    if (!["android", "ios"].includes(platform)) {
+      return res.status(400).json({
+        success: false,
+        message: "platform must be either 'android' or 'ios'",
+      });
+    }
+
+    const dateObj = startOfDay(new Date(date));
+
+    const record = await DownloadStat.findOneAndUpdate(
+      { date: dateObj, platform },
+      { $set: { downloads: Number(downloads) } },
+      { upsert: true, new: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: record,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const upsertDailyDownloadsBatch = async (req, res) => {
+  try {
+    const stats = Array.isArray(req.body?.stats) ? req.body.stats : [];
+
+    if (!stats.length) {
+      return res.status(400).json({
+        success: false,
+        message: "stats array is required",
+      });
+    }
+
+    const operations = stats
+      .filter((s) => s.date && ["android", "ios"].includes(s.platform) && s.downloads !== undefined)
+      .map((s) => ({
+        updateOne: {
+          filter: { date: startOfDay(new Date(s.date)), platform: s.platform },
+          update: { $set: { downloads: Number(s.downloads) } },
+          upsert: true,
+        },
+      }));
+
+    if (!operations.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid stats found in payload",
+      });
+    }
+
+    const result = await DownloadStat.bulkWrite(operations);
+
+    return res.status(200).json({
+      success: true,
+      upsertedCount: result.upsertedCount,
+      modifiedCount: result.modifiedCount,
     });
   } catch (error) {
     return res.status(500).json({
