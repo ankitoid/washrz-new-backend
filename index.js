@@ -477,10 +477,12 @@ socket.on("sendChatMessage", async (data) => {
             lastMessageSender: data.senderType,   // track who sent the last message
         };
 
+        console.log("this is the log--->>>>>", updateFields)
+
         // 3. Increment unreadAdminCount if the sender is NOT an admin
         if (data.senderType !== 'admin') {
             // If customer or bot sent, increment admin unread count
-            updateFields.$inc = { unreadAdminCount: 1 };
+            updateFields.unreadAdminCount = 5;
         } else {
             // Optionally, if admin sent, you might want to increment customer unread count
             // and reset admin unread count (since admin is active)
