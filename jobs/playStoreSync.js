@@ -1,5 +1,10 @@
 import { Storage } from "@google-cloud/storage";
+import path from "path";
+import { fileURLToPath } from "url";
 import DownloadStat from "../models/downloadStatSchema.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const startOfDay = (date) => {
   const value = new Date(date);
@@ -54,14 +59,18 @@ const parseCSV = (content) => {
 export const syncPlayStoreDownloads = async () => {
   const package_name = process.env.PLAY_STORE_PACKAGE_NAME;
   const developerId = process.env.PLAY_STORE_DEVELOPER_ID;
-  const keyPath = process.env.GOOGLE_PLAY_KEY_PATH;
+  const envKeyPath = process.env.GOOGLE_PLAY_KEY_PATH;
+  const defaultKeyPath = path.resolve(__dirname, "..", "customerapp-analytics.json");
+  const keyPath = envKeyPath ? path.resolve(envKeyPath) : defaultKeyPath;
 
-  if (!package_name || !developerId || !keyPath) {
+  if (!package_name || !developerId) {
     console.error(
-      "⚠️ Play Store Sync aborted: Missing env configuration (PLAY_STORE_PACKAGE_NAME, PLAY_STORE_DEVELOPER_ID, GOOGLE_PLAY_KEY_PATH)"
+      "⚠️ Play Store Sync aborted: Missing env configuration (PLAY_STORE_PACKAGE_NAME, PLAY_STORE_DEVELOPER_ID)"
     );
     return;
   }
+
+  console.log(`🔑 Using Play Store key file: ${keyPath}`);
 
   try {
     console.log("🔄 Starting Play Store Downloads Daily Sync...");
@@ -93,6 +102,7 @@ export const syncPlayStoreDownloads = async () => {
       console.log(`📥 Checking GCS bucket: ${bucketName}, path: ${filePath}`);
 
       try {
+        console.log(`📁 Attempting download from local key at: ${keyPath}`);
         const [fileContentBuffer] = await storage.bucket(bucketName).file(filePath).download();
 
         // Google Play Console exports reports in UTF-16LE encoding by default
