@@ -462,6 +462,11 @@ socket.on("sendChatMessage", async (data) => {
     try {
         console.log("MESSAGE RECEIVED:", data);
 
+        let unreadCount = await Message.countDocuments({
+           senderType: { $ne: "admin" }, 
+    isRead: false            
+});
+
         // 1. Save the new message
         const newMessage = await Message.create({
             roomId: data.roomId,
@@ -484,6 +489,8 @@ socket.on("sendChatMessage", async (data) => {
         if (data.senderType !== 'admin') {
             // Non-admin → increment admin unread count
             chatRoom.unreadAdminCount = (chatRoom.unreadAdminCount || 0) + 1;
+
+            unreadCount = unreadCount + 1
         } else {
             // Admin reply → increment customer unread count and reset admin count
             chatRoom.unreadCustomerCount = (chatRoom.unreadCustomerCount || 0) + 1;
@@ -503,12 +510,14 @@ socket.on("sendChatMessage", async (data) => {
 
         // 6. Notify all clients
         io.emit("chatRoomsUpdated");
+        io.emit("sendMessageUnreadCount",{
+          unreadCount
+        })
 
     } catch (error) {
         console.log("SOCKET ERROR:", error);
     }
 });
-
     socket.on("disconnect", () => {
 
         console.log(
