@@ -1368,6 +1368,8 @@ export const deletePickup = catchAsync(async (req, res, next) => {
   //   role: `Rider-${userName}`
   // });
 
+  console.log("this is the custId--->>",custId)
+
    if(custId){
       const notification = await createCustomerNotification({
       customerId: custId,
@@ -1391,6 +1393,8 @@ export const deletePickup = catchAsync(async (req, res, next) => {
              screen: "PickupDetails",
            },
          );
+
+         console.log("this is the fcm notificaton--->>",fcmnotification)
    }
 
 }
