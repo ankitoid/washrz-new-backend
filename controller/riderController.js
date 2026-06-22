@@ -48,7 +48,7 @@ const buildFullAddress = (address = {}) =>
 
 const fetchCustomerAddresses = async (appCustomerId) => {
   const addrRes = await fetch(
-    `https://live.drydash.in/v1/addresses?customerid=${appCustomerId}`,
+    `https://customer.shiptos.com/v1/addresses?customerid=${appCustomerId}`,
   );
 
   if (!addrRes.ok) {
@@ -786,7 +786,13 @@ export const getRescheduledPickups = async (req, res) => {
 export const deletePickup = catchAsync(async (req, res, next) => {
   const pickupData = await Pickup.findByIdAndUpdate(req.params.id, {
     isDeleted: true,
-    PickupStatus: "cancelled",
+    PickupStatus: "deleted",
+    cancelledAt: new Date(),
+    cancelNote : "cancelled by customer",
+    cancelledBy: {
+        name : "",
+        role : "Customer"
+      }
   });
   if (!pickupData) {
     return next(new AppError("No pickup found with that ID", 404));
@@ -797,6 +803,17 @@ export const deletePickup = catchAsync(async (req, res, next) => {
       { status: "cancelled" },
     );
   }
+
+  if(req.socket)
+  {
+    req.socket.emitToAll("pickupCancelled", { pickupId: pickupData?._id, cancelledBy: "Customer" });
+
+  //   req.socket.emitToAdmin("pickupDeleted", {
+  //   message: "customer deleted pickup successfully",
+  //   role: "Customer"
+  // });
+  }
+
 
   res.status(200).json({
     message: "Pickup Deleted Sucessfully",
@@ -1208,10 +1225,10 @@ const deleteOrderRelatedFiles = async () => {
 };
 
 // Schedule cron job to run every Sunday at midnight 0 0 * * 0
-cron.schedule("0 1 * * 0", () => {
-  console.log("Running a task every Sunday at midnight");
-  deleteOrderRelatedFiles();
-});
+// cron.schedule("0 1 * * 0", () => {
+//   console.log("Running a task every Sunday at midnight");
+//   deleteOrderRelatedFiles();
+// });
 
 // Rider Dashboard Data Controller
 // export const getRiderDashboardData = async (req, res) => {
