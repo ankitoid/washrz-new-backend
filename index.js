@@ -458,74 +458,52 @@ io.on("connection", (socket) => {
     // SEND MESSAGE
     // =========================
 
-    socket.on(
+socket.on("sendChatMessage", async (data) => {
+    try {
+        console.log("MESSAGE RECEIVED:", data);
 
-        "sendChatMessage",
+        // 1. Save the new message
+        const newMessage = await Message.create({
+            roomId: data.roomId,
+            senderType: data.senderType,
+            senderId: data.senderId,
+            message: data.message
+        });
 
-        async (data) => {
+        // 2. Prepare update object for the chat room
+        const updateFields = {
+            lastMessage: data.message,
+            lastMessageAt: new Date(),
+            lastMessageSender: data.senderType,   // track who sent the last message
+        };
 
-            try {
-
-                console.log(
-                    "MESSAGE RECEIVED:",
-                    data
-                );
-
-                const newMessage =
-                await Message.create({
-
-                    roomId:
-                        data.roomId,
-
-                    senderType:
-                        data.senderType,
-
-                    senderId:
-                        data.senderId,
-
-                    message:
-                        data.message
-                });
-
-               await ChatRoom.findByIdAndUpdate(data.roomId, {
-
-                    lastMessage:
-                        data.message,
-                      lastMessageAt: new Date(),
-                });
-
-                console.log(
-                    "MESSAGE SAVED:",
-                    newMessage._id
-                );
-
-                io.to(
-                    data.roomId.toString()
-                ).emit(
-
-                    "receiveChatMessage",
-
-                    newMessage
-                );
-
-                console.log(
-                    "MESSAGE EMITTED TO ROOM:",
-                    data.roomId
-                );
-
-                io.emit(
-                    "chatRoomsUpdated"
-                );
-
-            } catch (error) {
-
-                console.log(
-                    "SOCKET ERROR:",
-                    error
-                );
-            }
+        // 3. Increment unreadAdminCount if the sender is NOT an admin
+        if (data.senderType !== 'admin') {
+            // If customer or bot sent, increment admin unread count
+            updateFields.$inc = { unreadAdminCount: 1 };
+        } else {
+            // Optionally, if admin sent, you might want to increment customer unread count
+            // and reset admin unread count (since admin is active)
+            updateFields.$inc = { unreadCustomerCount: 1 };
+            updateFields.unreadAdminCount = 0; // or use $set
         }
-    );
+
+        // 4. Update the chat room
+        await ChatRoom.findByIdAndUpdate(data.roomId, updateFields, { new: true });
+
+        console.log("MESSAGE SAVED:", newMessage._id);
+
+        // 5. Emit to the specific room
+        io.to(data.roomId.toString()).emit("receiveChatMessage", newMessage);
+        console.log("MESSAGE EMITTED TO ROOM:", data.roomId);
+
+        // 6. Notify all clients that the chat list has changed
+        io.emit("chatRoomsUpdated");
+
+    } catch (error) {
+        console.log("SOCKET ERROR:", error);
+    }
+});
 
     socket.on("disconnect", () => {
 
