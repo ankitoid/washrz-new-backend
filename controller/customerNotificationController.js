@@ -1,5 +1,6 @@
 import CustomerNotification from "../models/customerNotificationSchema.js";
 import { emitToUser } from "../utills/socket.js";
+import customerFcmService from "../services/customerFcmService.js";
 
 export const createCustomerNotification = async ({
   customerId,
@@ -28,6 +29,23 @@ export const createCustomerNotification = async ({
       notification,
       unreadCount,
     });
+
+    // Also send FCM push notification(ss)
+    try {
+      await customerFcmService.sendToCustomer(
+        customerId,
+        {
+          title: title || "Notification",
+          body: message || "",
+        },
+        {
+          ...(data || {}),
+          type: type || "notification",
+        }
+      );
+    } catch (fcmError) {
+      console.error("Failed to send FCM in createCustomerNotification:", fcmError);
+    }
 
     return notification;
   } catch (error) {
