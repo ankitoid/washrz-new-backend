@@ -1,35 +1,16 @@
 import AnalyticsEvent from "../models/analyticsEventSchema.js";
+import DownloadStat from "../models/downloadStatSchema.js";
 
 const INDIA_TIMEZONE = "Asia/Kolkata";
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const DOWNLOAD_EVENT = "download_recorded";
 const SIGNUP_EVENT = "sign_up";
 const ACTIVE_USER_EVENTS = ["app_open", "session_start", "screen_view"];
-const DEMAND_EVENTS = [
-  "pickup_created",
-  "booking_created",
-  "order_created",
-  "payment_success",
-];
 const ALLOWED_EVENTS = [
   DOWNLOAD_EVENT,
   SIGNUP_EVENT,
-  "app_open",
-  "session_start",
-  "screen_view",
-  "login",
-  "phone_otp_requested",
-  "booking_created",
-  "pickup_created",
-  "payment_initiated",
-  "payment_success",
-  "payment_failed",
-  "payment_cancelled",
-  "address_added",
+  ...ACTIVE_USER_EVENTS,
 ];
-const DISTRIBUTION_EVENT_NAMES = Array.from(
-  new Set([SIGNUP_EVENT, ...ACTIVE_USER_EVENTS]),
-);
 
 const normalizeString = (value) => {
   if (value === undefined || value === null) return null;
@@ -74,6 +55,7 @@ const getRangeWindow = ({ range, from, to }) => {
     };
   }
 
+  // Default to weekly (last 7 days)
   return {
     start: startOfDay(new Date(now.getTime() - 6 * MS_PER_DAY)),
     end: endOfDay(now),
@@ -143,9 +125,7 @@ const getTrendBuckets = ({ start, end, range }) => {
 
 const getQueryLocationFilters = (query = {}) => ({
   city: normalizeString(query.city),
-  region: normalizeString(query.region),
   zone: normalizeString(query.zone),
-  sector: normalizeString(query.sector),
 });
 
 const withLocationMatch = (match, locationFilters) => {
@@ -155,16 +135,8 @@ const withLocationMatch = (match, locationFilters) => {
     nextMatch.city = locationFilters.city;
   }
 
-  if (locationFilters.region) {
-    nextMatch.region = locationFilters.region;
-  }
-
   if (locationFilters.zone) {
     nextMatch.zone = locationFilters.zone;
-  }
-
-  if (locationFilters.sector) {
-    nextMatch.sector = locationFilters.sector;
   }
 
   return nextMatch;
@@ -238,33 +210,28 @@ const getDistinctIdentityByPlatform = async (match) =>
     { $sort: { users: -1 } },
   ]);
 
-const getEventMetricSum = async ({
-  match,
-  eventName,
-  metadataField = null,
-}) => {
-  const rows = await AnalyticsEvent.aggregate([
-    {
-      $match: {
-        ...match,
-        eventName,
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        total: metadataField
-          ? {
-              $sum: {
-                $ifNull: [`$metadata.${metadataField}`, 1],
-              },
-            }
-          : { $sum: 1 },
-      },
-    },
-  ]);
+const getEventMetricSum = async ({ match, eventName }) => {
+  return AnalyticsEvent.countDocuments({
+    ...match,
+    eventName,
+  });
+};
 
-  return rows[0]?.total || 0;
+const getDownloadSum = async ({ start, end, platform }) => {
+  const match = {
+    date: {
+      $gte: startOfDay(start),
+      $lte: endOfDay(end),
+    },
+  };
+  if (platform && platform !== "all") {
+    match.platform = platform;
+  }
+  const result = await DownloadStat.aggregate([
+    { $match: match },
+    { $group: { _id: null, total: { $sum: "$downloads" } } },
+  ]);
+  return result[0]?.total || 0;
 };
 
 const getTrendSeries = async ({ buckets, platform, locationFilters }) => {
@@ -279,11 +246,7 @@ const getTrendSeries = async ({ buckets, platform, locationFilters }) => {
 
       const [activeUsers, downloads] = await Promise.all([
         getDistinctIdentityCountForEvents(match, ACTIVE_USER_EVENTS),
-        getEventMetricSum({
-          match,
-          eventName: DOWNLOAD_EVENT,
-          metadataField: "downloadCount",
-        }),
+        getDownloadSum({ start: bucket.start, end: bucket.end, platform }),
       ]);
 
       return {
@@ -299,28 +262,14 @@ const getTrendSeries = async ({ buckets, platform, locationFilters }) => {
 };
 
 const buildLatestLocationProjection = (prefix = "$latest") => ({
-  city: {
-    $ifNull: [`${prefix}.city`, { $ifNull: [`${prefix}.metadata.city`, null] }],
-  },
-  region: {
-    $ifNull: [`${prefix}.region`, { $ifNull: [`${prefix}.metadata.region`, null] }],
-  },
-  zone: {
-    $ifNull: [`${prefix}.zone`, { $ifNull: [`${prefix}.metadata.zone`, null] }],
-  },
-  sector: {
-    $ifNull: [`${prefix}.sector`, { $ifNull: [`${prefix}.metadata.sector`, null] }],
-  },
+  city: `${prefix}.city`,
+  zone: `${prefix}.zone`,
 });
 
-const getLatestUserLocations = async ({
-  match,
-  eventNames,
-  eventName = null,
-}) => {
+const getLatestUserLocations = async ({ match, eventNames }) => {
   const eventMatch = {
     ...match,
-    eventName: eventName || { $in: eventNames },
+    eventName: { $in: eventNames },
   };
 
   return AnalyticsEvent.aggregate([
@@ -358,87 +307,17 @@ const toDistribution = (rows, field) => {
 };
 
 const sanitizeEvent = (payload = {}) => {
-  const metadata =
-    payload.metadata && typeof payload.metadata === "object" ? payload.metadata : {};
-  const userId = normalizeString(payload.userId);
-  const installationId = normalizeString(payload.installationId);
-  const region = normalizeString(payload.region || metadata.region);
-  const zone = normalizeString(payload.zone || metadata.zone);
-  const sector = normalizeString(payload.sector || metadata.sector);
-  const city = normalizeString(payload.city || metadata.city);
+  const city = normalizeString(payload.city);
+  const zone = normalizeString(payload.zone);
 
   return {
     eventName: normalizeString(payload.eventName) || "",
-    identityKey:
-      normalizeString(payload.identityKey || userId || installationId) || "",
-    userId,
-    installationId,
-    sessionId: normalizeString(payload.sessionId),
+    identityKey: normalizeString(payload.identityKey) || "",
     platform: normalizeString(payload.platform) || "unknown",
     city,
-    region,
     zone,
-    sector,
-    country: normalizeString(payload.country),
-    osVersion: normalizeString(payload.osVersion),
-    appVersion: normalizeString(payload.appVersion),
-    deviceModel: normalizeString(payload.deviceModel),
-    metadata: {
-      ...metadata,
-      ...(city ? { city } : {}),
-      ...(region ? { region } : {}),
-      ...(zone ? { zone } : {}),
-      ...(sector ? { sector } : {}),
-    },
     occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
   };
-};
-
-export const getAnalyticsContract = async (req, res) => {
-  return res.status(200).json({
-    success: true,
-    data: {
-      allowedEvents: ALLOWED_EVENTS,
-      ranges: ["today", "weekly", "monthly", "all", "custom"],
-      activeUserEvents: ACTIVE_USER_EVENTS,
-      demandEvents: DEMAND_EVENTS,
-      requiredFields: ["eventName", "identityKey", "platform"],
-      optionalFields: [
-        "userId",
-        "installationId",
-        "sessionId",
-        "city",
-        "region",
-        "zone",
-        "sector",
-        "country",
-        "osVersion",
-        "appVersion",
-        "deviceModel",
-        "metadata",
-        "occurredAt",
-      ],
-      filters: ["platform", "city", "region", "zone", "sector", "from", "to"],
-      semantics: {
-        downloads: {
-          eventName: DOWNLOAD_EVENT,
-          note: "Use explicit backend-fed download events, preferably synced from Play Store data.",
-        },
-        newUsers: {
-          eventName: SIGNUP_EVENT,
-          note: "Counts signed-up users and uses the signup event location for distribution.",
-        },
-        activeUsers: {
-          events: ACTIVE_USER_EVENTS,
-          note: "Counts distinct identities with app-open/session/screen activity in the selected period.",
-        },
-        userDistribution: {
-          sourceEvents: DISTRIBUTION_EVENT_NAMES,
-          note: "Active-user distribution uses each identity's latest location in the selected period. New-user distribution uses signup location.",
-        },
-      },
-    },
-  });
 };
 
 export const ingestAnalyticsEvent = async (req, res) => {
@@ -466,7 +345,7 @@ export const ingestAnalyticsEvent = async (req, res) => {
       data: event,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(400).json({
       success: false,
       message: error.message,
     });
@@ -507,7 +386,7 @@ export const ingestAnalyticsBatch = async (req, res) => {
       insertedCount: inserted.length,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(400).json({
       success: false,
       message: error.message,
     });
@@ -552,52 +431,46 @@ export const getAnalyticsOverview = async (req, res) => {
       previousAndroidDownloads,
       osBreakdown,
       activeUserLocations,
-      newUserLocations,
       trend,
     ] = await Promise.all([
-      getEventMetricSum({
-        match: currentMatch,
-        eventName: DOWNLOAD_EVENT,
-        metadataField: "downloadCount",
+      getDownloadSum({
+        start,
+        end,
+        platform,
       }),
-      getEventMetricSum({
-        match: previousMatch,
-        eventName: DOWNLOAD_EVENT,
-        metadataField: "downloadCount",
+      getDownloadSum({
+        start: previous.start,
+        end: previous.end,
+        platform,
       }),
       getDistinctIdentityCountForEvents(currentMatch, ACTIVE_USER_EVENTS),
       getDistinctIdentityCountForEvents(previousMatch, ACTIVE_USER_EVENTS),
       getDistinctIdentityCount(currentMatch, SIGNUP_EVENT),
       getDistinctIdentityCount(previousMatch, SIGNUP_EVENT),
-      getEventMetricSum({
-        match: { ...currentMatch, platform: "ios" },
-        eventName: DOWNLOAD_EVENT,
-        metadataField: "downloadCount",
+      getDownloadSum({
+        start,
+        end,
+        platform: "ios",
       }),
-      getEventMetricSum({
-        match: { ...previousMatch, platform: "ios" },
-        eventName: DOWNLOAD_EVENT,
-        metadataField: "downloadCount",
+      getDownloadSum({
+        start: previous.start,
+        end: previous.end,
+        platform: "ios",
       }),
-      getEventMetricSum({
-        match: { ...currentMatch, platform: "android" },
-        eventName: DOWNLOAD_EVENT,
-        metadataField: "downloadCount",
+      getDownloadSum({
+        start,
+        end,
+        platform: "android",
       }),
-      getEventMetricSum({
-        match: { ...previousMatch, platform: "android" },
-        eventName: DOWNLOAD_EVENT,
-        metadataField: "downloadCount",
+      getDownloadSum({
+        start: previous.start,
+        end: previous.end,
+        platform: "android",
       }),
       getDistinctIdentityByPlatform(currentMatch),
       getLatestUserLocations({
         match: currentMatch,
         eventNames: ACTIVE_USER_EVENTS,
-      }),
-      getLatestUserLocations({
-        match: currentMatch,
-        eventNames: [],
-        eventName: SIGNUP_EVENT,
       }),
       getTrendSeries({
         buckets: getTrendBuckets({ start, end, range }),
@@ -608,13 +481,7 @@ export const getAnalyticsOverview = async (req, res) => {
 
     const totalPlatformUsers = osBreakdown.reduce((sum, row) => sum + row.users, 0);
     const cityDistribution = toDistribution(activeUserLocations, "city");
-    const regionDistribution = toDistribution(activeUserLocations, "region");
     const zoneDistribution = toDistribution(activeUserLocations, "zone");
-    const sectorDistribution = toDistribution(activeUserLocations, "sector");
-    const newUserCityDistribution = toDistribution(newUserLocations, "city");
-    const newUserRegionDistribution = toDistribution(newUserLocations, "region");
-    const newUserZoneDistribution = toDistribution(newUserLocations, "zone");
-    const newUserSectorDistribution = toDistribution(newUserLocations, "sector");
 
     return res.status(200).json({
       success: true,
@@ -659,36 +526,10 @@ export const getAnalyticsOverview = async (req, res) => {
         city: row.label,
         users: row.users,
       })),
-      regionDistribution: regionDistribution.map((row) => ({
-        region: row.label,
-        users: row.users,
-      })),
       zoneDistribution: zoneDistribution.map((row) => ({
         zone: row.label,
         users: row.users,
       })),
-      sectorDistribution: sectorDistribution.map((row) => ({
-        sector: row.label,
-        users: row.users,
-      })),
-      newUserDistribution: {
-        city: newUserCityDistribution.map((row) => ({
-          city: row.label,
-          users: row.users,
-        })),
-        region: newUserRegionDistribution.map((row) => ({
-          region: row.label,
-          users: row.users,
-        })),
-        zone: newUserZoneDistribution.map((row) => ({
-          zone: row.label,
-          users: row.users,
-        })),
-        sector: newUserSectorDistribution.map((row) => ({
-          sector: row.label,
-          users: row.users,
-        })),
-      },
     });
   } catch (error) {
     return res.status(500).json({
@@ -698,48 +539,78 @@ export const getAnalyticsOverview = async (req, res) => {
   }
 };
 
-export const getAnalyticsEvents = async (req, res) => {
+export const upsertDailyDownloads = async (req, res) => {
   try {
-    const page = Math.max(Number(req.query.page) || 1, 1);
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const skip = (page - 1) * limit;
+    const { date, platform, downloads } = req.body;
 
-    const query = {};
-
-    if (req.query.eventName) query.eventName = req.query.eventName;
-    if (req.query.platform && req.query.platform !== "all") {
-      query.platform = req.query.platform;
-    }
-    if (req.query.userId) query.userId = String(req.query.userId);
-    if (req.query.installationId) {
-      query.installationId = String(req.query.installationId);
-    }
-    if (req.query.city) query.city = String(req.query.city);
-    if (req.query.region) query.region = String(req.query.region);
-    if (req.query.zone) query.zone = String(req.query.zone);
-    if (req.query.sector) query.sector = String(req.query.sector);
-
-    if (req.query.from || req.query.to) {
-      query.occurredAt = {};
-      if (req.query.from) query.occurredAt.$gte = new Date(req.query.from);
-      if (req.query.to) query.occurredAt.$lte = new Date(req.query.to);
+    if (!date || !platform || downloads === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "date, platform, and downloads are required",
+      });
     }
 
-    const [events, total] = await Promise.all([
-      AnalyticsEvent.find(query)
-        .sort({ occurredAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      AnalyticsEvent.countDocuments(query),
-    ]);
+    if (!["android", "ios"].includes(platform)) {
+      return res.status(400).json({
+        success: false,
+        message: "platform must be either 'android' or 'ios'",
+      });
+    }
+
+    const dateObj = startOfDay(new Date(date));
+
+    const record = await DownloadStat.findOneAndUpdate(
+      { date: dateObj, platform },
+      { $set: { downloads: Number(downloads) } },
+      { upsert: true, new: true }
+    );
 
     return res.status(200).json({
       success: true,
-      page,
-      limit,
-      total,
-      data: events,
+      data: record,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const upsertDailyDownloadsBatch = async (req, res) => {
+  try {
+    const stats = Array.isArray(req.body?.stats) ? req.body.stats : [];
+
+    if (!stats.length) {
+      return res.status(400).json({
+        success: false,
+        message: "stats array is required",
+      });
+    }
+
+    const operations = stats
+      .filter((s) => s.date && ["android", "ios"].includes(s.platform) && s.downloads !== undefined)
+      .map((s) => ({
+        updateOne: {
+          filter: { date: startOfDay(new Date(s.date)), platform: s.platform },
+          update: { $set: { downloads: Number(s.downloads) } },
+          upsert: true,
+        },
+      }));
+
+    if (!operations.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid stats found in payload",
+      });
+    }
+
+    const result = await DownloadStat.bulkWrite(operations);
+
+    return res.status(200).json({
+      success: true,
+      upsertedCount: result.upsertedCount,
+      modifiedCount: result.modifiedCount,
     });
   } catch (error) {
     return res.status(500).json({
