@@ -64,10 +64,9 @@ export const syncPlayStoreDownloads = async () => {
   const keyPath = envKeyPath ? path.resolve(envKeyPath) : defaultKeyPath;
 
   if (!package_name || !developerId) {
-    console.error(
-      "⚠️ Play Store Sync aborted: Missing env configuration (PLAY_STORE_PACKAGE_NAME, PLAY_STORE_DEVELOPER_ID)"
-    );
-    return;
+    const errMsg = "Missing env configuration (PLAY_STORE_PACKAGE_NAME or PLAY_STORE_DEVELOPER_ID)";
+    console.error(`⚠️ Play Store Sync aborted: ${errMsg}`);
+    throw new Error(errMsg);
   }
 
   console.log(`🔑 Using Play Store key file: ${keyPath}`);
@@ -120,13 +119,17 @@ export const syncPlayStoreDownloads = async () => {
           console.log(`ℹ️ Report file not found for ${monthStr} (may not be generated yet).`);
         } else {
           console.error(`❌ Failed downloading/parsing ${monthStr}:`, err.message);
+          throw err;
         }
       }
     }
 
     if (allRecords.length === 0) {
       console.log("ℹ️ No records retrieved to update.");
-      return;
+      return {
+        success: true,
+        message: "No records found in GCS bucket files. (Reports may not be generated yet by Google Console)."
+      };
     }
 
     console.log(`💾 Upserting ${allRecords.length} records into MongoDB...`);
@@ -140,10 +143,18 @@ export const syncPlayStoreDownloads = async () => {
     }));
 
     const result = await DownloadStat.bulkWrite(bulkOps);
-    console.log(
-      `✅ Play Store Sync completed. Upserted: ${result.upsertedCount}, Modified: ${result.modifiedCount}`
-    );
+    const successMsg = `Play Store Sync completed. Upserted: ${result.upsertedCount}, Modified: ${result.modifiedCount}`;
+    console.log(`✅ ${successMsg}`);
+    
+    return {
+      success: true,
+      message: successMsg,
+      upsertedCount: result.upsertedCount,
+      modifiedCount: result.modifiedCount,
+      recordsCount: allRecords.length
+    };
   } catch (error) {
     console.error("❌ Play Store Sync failed:", error.message);
+    throw error;
   }
 };

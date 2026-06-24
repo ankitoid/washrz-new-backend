@@ -462,6 +462,11 @@ socket.on("sendChatMessage", async (data) => {
     try {
         console.log("MESSAGE RECEIVED:", data);
 
+        let unreadCount = await Message.countDocuments({
+           senderType: { $ne: "admin" }, 
+    isRead: false            
+});
+
         // 1. Save the new message
         const newMessage = await Message.create({
             roomId: data.roomId,
@@ -470,26 +475,32 @@ socket.on("sendChatMessage", async (data) => {
             message: data.message
         });
 
-        // 2. Prepare update object for the chat room
-        const updateFields = {
-            lastMessage: data.message,
-            lastMessageAt: new Date(),
-            lastMessageSender: data.senderType,   // track who sent the last message
-        };
-
-        // 3. Increment unreadAdminCount if the sender is NOT an admin
-        if (data.senderType !== 'admin') {
-            // If customer or bot sent, increment admin unread count
-            updateFields.$inc = { unreadAdminCount: 1 };
-        } else {
-            // Optionally, if admin sent, you might want to increment customer unread count
-            // and reset admin unread count (since admin is active)
-            updateFields.$inc = { unreadCustomerCount: 1 };
-            updateFields.unreadAdminCount = 0; // or use $set
+        // 2. Find the chat room
+        const chatRoom = await ChatRoom.findById(data.roomId);
+        if (!chatRoom) {
+            throw new Error("Chat room not found");
         }
 
-        // 4. Update the chat room
-        await ChatRoom.findByIdAndUpdate(data.roomId, updateFields, { new: true });
+        // 3. Update fields and unread counts manually
+        chatRoom.lastMessage = data.message;
+        chatRoom.lastMessageAt = new Date();
+        chatRoom.lastMessageSender = data.senderType;
+
+        if (data.senderType !== 'admin') {
+            // Non-admin → increment admin unread count
+            chatRoom.unreadAdminCount = (chatRoom.unreadAdminCount || 0) + 1;
+
+            unreadCount = unreadCount + 1
+        } else {
+            // Admin reply → increment customer unread count and reset admin count
+            chatRoom.unreadCustomerCount = (chatRoom.unreadCustomerCount || 0) + 1;
+            chatRoom.unreadAdminCount = 0;   // admin has seen the chat
+        }
+
+        // 4. Save the updated room
+        await chatRoom.save();
+
+        console.log("UPDATED ROOM:", chatRoom); // verify counts
 
         console.log("MESSAGE SAVED:", newMessage._id);
 
@@ -497,14 +508,16 @@ socket.on("sendChatMessage", async (data) => {
         io.to(data.roomId.toString()).emit("receiveChatMessage", newMessage);
         console.log("MESSAGE EMITTED TO ROOM:", data.roomId);
 
-        // 6. Notify all clients that the chat list has changed
+        // 6. Notify all clients
         io.emit("chatRoomsUpdated");
+        io.emit("sendMessageUnreadCount",{
+          unreadCount
+        })
 
     } catch (error) {
         console.log("SOCKET ERROR:", error);
     }
 });
-
     socket.on("disconnect", () => {
 
         console.log(
