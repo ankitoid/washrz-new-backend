@@ -573,7 +573,7 @@ socket.on("sendChatMessage", async (data) => {
             try {
               chatRoom.unreadAdminCount = (chatRoom.unreadAdminCount || 0) + 1;
                await customerFcmService.sendToCustomer(
-                              updatedRoom.customerId,
+                              chatRoom.customerId,
                               {
                                   title: "New Support Message",
                                   body: message,
