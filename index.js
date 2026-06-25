@@ -569,15 +569,17 @@ socket.on("sendChatMessage", async (data) => {
 
         // 5. Update unread counts (same logic as before)
         if (senderType !== 'admin') {
+          console.log("i am called in the if")
             // Non-admin (customer/bot) → increment admin unread count
       chatRoom.unreadAdminCount = (chatRoom.unreadAdminCount || 0) + 1;
         } else {
             // Admin reply → increment customer unread count and reset admin count
             chatRoom.unreadCustomerCount = (chatRoom.unreadCustomerCount || 0) + 1;
             chatRoom.unreadAdminCount = 0;  
-            
+
+            console.log("i am called--->>")
                         try {
-               await customerFcmService.sendToCustomer(
+               const fcm = await customerFcmService.sendToCustomer(
                               chatRoom.customerId,
                               {
                                   title: "New Support Message",
@@ -589,6 +591,8 @@ socket.on("sendChatMessage", async (data) => {
                                   senderId: senderId ? senderId.toString() : "admin",
                               }
                           );
+
+            console.log("i am calledddd in fcm 1===>>>",fcm)
             } catch (error) {
               console.log("this is the error by fcm==>>",error)
             }// admin has seen the chat
