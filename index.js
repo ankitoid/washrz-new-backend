@@ -570,8 +570,13 @@ socket.on("sendChatMessage", async (data) => {
         // 5. Update unread counts (same logic as before)
         if (senderType !== 'admin') {
             // Non-admin (customer/bot) → increment admin unread count
-            try {
-              chatRoom.unreadAdminCount = (chatRoom.unreadAdminCount || 0) + 1;
+      chatRoom.unreadAdminCount = (chatRoom.unreadAdminCount || 0) + 1;
+        } else {
+            // Admin reply → increment customer unread count and reset admin count
+            chatRoom.unreadCustomerCount = (chatRoom.unreadCustomerCount || 0) + 1;
+            chatRoom.unreadAdminCount = 0;  
+            
+                        try {
                await customerFcmService.sendToCustomer(
                               chatRoom.customerId,
                               {
@@ -586,12 +591,7 @@ socket.on("sendChatMessage", async (data) => {
                           );
             } catch (error) {
               console.log("this is the error by fcm==>>",error)
-            }
-
-        } else {
-            // Admin reply → increment customer unread count and reset admin count
-            chatRoom.unreadCustomerCount = (chatRoom.unreadCustomerCount || 0) + 1;
-            chatRoom.unreadAdminCount = 0;   // admin has seen the chat
+            }// admin has seen the chat
         }
 
         // 6. Save the updated room
