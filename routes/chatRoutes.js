@@ -14,8 +14,10 @@ import {
     sendMessage,
     botReply,
     getOrdersByPhone,
-    getRoomByCustomer
+    getRoomByCustomer,
+    uploadChatImage
 } from "../controller/chatController.js";
+import { upload } from "../services/s3services.js";
 
 const router = express.Router();
 router.get("/room/exists", getRoomByCustomer);
@@ -43,6 +45,25 @@ router.post("/send-message", sendMessage);
 router.post("/bot-reply", botReply);
 router.get('/orders-by-phone/:phone', getOrdersByPhone);
 
+
+//upload image in the chat 
+
+router.post("/upload-chat-image", (req, res) => {
+  console.log('📥 Upload route hit');
+  try {
+    upload.single('image')(req, res, function (err) {
+      if (err) {
+        console.error("❌ Multer error:", err);
+        return res.status(400).json({ success: false, message: err.message });
+      }
+      console.log('✅ Multer passed, calling controller');
+      uploadChatImage(req, res);
+    });
+  } catch (error) {
+    console.error('🔥 Unexpected error in upload route:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
 
 
 export default router;

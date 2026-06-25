@@ -6,6 +6,7 @@ import Order from "../models/orderSchema.js";
 import Pickup from "../models/pickupSchema.js";
 import Faq from "../models/Faq.js";
 import customerFcmService from "../services/customerFcmService.js";
+import { uploadFileToS3 } from "../services/s3services.js";
 
 export const createRoom = async (req, res) => {
     try {
@@ -423,6 +424,7 @@ export const sendMessage = async (req, res) => {
         }, { new: true });
         // fcm emit (ss)
         if (updatedRoom && senderType === "admin") {
+            console.log("sending fcm to customer===>>>")
             try {
                 await customerFcmService.sendToCustomer(
                     updatedRoom.customerId,
@@ -665,4 +667,44 @@ export const getRoomByCustomer = async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, message: "Server error" });
     }
+};
+
+
+/**
+ * Upload an image for chat messages.
+ * Expects a single file under field name 'image'.
+ * Returns the S3 URL.
+ */
+export const uploadChatImage = async (req, res) => {
+  try {
+    console.log("i am called")
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No image file provided" });
+    }
+
+    const { buffer, originalname, mimetype } = req.file;
+
+    console.log("this is the details which we get from the image==>",buffer,originalname,mimetype)
+
+    // Upload to the folder "customer-chat-images"
+    const uploadResult = await uploadFileToS3(
+      buffer,
+      originalname,
+      mimetype,
+      'customer-chat-images',
+      process.env.AWS_S3_BUCKET_NAME
+    );
+
+    console.log('this is the upload result',uploadResult)
+
+    // The URL is available in uploadResult.Location
+    res.json({
+      success: true,
+      fileUrl: uploadResult.Location,
+      message: "Image uploaded successfully",
+    });
+  } catch (error) {
+    console.error("Chat image upload error:", error);
+    res.status(500).json({ success: false, message: "Upload failed: " + error.message });
+  }
 };
