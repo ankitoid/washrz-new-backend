@@ -1,11 +1,11 @@
 import customerApp from "../config/Customer-firebaseAdmin.js";
 import CustomerPushToken from "../models/customerPushTokenModel.js";
-
+ 
 class CustomerFCMService {
   constructor() {
     this.admin = customerApp;
   }
-
+ 
   isAvailable() {
     try {
       return this.admin && this.admin.messaging;
@@ -13,7 +13,7 @@ class CustomerFCMService {
       return false;
     }
   }
-
+ 
   async testConnection() {
     try {
       if (!this.isAvailable()) {
@@ -22,7 +22,7 @@ class CustomerFCMService {
           error: "Firebase Admin not initialized or messaging not available",
         };
       }
-
+ 
       const app = this.admin.app();
       return {
         success: true,
@@ -34,24 +34,24 @@ class CustomerFCMService {
       return { success: false, error: error.message };
     }
   }
-
+ 
   async sendToCustomer(customerId, notification, data = {}) {
     try {
       if (!customerId) {
         return { success: false, error: "Customer ID is required" };
       }
-
+ 
       if (!this.isAvailable()) {
         return { success: false, error: "FCM service not available" };
       }
-
+ 
       const tokensDocs = await CustomerPushToken.find({
         customerId: String(customerId),
         isActive: true,
       }).lean();
-
+ 
       const tokens = tokensDocs.map((d) => d.token).filter(Boolean);
-
+ 
       if (tokens.length === 0) {
         return {
           success: false,
@@ -59,10 +59,10 @@ class CustomerFCMService {
           tokensCount: 0,
         };
       }
-
+ 
       const results = [];
       const failedTokens = [];
-
+ 
       for (const token of tokens) {
         try {
           const message = {
@@ -89,7 +89,7 @@ class CustomerFCMService {
               },
             },
           };
-
+ 
           const response = await this.admin.messaging().send(message);
           results.push({
             token: token.substring(0, 20) + "...",
@@ -102,7 +102,7 @@ class CustomerFCMService {
             success: false,
             error: error.message,
           });
-
+ 
           if (
             error.code === "messaging/registration-token-not-registered" ||
             error.code === "messaging/invalid-registration-token" ||
@@ -113,7 +113,7 @@ class CustomerFCMService {
           }
         }
       }
-
+ 
       if (failedTokens.length > 0) {
         await CustomerPushToken.updateMany(
           { token: { $in: failedTokens } },
@@ -126,10 +126,10 @@ class CustomerFCMService {
           }
         );
       }
-
+ 
       const successCount = results.filter((r) => r.success).length;
       const failureCount = results.filter((r) => !r.success).length;
-
+ 
       return {
         success: successCount > 0,
         successCount,
@@ -146,7 +146,7 @@ class CustomerFCMService {
       };
     }
   }
-
+ 
   async sendToMultipleCustomers(customerIds, notification, data = {}) {
     const results = [];
     for (const customerId of customerIds) {
@@ -156,5 +156,5 @@ class CustomerFCMService {
     return results;
   }
 }
-
+ 
 export default new CustomerFCMService();

@@ -426,6 +426,7 @@ export const sendMessage = async (req, res) => {
         if (updatedRoom && senderType === "admin") {
             console.log("sending fcm to customer===>>>")
             try {
+                console.log("sending fcm chat to customer:====>")
                 await customerFcmService.sendToCustomer(
                     updatedRoom.customerId,
                     {
