@@ -35,6 +35,7 @@ import analyticsRoutes from "./routes/analyticsRoutes.js";
 import socketService from "./services/socketService.js";
 import { cleanupExpiredCoupons } from "./jobs/couponCleanup.js";
 import { syncPlayStoreDownloads } from "./jobs/playStoreSync.js";
+import { syncAppStoreDownloads } from "./jobs/appStoreSync.js";
 import faqRoutes from "./routes/faqRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import ChatRoom from "./models/ChatRoom.js";
@@ -690,6 +691,24 @@ setTimeout(async () => {
     console.error("Google Play initial sync error:", err);
   }
 }, 10000);
+
+// ── iOS: App Store Connect downloads sync (every 12 hours) ─────────────────
+setInterval(async () => {
+  try {
+    await syncAppStoreDownloads();
+  } catch (err) {
+    console.error("App Store sync interval error:", err);
+  }
+}, 12 * 60 * 60 * 1000);
+
+// Run once on startup (15s delay — slightly after Android to avoid rate limits)
+setTimeout(async () => {
+  try {
+    await syncAppStoreDownloads();
+  } catch (err) {
+    console.error("App Store initial sync error:", err);
+  }
+}, 15000);
 
 
 // Periodic cleanup: mark riders offline if no update for 2 minutes
