@@ -69,13 +69,11 @@ export const syncPlayStoreDownloads = async () => {
     throw new Error(errMsg);
   }
 
-  console.log(`🔑 Using Play Store key file: ${keyPath}`);
-
   try {
     console.log("🔄 Starting Play Store Downloads Daily Sync...");
 
     const storage = new Storage({ keyFilename: keyPath });
-    const bucketName = `pubsite_prod_rev_${developerId}`;
+    const bucketName = `pubsite_prod_${developerId}`;
 
     const now = new Date();
     const monthsToCheck = [];
@@ -98,10 +96,8 @@ export const syncPlayStoreDownloads = async () => {
 
     for (const monthStr of monthsToCheck) {
       const filePath = `stats/installs/installs_${package_name}_${monthStr}_overview.csv`;
-      console.log(`📥 Checking GCS bucket: ${bucketName}, path: ${filePath}`);
 
       try {
-        console.log(`📁 Attempting download from local key at: ${keyPath}`);
         const [fileContentBuffer] = await storage.bucket(bucketName).file(filePath).download();
 
         // Google Play Console exports reports in UTF-16LE encoding by default
@@ -112,7 +108,6 @@ export const syncPlayStoreDownloads = async () => {
         }
 
         const records = parseCSV(csvContent);
-        console.log(`📊 Parsed ${records.length} stats records from ${monthStr}.`);
         allRecords = allRecords.concat(records);
       } catch (err) {
         if (err.code === 404) {
@@ -126,9 +121,21 @@ export const syncPlayStoreDownloads = async () => {
 
     if (allRecords.length === 0) {
       console.log("ℹ️ No records retrieved to update.");
+      
+      let bucketFiles = [];
+      try {
+        const [files] = await storage.bucket(bucketName).getFiles({ maxResults: 30 });
+        bucketFiles = files.map(f => f.name);
+      } catch (listErr) {
+        console.error("Failed to list bucket files:", listErr.message);
+        bucketFiles = ["Error listing bucket contents: " + listErr.message];
+      }
+
       return {
         success: true,
-        message: "No records found in GCS bucket files. (Reports may not be generated yet by Google Console)."
+        message: "No records found in GCS bucket files. (Reports may not be generated yet by Google Console).",
+        searchedFiles: monthsToCheck.map(m => `stats/installs/installs_${package_name}_${m}_overview.csv`),
+        availableFilesSample: bucketFiles
       };
     }
 
