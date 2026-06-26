@@ -577,10 +577,10 @@ socket.on("sendChatMessage", async (data) => {
             chatRoom.unreadCustomerCount = (chatRoom.unreadCustomerCount || 0) + 1;
             chatRoom.unreadAdminCount = 0;  
 
-            console.log("i am called--->>",chatRoom?.customerId)
+            console.log("i am called--->>",chatRoom?.appCustomerId)
                         try {
                const fcm = await customerFcmService.sendToCustomer(
-                              String(chatRoom.customerId),
+                              String(chatRoom.appCustomerId),
                               {
                                   title: "New Support Message",
                                   body: message,

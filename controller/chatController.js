@@ -13,12 +13,14 @@ export const createRoom = async (req, res) => {
 
         const {
             customerId,
+            appCustomerId,
             orderId,
             chatType = "global"
         } = req.body;
 
         let query = {
             customerId,
+            appCustomerId,
             chatType
         };
 
@@ -31,6 +33,7 @@ export const createRoom = async (req, res) => {
             {
                 $setOnInsert: {
                     customerId,
+                    appCustomerId,
                     orderId: chatType === "order" ? orderId : null,
                     chatType
                 }
