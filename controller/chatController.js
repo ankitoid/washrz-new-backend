@@ -7,6 +7,7 @@ import Pickup from "../models/pickupSchema.js";
 import Faq from "../models/Faq.js";
 import customerFcmService from "../services/customerFcmService.js";
 import { uploadFileToS3 } from "../services/s3services.js";
+import { compressImageIfNeeded } from "../utills/imageCompressor.js";
 
 export const createRoom = async (req, res) => {
     try {
@@ -687,6 +688,8 @@ export const uploadChatImage = async (req, res) => {
 
     // Compress the image if needed
     const { buffer, mimetype } = await compressImageIfNeeded(req.file);
+
+    console.log("this is the buffer and mimetype",buffer,mimetype)
 
     // Use the compressed buffer and (possibly updated) mime type
     const uploadResult = await uploadFileToS3(
