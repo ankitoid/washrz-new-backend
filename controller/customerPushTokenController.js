@@ -25,7 +25,7 @@ export const registerCustomerPushToken = async (req, res) => {
       },
       { upsert: true, new: true }
     );
-
+    console.log("registerCustomerPushToken ss:", doc);
     return res.status(200).json({
       status: "success",
       message: "Customer push token saved",
@@ -59,6 +59,7 @@ export const unregisterCustomerPushToken = async (req, res) => {
         deactivationReason: "manual logout",
       }
     );
+    console.log("unregisterCustomerPushToken ss:", token);
 
     return res.status(200).json({
       status: "success",
