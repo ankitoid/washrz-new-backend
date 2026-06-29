@@ -30,18 +30,17 @@ const endOfDay = (date) => {
   return value;
 };
 
-const getRangeWindow = ({ range, from, to }) => {
+const getRangeWindow = ({ range, from, to, startDate, endDate }) => {
   const now = new Date();
 
-  if (range === "custom" && from && to) {
-    return {
-      start: startOfDay(new Date(from)),
-      end: endOfDay(new Date(to)),
-    };
-  }
+  const fromDate = from || startDate;
+  const toDate   = to   || endDate;
 
-  if (range === "today") {
-    return { start: startOfDay(now), end: endOfDay(now) };
+  if (range === "custom" && fromDate && toDate) {
+    return {
+      start: startOfDay(new Date(fromDate)),
+      end:   endOfDay(new Date(toDate)),
+    };
   }
 
   if (range === "all") {
@@ -51,14 +50,14 @@ const getRangeWindow = ({ range, from, to }) => {
   if (range === "monthly") {
     return {
       start: startOfDay(new Date(now.getTime() - 29 * MS_PER_DAY)),
-      end: endOfDay(now),
+      end:   endOfDay(now),
     };
   }
 
   // Default to weekly (last 7 days)
   return {
     start: startOfDay(new Date(now.getTime() - 6 * MS_PER_DAY)),
-    end: endOfDay(now),
+    end:   endOfDay(now),
   };
 };
 
@@ -71,14 +70,6 @@ const getPreviousWindow = ({ start, end }) => {
 };
 
 const getPeriodLabel = (date, range) => {
-  if (range === "today") {
-    return date.toLocaleTimeString("en-IN", {
-      hour: "numeric",
-      hour12: true,
-      timeZone: INDIA_TIMEZONE,
-    });
-  }
-
   if (range === "weekly") {
     return date.toLocaleDateString("en-IN", {
       weekday: "long",
@@ -95,28 +86,30 @@ const getPeriodLabel = (date, range) => {
 
 const getTrendBuckets = ({ start, end, range }) => {
   const buckets = [];
-  const cursor = new Date(start);
+  const cursor  = new Date(start);
+  // monthly → weekly buckets (~4-5 points); weekly/custom → daily buckets
+  const stepDays = range === "monthly" ? 7 : 1;
 
   while (cursor <= end) {
     const bucketStart = new Date(cursor);
     let bucketEnd;
 
-    if (range === "today") {
-      bucketEnd = new Date(bucketStart.getTime() + 60 * 60 * 1000 - 1);
-      cursor.setHours(cursor.getHours() + 1);
+    if (stepDays === 7) {
+      bucketEnd = endOfDay(new Date(bucketStart.getTime() + 6 * MS_PER_DAY));
+      if (bucketEnd > end) bucketEnd = new Date(end);
+      cursor.setDate(cursor.getDate() + 7);
     } else {
       bucketEnd = endOfDay(bucketStart);
+      if (bucketEnd > end) bucketEnd = new Date(end);
       cursor.setDate(cursor.getDate() + 1);
       cursor.setHours(0, 0, 0, 0);
     }
 
-    if (bucketEnd > end) bucketEnd = new Date(end);
-
     buckets.push({
-      key: bucketStart.toISOString(),
+      key:   bucketStart.toISOString(),
       label: getPeriodLabel(bucketStart, range),
       start: bucketStart,
-      end: bucketEnd,
+      end:   bucketEnd,
     });
   }
 
@@ -234,26 +227,39 @@ const getDownloadSum = async ({ start, end, platform }) => {
   return result[0]?.total || 0;
 };
 
-const getTrendSeries = async ({ buckets, platform, locationFilters }) => {
+const getTrendSeries = async ({ buckets, platform, locationFilters, periodDuration }) => {
   const rows = await Promise.all(
     buckets.map(async (bucket) => {
       const match = buildBaseMatch({
         start: bucket.start,
-        end: bucket.end,
+        end:   bucket.end,
         platform,
         locationFilters,
       });
 
-      const [activeUsers, downloads] = await Promise.all([
+      const prevBucketStart = new Date(bucket.start.getTime() - periodDuration);
+      const prevBucketEnd   = new Date(bucket.end.getTime()   - periodDuration);
+      const prevMatch = buildBaseMatch({
+        start: prevBucketStart,
+        end:   prevBucketEnd,
+        platform,
+        locationFilters,
+      });
+
+      const [activeUsers, downloads, prevActiveUsers, prevDownloads] = await Promise.all([
         getDistinctIdentityCountForEvents(match, ACTIVE_USER_EVENTS),
-        getDownloadSum({ start: bucket.start, end: bucket.end, platform }),
+        getDownloadSum({ start: bucket.start,    end: bucket.end,    platform }),
+        getDistinctIdentityCountForEvents(prevMatch, ACTIVE_USER_EVENTS),
+        getDownloadSum({ start: prevBucketStart, end: prevBucketEnd, platform }),
       ]);
 
       return {
         bucketKey: bucket.key,
-        label: bucket.label,
+        label:     bucket.label,
         activeUsers,
         downloads,
+        prevActiveUsers,
+        prevDownloads,
       };
     }),
   );
@@ -395,15 +401,18 @@ export const ingestAnalyticsBatch = async (req, res) => {
 
 export const getAnalyticsOverview = async (req, res) => {
   try {
-    const range = req.query.range || "weekly";
+    const range    = req.query.range    || "weekly";
     const platform = req.query.platform || "all";
     const locationFilters = getQueryLocationFilters(req.query);
     const { start, end } = getRangeWindow({
       range,
-      from: req.query.from,
-      to: req.query.to,
+      from:      req.query.from,
+      to:        req.query.to,
+      startDate: req.query.startDate,
+      endDate:   req.query.endDate,
     });
-    const previous = getPreviousWindow({ start, end });
+    const previous       = getPreviousWindow({ start, end });
+    const periodDuration = end.getTime() - start.getTime() + 1;
 
     const currentMatch = buildBaseMatch({
       start,
@@ -476,6 +485,7 @@ export const getAnalyticsOverview = async (req, res) => {
         buckets: getTrendBuckets({ start, end, range }),
         platform,
         locationFilters,
+        periodDuration,
       }),
     ]);
 

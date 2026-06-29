@@ -131,7 +131,7 @@ const fetchDailyReport = async ({ token, vendorNumber, dateStr }) => {
 
   const params = {
     "filter[frequency]": "DAILY",
-    "filter[reportType]": "INSTALLS",
+    "filter[reportType]": "SALES",
     "filter[reportSubType]": "SUMMARY",
     "filter[reportDate]": dateStr,
     "filter[vendorNumber]": vendorNumber,
