@@ -138,8 +138,6 @@ const fetchDailyReport = async ({ token, vendorNumber, dateStr }) => {
     "filter[version]": "1_0",
   };
 
-  console.log(`📥 Fetching App Store report for date: ${dateStr}`);
-
   const response = await axios.get(url, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -153,14 +151,9 @@ const fetchDailyReport = async ({ token, vendorNumber, dateStr }) => {
   });
 
   if (response.status === 404) {
-    // Apple returns 404 when the report isn't generated yet
-    console.log(
-      `ℹ️ App Store report for ${dateStr} not available yet (404).`
-    );
     return null;
   }
 
-  // Content-Type: application/a-gzip → decompress
   const decompressed = await gunzip(Buffer.from(response.data));
   const tsvContent = decompressed.toString("utf8");
 
@@ -193,18 +186,46 @@ export const syncAppStoreDownloads = async () => {
   privateKey = fs.readFileSync(keyPath, "utf8");
 
   const now = new Date();
-  const datesToCheck = [];
 
-  for (let i = 1; i <= 30; i++) {
+  const allDates = [];
+  for (let i = 1; i <= 7; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
-    datesToCheck.push(`${yyyy}-${mm}-${dd}`);
+    allDates.push(`${yyyy}-${mm}-${dd}`);
   }
 
-  console.log("🔄 Starting App Store Installs Daily Sync...");
+  const windowStart = startOfDay(new Date(now));
+  windowStart.setDate(windowStart.getDate() - 7);
+
+  const existingDocs = await DownloadStat.find(
+    { platform: "ios", date: { $gte: windowStart } },
+    { date: 1, _id: 0 }
+  ).lean();
+
+  const existingDateKeys = new Set(
+    existingDocs.map((d) => startOfDay(d.date).toISOString())
+  );
+
+  const datesToCheck = allDates.filter((dateStr) => {
+    const iso = startOfDay(new Date(dateStr)).toISOString();
+    return !existingDateKeys.has(iso);
+  });
+
+  // ── Single status log ──────────────────────────────────────────────────────
+  const alreadyInDB = allDates.length - datesToCheck.length;
+  console.log(
+    `ℹ️ App Store sync: ${alreadyInDB}/${allDates.length} dates already in DB` +
+    (datesToCheck.length === 0
+      ? " — nothing to fetch."
+      : ` — fetching ${datesToCheck.length} missing date(s): ${datesToCheck.join(", ")}`)
+  );
+
+  if (datesToCheck.length === 0) {
+    return { success: true, message: "App Store data is already up-to-date.", checkedDates: [] };
+  }
 
   // ── Generate JWT token ────────────────────────────────────────────────────
   const token = generateAppStoreJWT({ keyId, issuerId, privateKey });
@@ -249,7 +270,6 @@ export const syncAppStoreDownloads = async () => {
   if (allRecords.length === 0) {
     const msg =
       "No App Store install records retrieved.";
-    console.log(`ℹ️ ${msg}`);
     return {
       success: true,
       message: msg,
