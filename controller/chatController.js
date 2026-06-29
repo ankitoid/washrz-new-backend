@@ -681,27 +681,22 @@ export const getRoomByCustomer = async (req, res) => {
  */
 export const uploadChatImage = async (req, res) => {
   try {
-    console.log("i am called")
     if (!req.file) {
       return res.status(400).json({ success: false, message: "No image file provided" });
     }
 
-    const { buffer, originalname, mimetype } = req.file;
+    // Compress the image if needed
+    const { buffer, mimetype } = await compressImageIfNeeded(req.file);
 
-    console.log("this is the details which we get from the image==>",buffer,originalname,mimetype)
-
-    // Upload to the folder "customer-chat-images"
+    // Use the compressed buffer and (possibly updated) mime type
     const uploadResult = await uploadFileToS3(
       buffer,
-      originalname,
+      req.file.originalname,
       mimetype,
       'customer-chat-images',
       process.env.AWS_S3_BUCKET_NAME
     );
 
-    console.log('this is the upload result',uploadResult)
-
-    // The URL is available in uploadResult.Location
     res.json({
       success: true,
       fileUrl: uploadResult.Location,
