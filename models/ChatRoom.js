@@ -7,6 +7,11 @@ new mongoose.Schema({
         required: true,
         index: true
     },
+    appCustomerId: {
+        type: String,
+        required: true,
+        index: true
+    },
     orderId: {
         type: String,
         index: true,
