@@ -785,6 +785,27 @@ app.use("/api/v1/faq", faqRoutes);
 app.use("/api/v1/chat", chatRoutes);
 app.use("/api/v1/rider-group", riderGroupRoutes);
 
+
+// Add this test route
+app.get('/test-fcm-ios', async (req, res) => {
+  try {
+    const iosToken = req.query.token; // Pass iOS token as query param
+    if (!iosToken) {
+      return res.status(400).json({ error: 'Provide iOS token: ?token=YOUR_IOS_TOKEN' });
+    }
+    
+    const result = await customerFcmService.sendToCustomer(
+      'test-customer-id',
+      { title: 'Test', body: 'iOS test notification' },
+      { test: 'true' }
+    );
+    
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.all("*", (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });

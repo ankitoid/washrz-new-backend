@@ -89,6 +89,12 @@ class CustomerFCMService {
 
       console.log("Active Tokens:", tokens.length);
 
+
+      // Detect iOS tokens
+      const iosTokens = tokens.filter(t => t.length > 100 || t.startsWith('c'));
+      const androidTokens = tokens.filter(t => t.length <= 100 && !t.startsWith('c'));
+      console.log(`📱 iOS: ${iosTokens.length}, Android: ${androidTokens.length}`);
+
       if (!tokens.length) {
         console.warn("⚠️ No active tokens found");
         return {
@@ -121,9 +127,25 @@ class CustomerFCMService {
             android: {
               priority: "high",
             },
+            // apns: {
+            //   payload: {
+            //     aps: {
+            //       badge: 1,
+            //       sound: "default",
+            //     },
+            //   },
+            // },
             apns: {
+              headers: {
+                'apns-priority': '10',
+                'apns-push-type': 'alert',
+              },
               payload: {
                 aps: {
+                  alert: {
+                    title: notification.title || "Notification",
+                    body: notification.body || "",
+                  },
                   badge: 1,
                   sound: "default",
                 },
@@ -151,6 +173,10 @@ class CustomerFCMService {
           console.error("❌ Send Failed");
           console.error("Code:", error.code);
           console.error("Message:", error.message);
+            // Add this for auth errors
+          if (error.code === "messaging/third-party-auth-error") {
+            console.error("🔑 AUTH ERROR - Check APNs in Firebase Console");
+          }
           console.error("Stack:", error.stack);
 
           results.push({
