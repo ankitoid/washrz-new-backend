@@ -91,9 +91,9 @@ class CustomerFCMService {
 
 
       // Detect iOS tokens
-      const iosTokens = tokens.filter(t => t.length > 100 || t.startsWith('c'));
+      // const iosTokens = tokens.filter(t => t.length > 100 || t.startsWith('c'));
       const androidTokens = tokens.filter(t => t.length <= 100 && !t.startsWith('c'));
-      console.log(`📱 iOS: ${iosTokens.length}, Android: ${androidTokens.length}`);
+      console.log(` Android: ${androidTokens.length}`);
 
       if (!tokens.length) {
         console.warn("⚠️ No active tokens found");
@@ -158,7 +158,8 @@ class CustomerFCMService {
             notification: message.notification,
             data: message.data,
           });
-
+          console.log(JSON.stringify(message, null, 2));
+          
           const response = await this.admin.messaging().send(message);
 
           console.log("✅ Sent Successfully");
