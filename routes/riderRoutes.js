@@ -1,6 +1,8 @@
 import express from "express";
+import User from "../models/userModel.js";
 import {
   addMoreIntransitImages,
+  createFollowupPickup,
   deletePickup,
   getCancelMedia,
   getRescheduledOrders,
@@ -31,7 +33,16 @@ router.get("/getCancelMedia/:pickupId", getCancelMedia);
 router.patch("/orders/:id/intransit-images", addMoreIntransitImages);
 router.patch("/orders/:id/ready-for-delivery-images", uploadReadyForDeliveryImages);
 router.post("/uploadDeliverImage/:id", uploadDeliverImage);
+router.post("/orders/:orderId/followup-pickup", createFollowupPickup);
 router.get("/rider-dashboard", getRiderDashboardData);
 router.get("/rider-tasks/:riderId", getRiderTasksById);
+router.get("/all", async (req, res) => {
+    try {
+        const riders = await User.find({ role: "rider" }).select("_id name phone email");
+        res.json({ success: true, riders });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
 
 export { router as default };

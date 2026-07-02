@@ -1,15 +1,21 @@
 import express from "express";
 import RiderLocation from "../models/riderLocationSchema.js";
 import User from "../models/userModel.js";
+import {
+  completeTaskTrackingLeg,
+  getRiderDailyTrackingSummary,
+  upsertTaskTrackingFromLocation,
+} from "../services/taskTrackingService.js";
 
 const router = express.Router();
+const ACTIVE_RIDER_WINDOW_MS = 5 * 60 * 1000;
 
 router.get("/active-riders", async (req, res) => {
   try {
-    const seventySecondsAgo = new Date(Date.now() - 70000);
+    const activeWindowStart = new Date(Date.now() - ACTIVE_RIDER_WINDOW_MS);
 
     const activeRiders = await RiderLocation.aggregate([
-      { $match: { lastUpdate: { $gte: seventySecondsAgo }, status: { $in: ["active", "on-delivery", "on-pickup"] } } },
+      { $match: { lastUpdate: { $gte: activeWindowStart }, status: { $in: ["active", "on-delivery", "on-pickup"] } } },
             { $sort: { lastUpdate: -1 } },
       { $group: { _id: "$riderId", latestLocation: { $first: "$$ROOT" } } },
       { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "riderDetails" } },
@@ -162,9 +168,9 @@ router.get("/dashboard-stats", async (req, res) => {
 
 router.post("/update", async (req, res) => {
   try {
-    const { riderId, lat, lng, speed = 0, bearing = 0, batteryLevel = 100, status = "active" } = req.body;
+    const { riderId, lat, lng, speed = 0, bearing = 0, batteryLevel = 100, status = "active", taskTracking } = req.body;
 
-    if (!riderId || !lat || !lng) {
+    if (!riderId || lat == null || lng == null) {
       return res.status(400).json({
         success: false,
         message: "Missing required fields: riderId, lat, lng"
@@ -183,6 +189,15 @@ router.post("/update", async (req, res) => {
       type: "Point",
       coordinates: [parseFloat(lng), parseFloat(lat)]
     };
+    const savedTaskTracking = await upsertTaskTrackingFromLocation({
+      riderId,
+      lat,
+      lng,
+      speed,
+      bearing,
+      batteryLevel,
+      taskTracking,
+    });
 
     // Update the rider's current location (upsert)
     const updatedLocation = await RiderLocation.findOneAndUpdate(
@@ -234,6 +249,7 @@ router.post("/update", async (req, res) => {
         batteryLevel: parseInt(batteryLevel),
         lastUpdate: new Date(),
         status,
+        taskTracking,
         name: user.name || "Unknown Rider",
         phone: user.phone || "N/A",
       });
@@ -245,7 +261,14 @@ router.post("/update", async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Location updated successfully",
-      location: updatedLocation
+      location: updatedLocation,
+      taskTracking: savedTaskTracking
+        ? {
+            trackingLegId: savedTaskTracking.trackingLegId,
+            totalDistanceKm: savedTaskTracking.totalDistanceKm,
+            status: savedTaskTracking.status,
+          }
+        : null,
     });
   } catch (error) {
     console.error("Error updating location:", error);
@@ -253,6 +276,52 @@ router.post("/update", async (req, res) => {
       success: false,
       message: "Server error",
       error: error.message
+    });
+  }
+});
+
+router.post("/tracking/complete", async (req, res) => {
+  try {
+    const completedLeg = await completeTaskTrackingLeg(req.body);
+
+    if (!completedLeg) {
+      return res.status(404).json({
+        success: false,
+        message: "Tracking leg not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      trackingLeg: completedLeg,
+    });
+  } catch (error) {
+    console.error("Error completing tracking leg:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
+
+router.get("/tracking/rider/:riderId/daily", async (req, res) => {
+  try {
+    const summary = await getRiderDailyTrackingSummary(
+      req.params.riderId,
+      req.query.date,
+    );
+
+    res.status(200).json({
+      success: true,
+      summary,
+    });
+  } catch (error) {
+    console.error("Error fetching daily tracking summary:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
     });
   }
 });
@@ -301,8 +370,8 @@ router.get("/riders/live", async (req, res) => {
         lastUpdateTime = activeData.lastUpdate || location?.lastUpdate;
       } else if (location) {
         // Not in real-time map, check database with threshold
-        const seventySecondsAgo = new Date(Date.now() - 70000);
-        if (new Date(location.lastUpdate) >= seventySecondsAgo) {
+        const activeWindowStart = new Date(Date.now() - ACTIVE_RIDER_WINDOW_MS);
+        if (new Date(location.lastUpdate) >= activeWindowStart) {
           status = location.status || "active";
         } else {
           status = "offline";
@@ -310,8 +379,8 @@ router.get("/riders/live", async (req, res) => {
       }
       
       if (lastUpdateTime) {
-        const seventySecondsAgo = new Date(Date.now() - 70000);
-        if (new Date(lastUpdateTime) < seventySecondsAgo) {
+        const activeWindowStart = new Date(Date.now() - ACTIVE_RIDER_WINDOW_MS);
+        if (new Date(lastUpdateTime) < activeWindowStart) {
           status = "offline";
         }
       }

@@ -1,6 +1,8 @@
+import mongoose from "mongoose";
 import CouponReservation from "../models/couponReservationSchema.js";
 import Coupon from "../models/couponSchema.js";
 import Order from "../models/orderSchema.js";
+import pickup from "../models/pickupSchema.js";
 import catchAsync from "../utills/catchAsync.js";
 
 
@@ -175,12 +177,15 @@ coupons_service.remove = async (id) => {
 // customer end logic starts here -->>
 
 // GET AVAILABLE COUPONS - FIXED to accept category
-coupons_service.getAvailable = async (query) => {
-  const { cartAmount, category } = query; // ← ADD category parameter
+coupons_service.getAvailable = async (query,body) => {
+  const { cartAmount, id } = query;
+  const { serviceTypes, userId  } = body;
   const now = new Date();
-  
-  console.log("Fetching coupons for:", { cartAmount, category, now });
-  
+
+
+  // Helper function to normalize category (lowercase + remove hyphens)
+  const normalizeCategory = (cat) => cat.toLowerCase().replace(/-/g, '');
+
   let queryConditions = {
     isActive: true,
     startDate: { $lte: now },
@@ -193,18 +198,78 @@ coupons_service.getAvailable = async (query) => {
       ]
     }
   };
-  
-  // ONLY add category filter if category is provided and not empty
-  if (category && category.trim() !== "") {
-    queryConditions.categories = { 
-      $in: [category.toUpperCase()] 
-    };
+
+  let finalReqCategories = [];
+
+  // Case 1: id provided → fetch categories from order/pickup items
+  if (id) {
+    let itemDetails = null;
+    if (id.startsWith("WZ")) {
+      const orderDetails = await Order.findOne({ order_id: id }).lean();
+      itemDetails = orderDetails?.items || [];
+    } else {
+      const pickupDetails = await pickup.findById(id).lean();
+      itemDetails = pickupDetails?.items || [];
+    }
+
+    const rawCategories = itemDetails.map(item => item?.itemId?.type).filter(Boolean);
+    finalReqCategories = [...new Set(rawCategories.map(normalizeCategory))];
   }
-  
+  // Case 2: no id but serviceTypes provided → use serviceTypes directly (normalized)
+  else if (serviceTypes && Array.isArray(serviceTypes) && serviceTypes.length > 0) {
+    finalReqCategories = [...new Set(serviceTypes.map(normalizeCategory))];
+  }
+  // Case 3: neither → return empty
+  else {
+    return [];
+  }
+
+  // Fetch all coupons that satisfy basic conditions
   const coupons = await Coupon.find(queryConditions).lean();
-  console.log(`Found ${coupons.length} coupons`);
+
+  // Filter coupons by exact normalized category array match
+  const matchedCoupons = coupons.filter((coupon) => {
+    // Normalize coupon's categories (remove hyphens, lowercase, unique, sorted)
+    const couponCategories = [...new Set(
+      coupon.categories.map(normalizeCategory)
+    )].sort();
+
+    // Request categories are already normalized and sorted
+    const requestCategories = [...finalReqCategories].sort();
+    return (
+      couponCategories.length === requestCategories.length &&
+      couponCategories.every((cat, index) => cat === requestCategories[index])
+    );
+  });
   
-  return coupons;
+  if (userId) {
+    const couponIds = matchedCoupons.map((c) => c._id); // already ObjectId
+
+    const userUsage = await CouponReservation.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(userId), // convert to ObjectId
+          couponId: { $in: couponIds },
+        },
+      },
+      { $group: { _id: "$couponId", count: { $sum: 1 } } },
+    ]);
+
+    const usageMap = new Map(userUsage.map((u) => [u._id.toString(), u.count]));
+
+    const availableAfterPerUser = matchedCoupons.filter((coupon) => {
+      let shouldInclude = (coupon.type === 'discount' && cartAmount*1 > ((cartAmount*coupon.discount)/100)) || (coupon.type === 'flat' && cartAmount > coupon.discount);
+
+      const perUserLimit = coupon.perUser ?? 0; // if missing => unlimited
+      if (perUserLimit <= 0 && shouldInclude) return true;
+      const used = usageMap.get(coupon._id.toString()) || 0;
+      return (used < perUserLimit) && shouldInclude;
+    });
+
+    return availableAfterPerUser;
+  }
+
+  return matchedCoupons;
 };
 
 // APPLY COUPON (RESERVE)
@@ -319,8 +384,13 @@ coupons_service.applyToOrder = async (userId, body) => {
       throw new Error("Cannot apply coupon to paid order");
     }
     
-    if (order.Coupon) throw new Error("Coupon already applied");
-    
+    if (order.Coupon){
+      order.Coupon = null; // Clear existing coupon
+      order.discountAmount = 0;
+      order.totalAmount = order.price + (order.deliveryCharges || 0) + (order.taxAmount || 0);
+      await order.save();
+    }
+
     const now = new Date();
     
     // First find the coupon to check all validations
@@ -355,12 +425,12 @@ coupons_service.applyToOrder = async (userId, body) => {
     }
     
     // Check category if applicable
-    const orderCategory = body.category || "LAUNDRY"; // Get from request or calculate
-    if (coupon.categories && coupon.categories.length > 0) {
-      if (!coupon.categories.includes(orderCategory.toUpperCase())) {
-        throw new Error("Coupon not applicable for this category");
-      }
-    }
+    // const orderCategory = body.category || "LAUNDRY"; // Get from request or calculate
+    // if (coupon.categories && coupon.categories.length > 0) {
+    //   if (!coupon.categories.includes(orderCategory.toUpperCase())) {
+    //     throw new Error("Coupon not applicable for this category");
+    //   }
+    // }
     
     // Calculate discount
     let discount = 0;
@@ -374,6 +444,11 @@ coupons_service.applyToOrder = async (userId, body) => {
         discount = Math.min(discount, coupon.maxCap);
       }
     }
+
+
+    // if (cartAmount <= discount) {
+    //   throw new Error("You are not allow to use this coupon");
+    // }
     
     // Safety - discount cannot exceed order amount
     discount = Math.min(discount, baseAmount);

@@ -36,9 +36,20 @@ try {
 
   // Initialize with a unique name "customer"
   if (!admin.apps.some(app => app.name === "customer")) {
+    // customerApp = admin.initializeApp({
+    //   credential: admin.credential.cert(serviceAccount)
+    // }, "customer");
+
+    // To this:
     customerApp = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+      credential: admin.credential.cert({
+        projectId: serviceAccount.project_id,
+        clientEmail: serviceAccount.client_email,
+        privateKey: serviceAccount.private_key.replace(/\\n/g, '\n') // Fix newlines
+      }),
+      projectId: serviceAccount.project_id // Explicitly set projectId
     }, "customer");
+
     console.log("✅ CUSTOMER Firebase Admin initialized successfully");
   } else {
     customerApp = admin.app("customer");

@@ -20,6 +20,51 @@ const pickupItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const assignedRiderSchema = new mongoose.Schema(
+  {
+    riderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "users",
+      required: true,
+    },
+    riderName: {
+      type: String,
+      required: true,
+    },
+    assignedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
+const navigationTimelineSchema = new mongoose.Schema(
+  {
+    event: {
+      type: String,
+      enum: ["navigation_started", "location_update", "reached_location"],
+      required: true,
+    },
+    trackingLegId: String,
+    taskType: {
+      type: String,
+      enum: ["pickup", "delivery", "return_to_plant"],
+      default: "pickup",
+    },
+    riderId: String,
+    riderName: String,
+    location: {
+      latitude: Number,
+      longitude: Number,
+    },
+    totalDistanceKm: { type: Number, default: 0 },
+    message: String,
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const schema = new pickupSchema(
   {
     appCustomerId: String,
@@ -85,12 +130,24 @@ const schema = new pickupSchema(
     note: String,
     riderName: String,
     riderDate: String,
+
+    assignedRider: {
+      pickup: {
+        type: assignedRiderSchema,
+        default: null,
+      },
+    },
+
     isHeavy :{ type: Boolean, default: false },
 
     morning_delivery : {type: Boolean, default:true},   // for checking morning delivery or not
 
     items: {
       type: [pickupItemSchema],
+      default: [],
+    },
+    navigationTimeline: {
+      type: [navigationTimelineSchema],
       default: [],
     },
   },
@@ -101,7 +158,7 @@ const schema = new pickupSchema(
 schema.pre(/^find/, function (next) {
   this.populate({
     path: "items.itemId",
-    select: "images videos",
+    select: "images videos type",
   });
   next();
 });

@@ -14,6 +14,7 @@ import {
   refreshToken,
   signup,
   updateOrderStatus,
+  updateOrderItemStatus,
   updateUserPassword,
   uploadFiles,
   verifyOtp,
@@ -30,6 +31,7 @@ router.get("/getallusers", getAllUsers);
 router.get("/getplantusers", getplantusers);
 router.delete("/deleteuser/:id", deleteUser);
 router.patch("/updateOrderStatus/:id", updateOrderStatus);
+router.patch("/updateOrderItemStatus/:id", updateOrderItemStatus);
 router.post("/uploadFiles/:id", uploadFiles);
 router.get("/getOrderById/:id", getOrderById);
 router.get("/getPickupById/:id", getPickupById);

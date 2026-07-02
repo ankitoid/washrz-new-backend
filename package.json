@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google-cloud/storage": "^7.21.0",
     "aws-sdk": "^2.1687.0",
     "axios": "^1.13.5",
     "bcryptjs": "^2.4.3",
@@ -32,6 +33,7 @@
     "nodemon": "^3.0.1",
     "qrcode": "^1.5.4",
     "razorpay": "^2.9.6",
+    "sharp": "^0.35.2",
     "socket.io": "^4.7.5",
     "validator": "^13.11.0",
     "web-push": "^3.6.7"

@@ -14,21 +14,88 @@ const { Schema } = mongoose;
 //   type: {type: String, default: ''}
 // }, { _id: false });
 
-const itemSchema = new mongoose.Schema(
+const itemStatusHistorySchema = new mongoose.Schema(
   {
-    itemId: {
+    intransit:             { type: Date, default: null },
+    processing:            { type: Date, default: null },
+    reprocessing:          { type: Date, default: null },
+    readyForDelivery:      { type: Date, default: null },
+    deliveryriderassigned: { type: Date, default: null },
+    delivered:             { type: Date, default: null },
+    cancelled:             { type: Date, default: null },
+  },
+  { _id: false },
+);
+
+const itemSchema = new mongoose.Schema({
+  lineId: { type: String}, // Unique identifier for this item line (can be generated as orderId + index)
+  itemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "CatalogItem",
+    required: true,
+  },
+  label:                  String,
+  price:                  Number,
+  unit:                   String,
+  intransitImages:        { type: [String], default: [] },
+  readyForDeliveryImages: { type: [String], default: [] },
+  status: {
+    type: String,
+    enum: [
+      "intransit",
+      "processing",
+      "reprocessing",
+      "ready for delivery",
+      "delivery rider assigned",
+      "delivered",
+      "cancelled",
+    ],
+    default: "intransit",
+  },
+  statusHistory: { type: itemStatusHistorySchema, default: () => ({}) },
+});
+
+const assignedRiderSchema = new Schema(
+  {
+    riderId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "CatalogItem",
+      ref: "users",
       required: true,
     },
-    label: String, // snapshot
-    price: Number, // snapshot
-    unit: String, // snapshot
-    quantity: {
-      type: Number,
+    riderName: {
+      type: String,
       required: true,
-      min: 1,
     },
+    assignedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false },
+);
+
+const navigationTimelineSchema = new Schema(
+  {
+    event: {
+      type: String,
+      enum: ["navigation_started", "location_update", "reached_location"],
+      required: true,
+    },
+    trackingLegId: String,
+    taskType: {
+      type: String,
+      enum: ["pickup", "delivery", "return_to_plant"],
+      default: "delivery",
+    },
+    riderId: String,
+    riderName: String,
+    location: {
+      latitude: Number,
+      longitude: Number,
+    },
+    totalDistanceKm: { type: Number, default: 0 },
+    message: String,
+    createdAt: { type: Date, default: Date.now },
   },
   { _id: false },
 );
@@ -136,6 +203,7 @@ const statusHistorySchema = new Schema(
     pending: { type: Date, default: null },
     confirmed: { type: Date, default: null },
     processing: { type: Date, default: null },
+    reprocessing: { type: Date, default: null },
     ready_for_delivery: { type: Date, default: null },
     out_for_delivery: { type: Date, default: null },
     delivered: { type: Date, default: null },
@@ -169,6 +237,70 @@ const CouponManageSchema = new Schema(
   },
   { _id: false },
 );
+
+
+// ========= INVOICE SCHEMA  ==========
+
+const invoiceSnapshotSchema = new mongoose.Schema(
+  {
+    // Invoice identification
+    invoiceNumber: { type: String, required: true, unique: true, sparse: true },
+    invoiceDate: { type: Date, default: Date.now },
+    invoiceGeneratedBy: { type: String, default: "system" },
+
+
+    //gst number
+    gstNumber: { type: String, default: "" },
+ 
+    // Customer details (captured at generation time)
+    customerName: String,
+    address: String,
+    contactNo: String,
+    email: String,
+ 
+    // Reference to the parent order
+    orderId: String,
+ 
+    // Frozen item list
+    items: [
+      {
+        label: String,
+        price: Number,
+        quantity: Number,
+        unit: String,
+        totalItemPrice: String,   // price * quantity
+        sku: String,
+        sacid: String,
+      },
+    ],
+ 
+    // Pricing breakdown
+    subtotal: Number,
+    deliveryCharges: Number,
+    taxAmount: Number,
+    discountAmount: Number,
+    totalAmount: Number,
+ 
+    // Payment snapshot (always "paid" since invoice is generated after payment)
+    payment: {
+      mode: String,              // e.g., 'upi', 'card', 'cash'
+      transactionId: String,
+      status: String,            // 'success'
+      paidAt: Date,
+    },
+ 
+    // Document status
+    status: {
+      type: String,
+      enum: ["generated", "sent", "void"],
+      default: "generated",
+    },
+ 
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }   // _id: false because it's embedded inside the order
+);
+ 
 
 // ========== MAIN ORDER SCHEMA ==========
 
@@ -228,6 +360,7 @@ const orderSchema = new Schema(
       enum: [
         "intransit",
         "processing",
+        "reprocessing",
         "ready for delivery",
         "delivery rider assigned",
         "delivered",
@@ -253,6 +386,17 @@ const orderSchema = new Schema(
     riderDate: String,
     riderAssignedAt: Date,
 
+    assignedRider: {
+      pickup: {
+        type: assignedRiderSchema,
+        default: null,
+      },
+      delivery: {
+        type: assignedRiderSchema,
+        default: null,
+      },
+    },
+
     // ========== TRACKING & MEDIA ==========
     intransitImage: [String],
     intransitVoice: String,
@@ -263,6 +407,7 @@ const orderSchema = new Schema(
     statusHistory: {
       intransit: { type: Date, default: null },
       processing: { type: Date, default: null },
+      reprocessing: { type: Date, default: null },
       readyForDelivery: { type: Date, default: null },
       deliveryriderassigned: { type: Date, default: null },
       delivered: { type: Date, default: null },
@@ -281,6 +426,15 @@ const orderSchema = new Schema(
       longitude: Number,
       address: String,
     },
+
+
+  // ========== MORNING DELIVERY ==========
+    morningDelivery: { type: Boolean, default: true },
+     
+  //  ========== CONFIRM COD==========
+
+    isCODConfirmed: { type: Boolean, default: false },
+
 
     // ========== ADDITIONAL INFORMATION ==========
     notes: String,
@@ -304,7 +458,13 @@ const orderSchema = new Schema(
     createdBy: { type: String, default: "customer" },
     updatedBy: String,
     isActive: { type: Boolean, default: true },
-    isArchived: { type: Boolean, default: false, index: true }
+    isArchived: { type: Boolean, default: false, index: true },
+
+    invoice: { type: invoiceSnapshotSchema, default: null },
+    navigationTimeline: {
+      type: [navigationTimelineSchema],
+      default: [],
+    },
   },
   {
     timestamps: true,
@@ -340,7 +500,7 @@ orderSchema.index({ riderId: 1, status: 1 });
 orderSchema.pre(/^find/, function (next) {
   this.populate({
     path: "items.itemId",
-    select: "images videos type"
+    select: "images videos type sku sacid",
   });
   next();
 });

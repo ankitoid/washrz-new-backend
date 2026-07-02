@@ -2,3 +2,5 @@
 node_modules
 secret-key-firebase.json
 customer-secret-key-firebase.json
+customerapp-analytics.json
+appstore-analytics.p8

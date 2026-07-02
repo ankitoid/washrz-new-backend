@@ -13,11 +13,24 @@ const schema = new plantSchema({
     required: true,
     trim: true,
   },
+  geoLocation: {
+    type: {
+      type: String,
+      enum: ["Point"],
+      default: "Point",
+    },
+    coordinates: {
+      type: [Number],
+      default: undefined,
+    },
+  },
   createdAt: {
     type: Date,
     default: Date.now,
   },
 });
+
+schema.index({ geoLocation: "2dsphere" });
 
 const Plant = mongoose.model("Plant", schema);
 export default Plant;

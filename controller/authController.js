@@ -1,10 +1,12 @@
 import crypto from "crypto";
+import mongoose from "mongoose";
 import { promisify } from "util";
 import jwt from "jsonwebtoken";
 import catchAsync from "../utills/catchAsync.js";
 import AppError from "../utills/appError.js";
 import User from "../models/userModel.js";
 import Order from "../models/orderSchema.js";
+import Plant from "../models/plantSchema.js";
 import AWS from "aws-sdk";
 import multer from "multer";
 import Pickup from "../models/pickupSchema.js";
@@ -12,6 +14,11 @@ import bcrypt from "bcryptjs/dist/bcrypt.js";
 import otp from "../models/otpSchema.js";
 import customerFcmService from "../services/customerFcmService.js";
 import { createCustomerNotification } from "./customerNotificationController.js";
+import { sendSmsthroughMSG91 } from "../utills/helpers.js";
+import {
+  ORDER_STATUS,
+  updateOrderStatusByItems,
+} from "../services/orderStatusService.js";
 
 const signAccToken = (id, type) => {
   return jwt.sign({ id, userType: type }, process.env.JWT_SECRET, {
@@ -150,6 +157,24 @@ export const signup = catchAsync(async (req, res, next) => {
 
   console.log("==============================================>> ", req.body);
 
+  let resolvedPlantName = "";
+  let resolvedPlantLocation = "";
+
+  if (plant) {
+    let plantDoc = null;
+    if (mongoose.Types.ObjectId.isValid(plant)) {
+      plantDoc = await Plant.findById(plant);
+    }
+    if (!plantDoc) {
+      plantDoc = await Plant.findOne({ name: plant });
+    }
+
+    if (plantDoc) {
+      resolvedPlantName = plantDoc.name;
+      resolvedPlantLocation = plantDoc.location;
+    }
+  }
+
   const newUser = await User.create({
     name: fullName,
     email,
@@ -158,6 +183,8 @@ export const signup = catchAsync(async (req, res, next) => {
     phone: mobileNumber,
     role,
     plant,
+    plantName: resolvedPlantName,
+    plantLocation: resolvedPlantLocation,
     avatar: "",
     addharCardNo: aadhaarCard,
     drivingLicence,
@@ -509,10 +536,12 @@ export const updateUserPassword = catchAsync(async (req, res, next) => {
 
 // Update order status
 export const updateOrderStatus = async (req, res) => {
-  const { status } = req.body;
+  const { status, lineId, orderItemId } = req.body;
 
   try {
     const orderId = req.params.id;
+    let customerNotificationResult = null;
+    let customerPushResult = null;
 
     if (!orderId || !status) {
       return res
@@ -520,58 +549,49 @@ export const updateOrderStatus = async (req, res) => {
         .json({ message: "Order ID and status are required." });
     }
 
-    const existingOrder = await Order.findById(orderId);
-    if (!existingOrder) {
-      return res.status(404).json({ message: "Order not found." });
-    }
-
-    const statusHistoryMap = {
-      intransit: "statusHistory.intransit",
-      processing: "statusHistory.processing",
-      "ready for delivery": "statusHistory.readyForDelivery",
-      "delivery rider assigned": "statusHistory.deliveryriderassigned",
-      delivered: "statusHistory.delivered",
-      cancelled: "statusHistory.cancelled",
-    };
-
-    const updateData = { status };
-
-    if (statusHistoryMap[status]) {
-      updateData[statusHistoryMap[status]] = new Date();
-    }
-
-    const updatedOrder = await Order.findByIdAndUpdate(orderId, updateData, {
-      new: true,
+    const {
+      order: updatedOrder,
+      previousOrderStatus,
+      nextOrderStatus,
+      updatedItem,
+    } = await updateOrderStatusByItems({
+      orderId,
+      status,
+      lineId,
+      orderItemId,
     });
 
-    if (!updatedOrder) {
-      return res.status(404).json({ message: "Order not found." });
-    }
-
     if (
-      status === "delivery rider assigned" &&
-      existingOrder.status !== "delivery rider assigned" &&
+      nextOrderStatus === ORDER_STATUS.DELIVERY_RIDER_ASSIGNED &&
+      previousOrderStatus !== ORDER_STATUS.DELIVERY_RIDER_ASSIGNED &&
       updatedOrder.appCustomerId
     ) {
-      await createCustomerNotification({
+      const notification = await createCustomerNotification({
         customerId: updatedOrder.appCustomerId,
         title: "Out for Delivery 🚚",
         message: "Your items are heading home, clean and fresh.",
-        type: "delivery_rider_assigned",
+        type: "out_for_Delivery",
         data: {
           orderId: String(updatedOrder._id),
           screen: "OrderDetails",
         },
       });
 
-      await customerFcmService.sendToCustomer(
+      customerNotificationResult = {
+        attempted: true,
+        success: !!notification,
+        type: "out_for_Delivery",
+        notificationId: notification?._id || null,
+      };
+
+      customerPushResult = await customerFcmService.sendToCustomer(
         String(updatedOrder.appCustomerId),
         {
           title: "All set 👌",
           body: "Your items are heading home, clean and fresh.",
         },
         {
-          type: "Out_for_Delivery",
+          type: "out_for_Delivery",
           orderId: String(updatedOrder._id),
           screen: "OrderDetails",
         },
@@ -579,22 +599,29 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     if (
-      status === "delivered" &&
-      existingOrder.status !== "delivered" &&
+      nextOrderStatus === ORDER_STATUS.DELIVERED &&
+      previousOrderStatus !== ORDER_STATUS.DELIVERED &&
       updatedOrder.appCustomerId
     ) {
-      await createCustomerNotification({
+      const notification = await createCustomerNotification({
         customerId: updatedOrder.appCustomerId,
         title: "Delivered ✨",
         message: "Freshly cleaned and delivered with care.",
-        type: "order_delivered",
+        type: "order_Delivered",
         data: {
           orderId: String(updatedOrder._id),
           screen: "OrderDetails",
         },
       });
 
-      await customerFcmService.sendToCustomer(
+      customerNotificationResult = {
+        attempted: true,
+        success: !!notification,
+        type: "order_Delivered",
+        notificationId: notification?._id || null,
+      };
+
+      customerPushResult = await customerFcmService.sendToCustomer(
         String(updatedOrder.appCustomerId),
         {
           title: "Delivered ✨",
@@ -608,14 +635,46 @@ export const updateOrderStatus = async (req, res) => {
       );
     }
 
+    if (
+      (nextOrderStatus === ORDER_STATUS.DELIVERY_RIDER_ASSIGNED ||
+        nextOrderStatus === ORDER_STATUS.DELIVERED) &&
+      !updatedOrder.appCustomerId
+    ) {
+      customerNotificationResult = {
+        attempted: false,
+        success: false,
+        reason: "Order has no appCustomerId",
+      };
+      customerPushResult = {
+        attempted: false,
+        success: false,
+        reason: "Order has no appCustomerId",
+      };
+    }
+
     return res.status(200).json({
       message: "Order status updated successfully.",
       updatedOrder,
+      updatedItem,
+      customerNotification: customerNotificationResult,
+      customerPush: customerPushResult,
     });
   } catch (error) {
     console.error("Error updating order status:", error);
-    return res.status(500).json({ message: "Internal server error." });
+    return res
+      .status(error.statusCode || 500)
+      .json({ message: error.message || "Internal server error." });
   }
+};
+
+export const updateOrderItemStatus = async (req, res) => {
+  req.body = {
+    ...req.body,
+    lineId: req.body.lineId,
+    orderItemId: req.body.orderItemId,
+  };
+
+  return updateOrderStatus(req, res);
 };
 
 const s3 = new AWS.S3({
@@ -827,8 +886,11 @@ export const loginViaOtp = catchAsync(async (req, res, next) => {
       new: true, // return created/updated doc
     },
   );
+  console.log("this is the result sssss===>", result);
 
-  const otp_res = await sendOtpOnWhatsApp(phoneNumber, gen_otp);
+  // const otp_res = await sendOtpOnWhatsApp(phoneNumber, gen_otp);
+
+  const otp_res = await sendSmsthroughMSG91(phoneNumber, gen_otp, result._id.toString());
 
   // console.log("here is the result",otp_res)
 

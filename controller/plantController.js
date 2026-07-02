@@ -1,4 +1,5 @@
 import Order from "../models/orderSchema.js";
+import mongoose from "mongoose";
 import Pickup from "../models/pickupSchema.js";
 import Plant from "../models/plantSchema.js";
 import User from "../models/userModel.js";
@@ -12,7 +13,7 @@ import customerFcmService from "../services/customerFcmService.js";
 // Create a new plant
 export const addPlant = async (req, res) => {
   try {
-    const { name, location } = req.body;
+    const { name, location, latitude, longitude, lat, lng } = req.body;
 
     // Check if the plant already exists
     const existingPlant = await Plant.findOne({ name });
@@ -20,13 +21,72 @@ export const addPlant = async (req, res) => {
       return res.status(400).json({ error: "Plant already exists." });
     }
 
+    const plantData = { name, location };
+    const plantLat = latitude ?? lat;
+    const plantLng = longitude ?? lng;
+
+    if (plantLat != null && plantLng != null) {
+      plantData.geoLocation = {
+        type: "Point",
+        coordinates: [Number(plantLng), Number(plantLat)],
+      };
+    }
+
     // Create a new plant with the name and location
-    const plant = new Plant({ name, location });
+    const plant = new Plant(plantData);
     await plant.save();
 
     res.status(201).json({ message: "Plant added successfully", plant });
   } catch (error) {
     res.status(500).json({ error: "Server error, please try again." });
+  }
+};
+
+export const getRiderPlantDestination = async (req, res) => {
+  try {
+    const { riderId } = req.params;
+    const rider = await User.findById(riderId).select("plant name").lean();
+
+    if (!rider) {
+      return res.status(404).json({ error: "Rider not found." });
+    }
+
+    let plant = null;
+    if (mongoose.Types.ObjectId.isValid(rider.plant)) {
+      plant = await Plant.findById(rider.plant).lean();
+    }
+    if (!plant) {
+      plant = await Plant.findOne({ name: rider.plant }).lean();
+    }
+
+    if (!plant) {
+      return res.status(404).json({ error: "Plant not found for rider." });
+    }
+
+    const coordinates = plant.geoLocation?.coordinates;
+    if (!coordinates || coordinates.length < 2) {
+      return res.status(422).json({
+        error: "Plant coordinates are not configured.",
+        plant: {
+          id: plant._id,
+          name: plant.name,
+          location: plant.location,
+        },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      plant: {
+        id: plant._id,
+        name: plant.name,
+        location: plant.location,
+        latitude: coordinates[1],
+        longitude: coordinates[0],
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch rider plant location." });
   }
 };
 
@@ -212,7 +272,15 @@ export const assignRider = async (req, res) => {
 
     const order = await Order.findByIdAndUpdate(
       orderId,
-      { riderName, riderDate },
+      {
+        riderName,
+        riderDate,
+        "assignedRider.delivery": {
+          riderId,
+          riderName,
+          assignedAt: new Date(),
+        },
+      },
       { new: true },
     );
 
@@ -305,6 +373,11 @@ export const assignPickupRider = async (req, res) => {
         riderName,
         riderDate,
         PickupStatus: "assigned",
+        "assignedRider.pickup": {
+          riderId,
+          riderName,
+          assignedAt: new Date(),
+        },
       },
       { new: true },
     );
@@ -350,11 +423,10 @@ export const assignPickupRider = async (req, res) => {
     });
 
     if (pickup.appCustomerId) {
-     const done =  await createCustomerNotification({
+      const done = await createCustomerNotification({
         customerId: pickup.appCustomerId,
         title: "Rider Assigned",
-        message:
-          "Keep your items bagged & ready.",
+        message: "Keep your items bagged & ready.",
         type: "pickup_Assigned",
         data: {
           pickupId: String(pickup._id),
@@ -416,7 +488,7 @@ cron.schedule("30 0 * * *", async () => {
     // Clear rider info from Orders
     await Order.updateMany(
       {
-         status: { $nin: ["delivered"] },
+        status: { $nin: ["delivered"] },
       },
       {
         $unset: {
