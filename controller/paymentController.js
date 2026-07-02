@@ -450,6 +450,7 @@ export const razorpayWebhook = async (req, res) => {
       .update(JSON.stringify(req.body))
       .digest("hex");
 
+
     if (signature !== expectedSignature) {
       console.log("❌ Webhook signature mismatch");
       return res.status(400).json({ success: false });
@@ -464,6 +465,9 @@ export const razorpayWebhook = async (req, res) => {
 
     if (event === "payment.captured") {
       const payment = req.body.payload.payment.entity;
+      console.log("Entitiy: ", JSON.stringify(req.body))
+      console.log("------------------------------------")
+      console.log("This is the Payment: : > ", payment);
 
       const razorpayOrderId = payment.order_id;
       const razorpayPaymentId = payment.id;
