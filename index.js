@@ -322,6 +322,36 @@ io.on("connection", (socket) => {
     });
   });
 
+  // ─────────────────────────────────────────────────────────────
+  // HEARTBEAT — 30s "I'm alive" ping from rider (even when stationary)
+  // This is what keeps a rider marked "active" during sleep/Doze,
+  // because location updates may slow down but heartbeat stays frequent.
+  // ─────────────────────────────────────────────────────────────
+  socket.on("riderHeartbeat", async (data) => {
+    const { riderId, name, timestamp } = data;
+    if (!riderId) return;
+
+    const now = new Date();
+
+    // 1. Update in-memory store (keep rider marked active)
+    const existing = activeRiderLocations.get(riderId);
+    activeRiderLocations.set(riderId, {
+      ...(existing || {}),
+      riderId,
+      status: existing?.status === "idle" ? "active" : (existing?.status || "active"),
+      lastHeartbeat: now,
+      lastUpdate: existing?.lastUpdate || now, // don't overwrite last GPS time
+    });
+
+    // 2. Track heartbeat in a lightweight way (no full DB write needed each ping)
+    // Optional: broadcast to admin so dashboard can show "last seen Xs ago"
+    socketService.emitToAdmin("riderHeartbeat", {
+      riderId,
+      name: name || existing?.name,
+      timestamp: now.toISOString(),
+    });
+  });
+
   socket.on("taskNavigationStarted", async (data) => {
     try {
       await startTaskTrackingLeg(data);
@@ -711,15 +741,51 @@ setTimeout(async () => {
 }, 15000);
 
 
-// Periodic cleanup: mark riders offline if no update for 2 minutes
+// ─────────────────────────────────────────────────────────────────────────
+// Periodic cleanup: mark riders idle/offline.
+//
+// IMPORTANT (sleep-mode logic): A phone that went to sleep will see its
+// WebSocket die, BUT the foreground service keeps firing. It sends:
+//   - Location updates via HTTP fallback (slow, e.g. every 30s–2min)
+//   - Heartbeats every 30s via HTTP fallback
+//
+// So a rider is considered ALIVE if EITHER:
+//   - lastUpdate (location) is recent (< 5 min), OR
+//   - lastHeartbeat is recent (< 90 s)
+//
+// Only if BOTH are stale do we demote them to idle, then offline.
+// ─────────────────────────────────────────────────────────────────────────
 setInterval(async () => {
   const now = new Date();
-  const FIVE_MINUTES = 5 * 60 * 1000;
+  const LOCATION_STALE_MS = 5 * 60 * 1000;   // 5 min — location grace
+  const HEARTBEAT_STALE_MS = 90 * 1000;       // 90 s — heartbeat grace
+  const OFFLINE_MS = 10 * 60 * 1000;          // 10 min — full offline
 
   for (const [riderId, data] of activeRiderLocations.entries()) {
-    if (now - data.lastUpdate > FIVE_MINUTES && data.status === "active") {
+    const lastUpdate = data.lastUpdate ? new Date(data.lastUpdate) : null;
+    const lastHeartbeat = data.lastHeartbeat ? new Date(data.lastHeartbeat) : null;
+
+    const locationAgeMs = lastUpdate ? now - lastUpdate : Infinity;
+    const heartbeatAgeMs = lastHeartbeat ? now - lastHeartbeat : Infinity;
+
+    // Rider is alive if heartbeat OR location is fresh → skip
+    if (heartbeatAgeMs < HEARTBEAT_STALE_MS || locationAgeMs < LOCATION_STALE_MS) {
+      // If rider was idle but is now sending heartbeats again, restore to active
+      if (data.status === "idle") {
+        data.status = "active";
+        activeRiderLocations.set(riderId, data);
+        socketService.emitToAdmin("riderStatusUpdate", {
+          riderId,
+          status: "active",
+          lastUpdate: now,
+        });
+      }
+      continue;
+    }
+
+    // Both stale → demote active → idle
+    if (data.status === "active" && locationAgeMs > LOCATION_STALE_MS) {
       data.status = "idle";
-      data.lastUpdate = now;
       activeRiderLocations.set(riderId, data);
       try {
         const user = await User.findById(riderId).select("name phone");
@@ -754,6 +820,26 @@ setInterval(async () => {
       socketService.emitToAdmin("riderStatusUpdate", {
         riderId,
         status: "idle",
+        lastUpdate: now,
+      });
+    }
+
+    // Both stale for 10+ min → demote idle → offline (phone likely off/crashed)
+    if (data.status === "idle" && (locationAgeMs > OFFLINE_MS && heartbeatAgeMs > OFFLINE_MS)) {
+      data.status = "offline";
+      activeRiderLocations.set(riderId, data);
+      try {
+        await RiderLocation.findOneAndUpdate(
+          { riderId },
+          { $set: { status: "offline", lastUpdate: now } },
+        );
+        console.log(`🔴 Rider ${riderId} marked as OFFLINE (no updates for 10+ min)`);
+      } catch (error) {
+        console.error("Error updating offline status in DB:", error);
+      }
+      socketService.emitToAdmin("riderStatusUpdate", {
+        riderId,
+        status: "offline",
         lastUpdate: now,
       });
     }

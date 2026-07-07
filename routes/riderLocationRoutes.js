@@ -479,4 +479,48 @@ router.get("/riders/:riderId", async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// HEARTBEAT — HTTP fallback when WebSocket is dead (phone sleeping).
+// The mobile app calls this every 30s via fetch() when socket.connected is false.
+// This is lightweight — no DB write, just updates the in-memory map so the
+// idle-detection cron knows the rider is still alive.
+// ─────────────────────────────────────────────────────────────────────────
+router.post("/heartbeat", async (req, res) => {
+  try {
+    const { riderId } = req.body;
+    if (!riderId) {
+      return res.status(400).json({ success: false, message: "riderId required" });
+    }
+
+    const now = new Date();
+
+    // Update in-memory map (same map used by socket handler + idle cron)
+    const activeRiderLocations = req.app.locals.activeRiderLocations;
+    if (activeRiderLocations) {
+      const existing = activeRiderLocations.get(riderId);
+      activeRiderLocations.set(riderId, {
+        ...(existing || {}),
+        riderId,
+        status: existing?.status === "offline" ? "active" : (existing?.status || "active"),
+        lastHeartbeat: now,
+        lastUpdate: existing?.lastUpdate || now, // don't overwrite last GPS time
+      });
+
+      // Broadcast to admin dashboard
+      const io = req.app.locals.io;
+      if (io) {
+        io.to("admin-dashboard").emit("riderHeartbeat", {
+          riderId,
+          timestamp: now.toISOString(),
+        });
+      }
+    }
+
+    res.status(200).json({ success: true, message: "Heartbeat received" });
+  } catch (error) {
+    console.error("Error processing heartbeat:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 export default router;
