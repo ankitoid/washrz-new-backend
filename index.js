@@ -783,6 +783,8 @@ setInterval(async () => {
       continue;
     }
 
+    
+
     // Both stale → demote active → idle
     if (data.status === "active" && locationAgeMs > LOCATION_STALE_MS) {
       data.status = "idle";
