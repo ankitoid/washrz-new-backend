@@ -462,6 +462,196 @@ export const assignPickupRider = async (req, res) => {
   }
 };
 
+// logic for assigning the pickup or delivery to the rider for the VRP engine
+export const assignRiderUnified = async (req, res) => {
+  try {
+    const { orderId, riderName, riderId } = req.body;
+
+    // Basic validation
+    if (!orderId || !riderId) {
+      return res.status(400).json({ message: "orderId and riderId are required" });
+    }
+
+    // Determine type based on orderId prefix
+    const isDelivery = orderId.startsWith("WZ");
+    const type = isDelivery ? "delivery" : "pickup";
+
+    const riderDate = new Date().toISOString().split("T")[0];
+    let result;
+
+    if (type === "delivery") {
+      // --- Delivery assignment ---
+      const order = await Order.findByIdAndUpdate(
+        orderId,
+        {
+          riderName,
+          riderDate,
+          "assignedRider.delivery": {
+            riderId,
+            riderName,
+            assignedAt: new Date(),
+          },
+        },
+        { new: true }
+      );
+
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      console.log(`🔄 Assigning rider ${riderName} (${riderId}) to order ${orderId}`);
+
+      // Socket notifications
+      req.socket.emitToAdmin("assignOrder", { order });
+      req.socket.emitToRider(riderId, "assignOrder", { order });
+
+      // FCM to rider
+      const fcmResult = await fcmService.sendToRider(
+        riderId,
+        {
+          title: "🎯 New Delivery Assigned",
+          body: `Tap to view Order`,
+        },
+        {
+          orderId: String(order._id),
+          orderNumber: order.order_id || String(order._id),
+          type: "delivery_assigned",
+          customerName: order.customerName || "Customer",
+          address: order.address || "Location not specified",
+          amount: order.totalAmount ? `₹${order.totalAmount}` : "N/A",
+          action: "VIEW_ORDER",
+          screen: "OrderDetails",
+          timestamp: new Date().toISOString(),
+        }
+      );
+
+      // In-app notification for rider
+      await createNotification({
+        riderId,
+        title: "🎯 New Delivery Assigned",
+        message: "Tap to view order",
+        type: "delivery_assigned",
+        data: {
+          orderId: String(order._id),
+          screen: "OrderDetails",
+        },
+      });
+
+      const notificationStatus = fcmResult.success
+        ? "Push notification sent to rider's device"
+        : "Socket notification sent, but push notification failed";
+
+      result = {
+        status: "success",
+        message: `Rider ${riderName} assigned successfully for delivery`,
+        data: {
+          order,
+          notification: {
+            status: notificationStatus,
+            fcm: fcmResult,
+            socket: true,
+          },
+        },
+      };
+    } else {
+      // --- Pickup assignment ---
+      const pickup = await Pickup.findByIdAndUpdate(
+        orderId,
+        {
+          riderName,
+          riderDate,
+          PickupStatus: "assigned",
+          "assignedRider.pickup": {
+            riderId,
+            riderName,
+            assignedAt: new Date(),
+          },
+        },
+        { new: true }
+      );
+
+      if (!pickup) {
+        return res.status(404).json({ message: "Pickup not found" });
+      }
+
+      // Socket notifications
+      req.socket.emitToAdmin("assignedPickup", { pickup, riderName });
+      req.socket.emitToRider(riderId, "riderAssignedPickup", { pickup });
+
+      // FCM to rider (pickup specific)
+      await fcmService.sendToRider(
+        riderId,
+        {
+          title: "📦 New Pickup Assigned",
+          body: "Pickup - Ready for collection",
+        },
+        {
+          pickupId: String(pickup._id),
+          type: "pickup_assigned",
+          customerName: pickup.customerName || "Customer",
+          action: "view_pickup",
+          screen: "pickup_details",
+        }
+      );
+
+      // In-app notification for rider
+      await createNotification({
+        riderId,
+        title: "📦 New Pickup Assigned",
+        message: "Pickup ready for collection",
+        type: "pickup_assigned",
+        data: {
+          pickupId: String(pickup._id),
+          screen: "pickup_details",
+        },
+      });
+
+      // Notify customer (if applicable)
+      if (pickup.appCustomerId) {
+        await createCustomerNotification({
+          customerId: pickup.appCustomerId,
+          title: "Rider Assigned",
+          message: "Keep your items bagged & ready.",
+          type: "pickup_Assigned",
+          data: {
+            pickupId: String(pickup._id),
+            screen: "PickupDetails",
+          },
+        });
+
+        await customerFcmService.sendToCustomer(
+          String(pickup.appCustomerId),
+          {
+            title: "Rider Assigned",
+            body: "Keep items bagged & ready. Your laundry's escape plan is in motion!",
+          },
+          {
+            type: "pickup_Assigned",
+            pickupId: String(pickup._id),
+            screen: "PickupDetails",
+          }
+        );
+      }
+
+      result = {
+        status: "success",
+        data: {
+          pickup,
+        },
+      };
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("assignRiderUnified error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: error.message,
+      code: error.code,
+    });
+  }
+};
+
 cron.schedule("30 0 * * *", async () => {
   // Runs every day at 12:30 AM
   try {

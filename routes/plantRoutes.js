@@ -4,6 +4,7 @@ import {
   assignPickupRider,
   assignPlant,
   assignRider,
+  assignRiderUnified,
   deletePlant,
   getAllPlants,
   getRiderPlantDestination,
@@ -20,5 +21,9 @@ router.put("/assignPlant/:pickupId", assignPlant);
 router.get("/getRiders", getRiders);
 router.patch("/assignRider", assignRider);
 router.patch("/assignPickupRider", assignPickupRider);
+
+// new api for assignment of pickup or delivery to rider for the VRP engine----->>>>>>
+
+router.patch("/assignRiderVrp", assignRiderUnified);
 
 export { router as default };
