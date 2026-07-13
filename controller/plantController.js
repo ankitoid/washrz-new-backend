@@ -485,6 +485,7 @@ export const assignRiderUnified = async (req, res) => {
         orderId,
         {
           riderName,
+          status : "delivery rider assigned",
           riderDate,
           "assignedRider.delivery": {
             riderId,
