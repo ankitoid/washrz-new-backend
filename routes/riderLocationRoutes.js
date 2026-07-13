@@ -10,6 +10,39 @@ import {
 const router = express.Router();
 const ACTIVE_RIDER_WINDOW_MS = 5 * 60 * 1000;
 
+function buildLocationSnapshot({
+  riderId,
+  name,
+  phone,
+  lat,
+  lng,
+  speed = 0,
+  bearing = 0,
+  batteryLevel = 100,
+  status = "active",
+  lastUpdate = new Date(),
+  taskTracking = null,
+}) {
+  const currentLocation = { lat: parseFloat(lat), lng: parseFloat(lng) };
+
+  return {
+    riderId,
+    id: riderId,
+    name: name || "Unknown Rider",
+    phone: phone || "N/A",
+    status,
+    currentLocation,
+    location: currentLocation,
+    lat: currentLocation.lat,
+    lng: currentLocation.lng,
+    speed: parseFloat(speed) || 0,
+    bearing: parseFloat(bearing) || 0,
+    batteryLevel: parseInt(batteryLevel) || 100,
+    lastUpdate,
+    taskTracking,
+  };
+}
+
 router.get("/active-riders", async (req, res) => {
   try {
     const activeWindowStart = new Date(Date.now() - ACTIVE_RIDER_WINDOW_MS);
@@ -89,14 +122,21 @@ router.get("/rider/:riderId/current", async (req, res) => {
 
     if (!latestLocation) return res.status(404).json({ success: false, message: "Rider location not found" });
 
+    const currentLocation = latestLocation.location ? {
+      lat: latestLocation.location.coordinates[1],
+      lng: latestLocation.location.coordinates[0]
+    } : null;
+
     res.status(200).json({
       success: true,
       rider: {
         riderId,
         name: latestLocation.riderId?.name,
         phone: latestLocation.riderId?.phone,
-        lat: latestLocation.location.coordinates[1],
-        lng: latestLocation.location.coordinates[0],
+        lat: currentLocation?.lat,
+        lng: currentLocation?.lng,
+        currentLocation,
+        location: currentLocation,
         speed: latestLocation.speed,
         bearing: latestLocation.bearing,
         status: latestLocation.status,
@@ -238,21 +278,21 @@ router.post("/update", async (req, res) => {
 
     // Broadcast to admin dashboard so HTTP updates appear in real-time
     const io = req.app.locals.io;
+    const locationSnapshot = buildLocationSnapshot({
+      riderId,
+      name: user.name,
+      phone: user.phone,
+      lat,
+      lng,
+      speed,
+      bearing,
+      batteryLevel,
+      status,
+      lastUpdate: new Date(),
+      taskTracking,
+    });
     if (io) {
-      io.to("admin-dashboard").emit("riderLocationUpdate", {
-        riderId,
-        location,
-        lat: parseFloat(lat),
-        lng: parseFloat(lng),
-        speed: parseFloat(speed),
-        bearing: parseFloat(bearing),
-        batteryLevel: parseInt(batteryLevel),
-        lastUpdate: new Date(),
-        status,
-        taskTracking,
-        name: user.name || "Unknown Rider",
-        phone: user.phone || "N/A",
-      });
+      io.to("admin-dashboard").emit("riderLocationUpdate", locationSnapshot);
     }
 
     console.log(`📍 HTTP location update: rider ${riderId} at ${lat}, ${lng}`);
@@ -262,6 +302,7 @@ router.post("/update", async (req, res) => {
       success: true,
       message: "Location updated successfully",
       location: updatedLocation,
+      rider: locationSnapshot,
       taskTracking: savedTaskTracking
         ? {
             trackingLegId: savedTaskTracking.trackingLegId,
@@ -385,6 +426,11 @@ router.get("/riders/live", async (req, res) => {
         }
       }
       
+      const currentLocation = location?.location ? {
+        lat: location.location.coordinates[1],
+        lng: location.location.coordinates[0]
+      } : null;
+
       return {
         id: rider._id,
         name: rider.name,
@@ -392,10 +438,8 @@ router.get("/riders/live", async (req, res) => {
         email: rider.email,
         avatar: rider.avatar,
         status: status,
-        currentLocation: location?.location ? {
-          lat: location.location.coordinates[1],
-          lng: location.location.coordinates[0]
-        } : null,
+        currentLocation,
+        location: currentLocation,
         speed: location?.speed || 0,
         bearing: location?.bearing || 0,
         batteryLevel: location?.batteryLevel || 100,
@@ -451,10 +495,8 @@ router.get("/riders/:riderId", async (req, res) => {
       email: rider.email,
       avatar: rider.avatar,
       status: latestLocation?.status || "offline",
-      currentLocation: latestLocation?.location ? {
-        lat: latestLocation.location.coordinates[1],
-        lng: latestLocation.location.coordinates[0]
-      } : null,
+      currentLocation,
+      location: currentLocation,
       speed: latestLocation?.speed || 0,
       bearing: latestLocation?.bearing || 0,
       batteryLevel: latestLocation?.batteryLevel || 100,

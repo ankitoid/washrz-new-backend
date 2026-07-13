@@ -315,6 +315,9 @@ io.on("connection", (socket) => {
     // Broadcast to admin dashboard sockets
     socketService.emitToAdmin("riderLocationUpdate", {
       riderId,
+      id: riderId,
+      currentLocation: { lat: location.lat, lng: location.lng },
+      location: { lat: location.lat, lng: location.lng },
       ...locationData,
       name: user?.name || "Unknown Rider",
       phone: user?.phone || "N/A",
