@@ -3404,12 +3404,15 @@ export const checkService = async (req, res) => {
       let status = 'upcoming';
 
       if (!enabled || availableCapacity <= 0) {
+        if(!enabled)
+        {
         includeSlot = false;
+        }
         status = 'disabled';
       } else if (isToday) {
         // For today: hide slots that have already started (start time <= current time)
         if (startMinutes <= currentTimeInMinutes) {
-          includeSlot = false;
+          includeSlot = true;
           status = 'expired';
         } else {
           includeSlot = true;
