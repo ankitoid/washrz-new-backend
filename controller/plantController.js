@@ -481,7 +481,7 @@ export const assignRiderUnified = async (req, res) => {
 
     if (type === "delivery") {
       // --- Delivery assignment ---
-      const order = await Order.findByIdAndUpdate(
+      const order = await Order.findOneAndUpdate(
         { order_id: orderId },
         {
           riderName,
