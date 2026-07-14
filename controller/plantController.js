@@ -482,7 +482,7 @@ export const assignRiderUnified = async (req, res) => {
     if (type === "delivery") {
       // --- Delivery assignment ---
       const order = await Order.findByIdAndUpdate(
-        orderId,
+        { order_id: orderId },
         {
           riderName,
           status : "delivery rider assigned",
