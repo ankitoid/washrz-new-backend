@@ -120,9 +120,11 @@ export const addPickup = catchAsync(async (req, res, next) => {
 
   console.log("this is the dataaaa===>>>>", name, contact, address);
 
+  let contactNoWith91 = contact.length === 10 ? `91${contact}` : contact;
+
   const pickupData = await pickup.create({
     Name: name,
-    Contact: contact,
+    Contact: contactNoWith91,
     Address: address,
     plantName: "Delhi",
     type: "live",

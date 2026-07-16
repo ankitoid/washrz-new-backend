@@ -1596,9 +1596,129 @@ export const SearchZones = async (req, res) => {
   }
 };
 
+// old code updated on 16 july due to adding new func for the dragable box on the map to tune boundries while creating a zone.
+// export const CreateZone = async (req, res) => {
+//   try {
+//     const { search } = req.body;
+
+//     if (!search) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "search is required"
+//       });
+//     }
+
+//     const exactMatch = await Zone.findOne({
+//       $or: [
+//         { name: { $regex: new RegExp(`^${search}$`, 'i') } },
+//         { zoneId: { $regex: new RegExp(`^${search}$`, 'i') } }
+//       ]
+//     });
+
+//     if (exactMatch) {
+//       return res.status(200).json({
+//         success: true,
+//         message: "Zone already exists",
+//         data: exactMatch,
+//         fromCache: true
+//       });
+//     }
+
+//     const potentialZoneId = search
+//       .toUpperCase()
+//       .replace(/[^A-Z0-9]/g, "_")
+//       .replace(/_+/g, "_")
+//       .replace(/^_|_$/g, "");
+
+//     const zoneIdMatch = await Zone.findOne({ zoneId: potentialZoneId });
+
+//     if (zoneIdMatch) {
+//       return res.status(200).json({
+//         success: true,
+//         message: "Zone already exists",
+//         data: zoneIdMatch,
+//         fromCache: true
+//       });
+//     }
+
+//     const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY;
+
+//     if (!GOOGLE_KEY) {
+//       return res.status(500).json({
+//         success: false,
+//         message: "Google Maps API key not configured"
+//       });
+//     }
+
+//     const response = await axios.get(
+//       "https://maps.googleapis.com/maps/api/place/findplacefromtext/json",
+//       {
+//         params: {
+//           input: search,
+//           inputtype: "textquery",
+//           fields: "name,formatted_address,geometry",
+//           key: GOOGLE_KEY
+//         },
+//         timeout: 5000
+//       }
+//     );
+
+
+//     const place = response.data.candidates?.[0];
+
+//     if (!place) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Location not found in Google Maps"
+//       });
+//     }
+
+//     const googleMatch = await Zone.findOne({
+//       name: { $regex: new RegExp(`^${place.name}$`, 'i') }
+//     });
+
+//     if (googleMatch) {
+//       return res.status(200).json({
+//         success: true,
+//         message: "Zone already exists",
+//         data: googleMatch,
+//         fromCache: true
+//       });
+//     }
+
+//     const polygon = buildPolygon(place.geometry.viewport);
+//     const zoneId = generateZoneId(place.name);
+
+//     const zone = await Zone.create({
+//       name: place.name,
+//       city: getCity(place.formatted_address),
+//       zoneId,
+//       geometry: {
+//         type: "Polygon",
+//         coordinates: [polygon]
+//       }
+//       // slotTemplate will be added later when configured
+//     });
+
+//     return res.status(201).json({
+//       success: true,
+//       message: "Zone created successfully",
+//       data: zone,
+//       fromCache: false
+//     });
+
+//   } catch (error) {
+//     console.error(error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error"
+//     });
+//   }
+// };
+
 export const CreateZone = async (req, res) => {
   try {
-    const { search } = req.body;
+    const { search, coordinates } = req.body; // <-- NEW: Accept coordinates
 
     if (!search) {
       return res.status(400).json({
@@ -1607,6 +1727,7 @@ export const CreateZone = async (req, res) => {
       });
     }
 
+    // --- Existing duplicate check logic (keep as is) ---
     const exactMatch = await Zone.findOne({
       $or: [
         { name: { $regex: new RegExp(`^${search}$`, 'i') } },
@@ -1630,7 +1751,6 @@ export const CreateZone = async (req, res) => {
       .replace(/^_|_$/g, "");
 
     const zoneIdMatch = await Zone.findOne({ zoneId: potentialZoneId });
-
     if (zoneIdMatch) {
       return res.status(200).json({
         success: true,
@@ -1640,8 +1760,8 @@ export const CreateZone = async (req, res) => {
       });
     }
 
+    // --- Fetch place details from Google (keep as is) ---
     const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY;
-
     if (!GOOGLE_KEY) {
       return res.status(500).json({
         success: false,
@@ -1662,9 +1782,7 @@ export const CreateZone = async (req, res) => {
       }
     );
 
-
     const place = response.data.candidates?.[0];
-
     if (!place) {
       return res.status(404).json({
         success: false,
@@ -1672,31 +1790,28 @@ export const CreateZone = async (req, res) => {
       });
     }
 
-    const googleMatch = await Zone.findOne({
-      name: { $regex: new RegExp(`^${place.name}$`, 'i') }
-    });
-
-    if (googleMatch) {
-      return res.status(200).json({
-        success: true,
-        message: "Zone already exists",
-        data: googleMatch,
-        fromCache: true
-      });
+    // --- NEW: Determine polygon (custom or Google viewport) ---
+    let polygon;
+    if (coordinates && Array.isArray(coordinates) && coordinates.length >= 4) {
+      // Client sent a manually drawn/edited polygon.
+      // Ensure it's an array of [lng, lat] pairs.
+      polygon = coordinates;
+    } else {
+      // Fallback to Google's viewport rectangle.
+      polygon = buildPolygon(place.geometry.viewport);
     }
 
-    const polygon = buildPolygon(place.geometry.viewport);
     const zoneId = generateZoneId(place.name);
 
+    // --- Create zone with the chosen polygon ---
     const zone = await Zone.create({
       name: place.name,
       city: getCity(place.formatted_address),
       zoneId,
       geometry: {
         type: "Polygon",
-        coordinates: [polygon]
+        coordinates: [polygon] // MongoDB GeoJSON expects an array of LinearRings
       }
-      // slotTemplate will be added later when configured
     });
 
     return res.status(201).json({
@@ -1707,10 +1822,10 @@ export const CreateZone = async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("CreateZone error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error"
+      message: "Internal server error: " + error.message
     });
   }
 };
