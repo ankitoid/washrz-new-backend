@@ -69,6 +69,7 @@ import axios from "axios";
 import SlotConfig from "../models/SlotConfig.js";
 import Zone from "../models/Zone.js";
 import Booking from "../models/slotBookingSchema.js";
+import mongoose from "mongoose";
 
 // const getAllTimeSlots = () => [
 //   "08AM - 11AM", "09AM - 12PM", "10AM - 01PM", "11AM - 02PM",
@@ -3302,7 +3303,8 @@ export const checkService = async (req, res) => {
       totalCapacity: zone.slotTemplate.totalCapacity,
       slotMinCapacity: zone.slotTemplate.slotMinCapacity,
       cutoffTimes: zone.slotTemplate.cutoffTimes,
-      deliveryDeadlines: zone.slotTemplate.deliveryDeadlines
+      deliveryDeadlines: zone.slotTemplate.deliveryDeadlines,
+      delayInfo: zone.delayInfo
     };
 
     // --------------------------------------------------------------------
@@ -3586,5 +3588,50 @@ export const getConfiguredDates = async (req, res) => {
   } catch (err) {
     console.error("Error fetching dates:", err);
     res.status(500).json({ error: "Fetch failed: " + err.message });
+  }
+};
+
+// POST - Update Delay with reason
+export const setIsDelay = async (req, res) => {
+  try {
+    const { zoneId, isDelay, category, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(zoneId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid zone id.",
+      });
+    }
+
+    const zone = await Zone.findById(zoneId);
+
+    if (!zone) {
+      return res.status(404).json({
+        success: false,
+        message: "Zone not found.",
+      });
+    }
+
+    zone.delayInfo = {
+      isDelay,
+      category: isDelay ? category : "OTHER",
+      reason: isDelay ? reason?.trim() || "" : "",
+      updatedAt: new Date(),
+    };
+
+    await zone.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Zone delay has been ${isDelay ? "enabled" : "disabled"} successfully.`,
+      data: zone,
+    });
+  } catch (error) {
+    console.error("setIsDelay:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong.",
+    });
   }
 };

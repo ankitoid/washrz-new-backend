@@ -70,29 +70,61 @@ const slotTemplateSchema = new mongoose.Schema({
 
 
 
-const zoneSchema = new mongoose.Schema({
-  name: { type: String, required: true },        // South Delhi
-  city: { type: String, required: true },        // Delhi
-  zoneId: { type: String, required: true, unique: true },
+const zoneSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true }, // South Delhi
+    city: { type: String, required: true }, // Delhi
+    zoneId: { type: String, required: true, unique: true },
+    delayInfo: {
+      isDelay: {
+        type: Boolean,
+        default: false,
+      },
+      category: {
+        type: String,
+        enum: [
+          "WEATHER",
+          "TRAFFIC",
+          "VEHICLE",
+          "STAFF",
+          "HIGH_VOLUME",
+          "MACHINE",
+          "POWER",
+          "HOLIDAY",
+          "TECHNICAL",
+          "OTHER",
+        ],
+        default: null,
+      },
+      reason: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      updatedAt: {
+        type: Date,
+        default: null,
+      },
+    },
 
-  geometry: {
-    type: {
-      type: String,
-      enum: ["Polygon"],
-      required: true,
+    geometry: {
+      type: {
+        type: String,
+        enum: ["Polygon"],
+        required: true,
+      },
+      coordinates: {
+        type: [[[Number]]], // [ [ [lng, lat], ... ] ]
+        required: true,
+      },
     },
-    coordinates: {
-      type: [[[Number]]], // [ [ [lng, lat], ... ] ]
-      required: true,
-    },
-  },
-  
-  // NEW: Slot template for this zone
-  slotTemplate: {
-    type: slotTemplateSchema,
-    default: null
-  }
-}, { timestamps: true });
+
+    // NEW: Slot template for this zone
+    slotTemplate: {
+      type: slotTemplateSchema,
+      default: null
+    }
+  }, { timestamps: true });
 
 zoneSchema.index({ geometry: "2dsphere" });
 

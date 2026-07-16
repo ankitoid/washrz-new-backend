@@ -25,7 +25,7 @@
 // export { router as default };
 
 import express from "express";
-import { checkService, copySlots, CreateZone, generateSlotsConfig, getAllZones, getConfiguredDates, getSlots, getZoneSlots, resetSlots, resolveZone, saveSlots, SearchZones } from "../controller/adminSlotController.js";
+import { checkService, copySlots, CreateZone, generateSlotsConfig, getAllZones, getConfiguredDates, getSlots, getZoneSlots, resetSlots, resolveZone, saveSlots, SearchZones, setIsDelay } from "../controller/adminSlotController.js";
 
 
 const router = express.Router();
@@ -49,6 +49,7 @@ const router = express.Router();
 
 // Zone management routes
 router.get("/zones", getAllZones);
+router.post("/zones/isDelay", setIsDelay);
 router.get("/zones/search", SearchZones);
 router.post("/zones/create", CreateZone);
 router.get("/location/resolve", resolveZone);
