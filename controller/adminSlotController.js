@@ -3735,6 +3735,7 @@ export const setIsDelay = async (req, res) => {
     };
 
     await zone.save();
+    req.socket.emitToAll("slot_updated", { message: "please refetch the api for getting the updated state." }); 
 
     return res.status(200).json({
       success: true,
