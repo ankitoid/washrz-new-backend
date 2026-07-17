@@ -44,6 +44,7 @@ import Message from "./models/Message.js";
 import riderGroupRoutes from "./routes/riderGroupRoutes.js";
 import RiderGroup from "./models/RiderGroup.js";
 import RiderGroupMessage from "./models/RiderGroupMessage.js";
+import populationRoutes from "./routes/population.js";
 import {
   completeTaskTrackingLeg,
   startTaskTrackingLeg,
@@ -877,6 +878,7 @@ app.use("/api/v1/faq", faqRoutes);
 app.use("/api/v1/chat", chatRoutes);
 app.use("/api/v1/rider-group", riderGroupRoutes);
 app.use("/api/v1/b2b", b2bRoutes);
+app.use("/api/v1/population", populationRoutes);
 
 
 // Add this test route
