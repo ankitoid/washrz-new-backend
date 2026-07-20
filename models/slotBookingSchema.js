@@ -23,6 +23,10 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+    deliveryLabel: {
+    type: String,
+    default: null
+  },
   customerDetails: {
     appCustomerId : {type:String,requried : true},
     name: { type: String, required: true },

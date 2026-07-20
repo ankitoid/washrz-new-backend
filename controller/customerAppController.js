@@ -1,6 +1,7 @@
 import Order from "../models/orderSchema.js";
 import order from "../models/orderSchema.js";
 import pickup from "../models/pickupSchema.js";
+import slotBookingSchema from "../models/slotBookingSchema.js";
 import APIFeatures from "../utills/apiFeatures.js";
 
 export const getCustomerOrders = async (req,res) =>
@@ -49,9 +50,10 @@ try {
   }
 
   const order_details =  await order.findOne({order_id});
-  console.log("this is order_details==>>",order_details)
-  const booking_details = await pickup.findOne({orderId: order_details?._id}).populate({path: 'bookingId', select:'deliveryLabel'});
-  order_details.deliveryLabel = booking_details?.bookingId?.deliveryLabel;
+  const pickup_details = await pickup.findOne({orderId: order_details?._id});
+  const booking_details = await slotBookingSchema.findOne({bookingId: pickup_details?.bookingId});
+
+  order_details.deliveryLabel = booking_details?.deliveryLabel;
 if (!order_details) {
   return res.status(404).json({
     message: "Order not found",
