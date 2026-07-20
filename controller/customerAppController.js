@@ -49,13 +49,12 @@ try {
   });
   }
 
-  const order_details =  await order.findOne({order_id});
+  const order_details =  await order.findOne({order_id}).lean();
   const pickup_details = await pickup.findOne({orderId: order_details?._id});
   const booking_details = await slotBookingSchema.findOne({bookingId: pickup_details?.bookingId});
 
   console.log("this is booking_details==>>",booking_details)
 
-  order_details.deliveryLabel = booking_details?.deliveryLabel || "";
 if (!order_details) {
   return res.status(404).json({
     message: "Order not found",
@@ -64,7 +63,7 @@ if (!order_details) {
 
   console.log("this is orderdetails==>>",order_details)
 
-  res.status(200).json({order_details: order_details, message: "Orders Retrieved Successfully"})
+  res.status(200).json({order_details: {...order_details, deliveryLabel: booking_details?.deliveryLabel || ""}, message: "Orders Retrieved Successfully"})
 } catch (error) {
   console.error(error);
     return res.status(500).json({
