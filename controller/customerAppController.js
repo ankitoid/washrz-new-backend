@@ -53,7 +53,9 @@ try {
   const pickup_details = await pickup.findOne({orderId: order_details?._id});
   const booking_details = await slotBookingSchema.findOne({bookingId: pickup_details?.bookingId});
 
-  order_details.deliveryLabel = booking_details?.deliveryLabel;
+  console.log("this is booking_details==>>",booking_details)
+
+  order_details.deliveryLabel = booking_details?.deliveryLabel || "";
 if (!order_details) {
   return res.status(404).json({
     message: "Order not found",
