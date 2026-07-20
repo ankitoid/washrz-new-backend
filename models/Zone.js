@@ -93,6 +93,7 @@ const zoneSchema = new mongoose.Schema(
           "HOLIDAY",
           "TECHNICAL",
           "OTHER",
+          null,
         ],
         default: null,
       },
