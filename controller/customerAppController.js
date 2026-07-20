@@ -48,8 +48,9 @@ try {
   });
   }
 
-  const order_details =  await order.findOne({order_id})
-
+  const order_details =  await order.findOne({order_id});
+  const booking_details = await pickup.findOne({orderId: order_details?._id}).populate({path: 'bookingId', select:'deliveryLabel'});
+  order_details.deliveryLabel = booking_details?.bookingId?.deliveryLabel;
 if (!order_details) {
   return res.status(404).json({
     message: "Order not found",
