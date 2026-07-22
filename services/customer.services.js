@@ -1,4 +1,6 @@
 import Orders from "../models/orderSchema.js";
+import pickup from "../models/pickupSchema.js";
+import slotBookingSchema from "../models/slotBookingSchema.js";
 
 export const customer_services = {};
 
@@ -198,7 +200,7 @@ customer_services.markPaymentNotDone = async (req, res) => {
     if (!pickupDoc) {
       return res.status(404).json({ message: "Pickup record not found" });
     }
-    const bookingDoc = await booking.findOne({ bookingId: pickupDoc.bookingId }).select("isSameDayDelivery");
+    const bookingDoc = await slotBookingSchema.findOne({ bookingId: pickupDoc.bookingId }).select("isSameDayDelivery");
     const isSameDayDelivery = bookingDoc?.isSameDayDelivery || false;
 
     // 3. Perform the main update (atomic, with conditions)
