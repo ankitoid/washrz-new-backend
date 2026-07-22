@@ -177,3 +177,99 @@ try{
     });
 }
 }
+
+customer_services.markPaymentNotDone = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({ message: "orderId is required" });
+    }
+
+    // 1. Fetch the MongoDB _id for this order
+    const orderDoc = await Orders.findOne({ order_id: orderId }).select("_id");
+    if (!orderDoc) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    const orderMongoId = orderDoc._id;
+
+    // 2. Fetch isSameDayDelivery from the related booking
+    const pickupDoc = await pickup.findOne({ bookingId: orderMongoId }).select("bookingId");
+    if (!pickupDoc) {
+      return res.status(404).json({ message: "Pickup record not found" });
+    }
+    const bookingDoc = await booking.findOne({ bookingId: pickupDoc.bookingId }).select("isSameDayDelivery");
+    const isSameDayDelivery = bookingDoc?.isSameDayDelivery || false;
+
+    // 3. Perform the main update (atomic, with conditions)
+    const updatedOrder = await Orders.findOneAndUpdate(
+      {
+        order_id: orderId,
+        appCustomerId: { $exists: true, $ne: null },
+        platform_type: "app",
+      },
+      {
+        morningDelivery: false,
+        isCODConfirmed: true,
+      },
+      { new: false } // we don't need the updated doc
+    );
+
+    if (!updatedOrder) {
+      const orderExists = await Orders.exists({ order_id: orderId });
+      if (!orderExists) {
+        return res.status(404).json({ message: "Order not found" });
+      } else {
+        return res.status(400).json({
+          message: "This operation is only allowed for app orders with a customer ID",
+        });
+      }
+    }
+
+    // 4. If same‑day delivery, automatically reschedule the order
+    if (isSameDayDelivery) {
+      // Decide the new delivery date – e.g., tomorrow
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      try {
+        await rescheduleOrderService(orderId, tomorrow);
+        // Optionally log success
+      } catch (rescheduleError) {
+        // Since the main update succeeded, decide whether to fail the whole request.
+        // Here we log the error and return a 207 (Multi‑Status) or a warning.
+        console.error("Reschedule failed after marking payment not done:", rescheduleError);
+        // You could also choose to return a 500 with a specific message.
+        // For this example, we return success for the update but include a warning.
+        return res.status(207).json({
+          message: "Order updated, but rescheduling failed. Please retry.",
+          error: rescheduleError.message,
+        });
+      }
+    }
+
+    // 5. Success – no content
+    return res.status(204).send();
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+
+const rescheduleOrderService = async (orderId, newDate) => {
+  const order = await Orders.findById(orderId);
+  if (!order) {
+    throw new Error('Order not found');
+  }
+  // Additional business validations can be added here
+
+  order.rescheduledDate = newDate;
+  order.isRescheduled = true;
+  await order.save();
+  return order;
+};
+
