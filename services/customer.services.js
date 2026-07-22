@@ -273,7 +273,7 @@ customer_services.markPaymentNotDone = async (req, res) => {
 
 
 const rescheduleOrderService = async (orderId, newDate) => {
-  const order = await Orders.findById(orderId);
+  const order = await Orders.findOne({ order_id: orderId });
   if (!order) {
     throw new Error('Order not found');
   }
