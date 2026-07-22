@@ -198,7 +198,7 @@ customer_services.markPaymentNotDone = async (req, res) => {
     console.log("Fetched order MongoDB ID:",orderDoc,orderMongoId);
 
     // 2. Fetch isSameDayDelivery from the related booking
-    const pickupDoc = await pickup.findOne({ bookingId: orderMongoId }).select("bookingId");
+    const pickupDoc = await pickup.findOne({ orderId: orderMongoId }).select("bookingId");
     if (!pickupDoc) {
       return res.status(404).json({ message: "Pickup record not found" });
     }
