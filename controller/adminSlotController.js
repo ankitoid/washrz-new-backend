@@ -3499,6 +3499,14 @@ export const checkService = async (req, res) => {
         : `Tomorrow by ${nextDayDeadline}`;
     };
 
+    const CheckDelivery = (startTimeStr) => {
+      const startMinutes = timeToMinutes(startTimeStr);
+      const cutoffMinutes = timeToMinutes(morningCutoff);
+      return startMinutes < cutoffMinutes
+        ? true
+        : false
+    };
+
     // --------------------------------------------------------------------
     // 8. Build the list of slots (with filtering for today)
     // --------------------------------------------------------------------
@@ -3545,6 +3553,8 @@ export const checkService = async (req, res) => {
 
       const deliveryLabel = getDeliveryLabel(startTimeStr);
 
+      const isSameDayDelivery = CheckDelivery(startTimeStr);
+
       allSlots.push({
         time: templateSlot.time,
         startTime: startTimeStr,
@@ -3556,6 +3566,7 @@ export const checkService = async (req, res) => {
         isActive: false,
         status,
         bookingPercentage: totalCapacity > 0 ? (bookedCount / totalCapacity) * 100 : 0,
+        isSameDayDelivery,
         deliveryLabel
       });
     }
