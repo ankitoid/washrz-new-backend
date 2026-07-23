@@ -70,6 +70,7 @@ import SlotConfig from "../models/SlotConfig.js";
 import Zone from "../models/Zone.js";
 import Booking from "../models/slotBookingSchema.js";
 import mongoose from "mongoose";
+import { computePolygonArea } from "../utills/geometry.js";
 
 // const getAllTimeSlots = () => [
 //   "08AM - 11AM", "09AM - 12PM", "10AM - 01PM", "11AM - 02PM",
@@ -1882,6 +1883,9 @@ export const CreateZone = async (req, res) => {
       polygon = buildPolygon(place.geometry.viewport);
     }
 
+
+    const area = computePolygonArea(polygon)
+
     // --- Generate unique zoneId (with duplicate handling) ---
     const zoneId = generateZoneId(place.name, city);
 
@@ -1904,7 +1908,8 @@ export const CreateZone = async (req, res) => {
       geometry: {
         type: "Polygon",
         coordinates: [polygon]
-      }
+      },
+      area
     });
 
     return res.status(201).json({
@@ -1942,45 +1947,45 @@ function generateZoneId(name, city) {
     .replace(/^_|_$/g, "");
 }
 
-export const resolveZone = async (req, res) => {
-  try {
-    const { lat, lng } = req.query;
+// export const resolveZone = async (req, res) => {
+//   try {
+//     const { lat, lng } = req.query;
 
-    if (!lat || !lng) {
-      return res.status(400).json({
-        error: "Latitude and longitude are required"
-      });
-    }
+//     if (!lat || !lng) {
+//       return res.status(400).json({
+//         error: "Latitude and longitude are required"
+//       });
+//     }
 
-    const zone = await Zone.findOne({
-      geometry: {
-        $geoIntersects: {
-          $geometry: {
-            type: "Point",
-            coordinates: [parseFloat(lng), parseFloat(lat)],
-          },
-        },
-      },
-    });
+//     const zone = await Zone.findOne({
+//       geometry: {
+//         $geoIntersects: {
+//           $geometry: {
+//             type: "Point",
+//             coordinates: [parseFloat(lng), parseFloat(lat)],
+//           },
+//         },
+//       },
+//     });
 
-    if (!zone) {
-      return res.json({
-        zoneFound: false,
-        message: "Location not within any service zone"
-      });
-    }
+//     if (!zone) {
+//       return res.json({
+//         zoneFound: false,
+//         message: "Location not within any service zone"
+//       });
+//     }
 
-    return res.json({
-      zoneFound: true,
-      zoneId: zone.zoneId,
-      city: zone.city,
-      name: zone.name,
-    });
-  } catch (err) {
-    console.error("Zone resolve error:", err);
-    res.status(500).json({ error: "Zone resolve failed: " + err.message });
-  }
-};
+//     return res.json({
+//       zoneFound: true,
+//       zoneId: zone.zoneId,
+//       city: zone.city,
+//       name: zone.name,
+//     });
+//   } catch (err) {
+//     console.error("Zone resolve error:", err);
+//     res.status(500).json({ error: "Zone resolve failed: " + err.message });
+//   }
+// };
 
 // =====================================================
 // SLOT HELPERS
@@ -2069,8 +2074,72 @@ export const resolveZone = async (req, res) => {
 //   return slots;
 // };
 
-// new slots generation logic with no overlapping and 30 minutes
 
+//new resolve zone logic changed on 23 july 2026
+
+export const resolveZone = async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({
+        error: "Latitude and longitude are required"
+      });
+    }
+
+    const point = {
+      type: "Point",
+      coordinates: [parseFloat(lng), parseFloat(lat)]
+    };
+
+    // Aggregation pipeline:
+    // 1. Find all zones that contain the point.
+    // 2. Sort by area ascending (smallest first).
+    // 3. Return only the first (smallest) zone.
+    const zones = await Zone.aggregate([
+      {
+        $geoNear: {
+          near: point,
+          distanceField: "distance",
+          spherical: true,
+          query: {
+            geometry: {
+              $geoIntersects: {
+                $geometry: point
+              }
+            }
+          }
+        }
+      },
+      { $sort: { area: 1 } },  // ascending: smallest area first
+      { $limit: 1 }
+    ]);
+
+    const zone = zones[0];
+
+    if (!zone) {
+      return res.json({
+        zoneFound: false,
+        message: "Location not within any service zone"
+      });
+    }
+
+    return res.json({
+      zoneFound: true,
+      zoneId: zone.zoneId,
+      city: zone.city,
+      name: zone.name,
+    });
+  } catch (err) {
+    console.error("Zone resolve error:", err);
+    res.status(500).json({ error: "Zone resolve failed: " + err.message });
+  }
+};
+
+
+
+
+// new slots generation logic with no overlapping and 30 minutes
 const generateSlots = (startTime, endTime, slotDuration) => {
   // Parse time string like "10:00 AM" or "02:00 AM" to minutes since midnight
   const parseTime = (timeStr) => {

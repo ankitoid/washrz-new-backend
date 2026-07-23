@@ -124,7 +124,14 @@ const zoneSchema = new mongoose.Schema(
     slotTemplate: {
       type: slotTemplateSchema,
       default: null
-    }
+    },
+   
+  // area of the zone
+  area: {
+  type: Number,
+  default: 0,
+  index: true   // for faster sorting in aggregation
+         },
   }, { timestamps: true });
 
 zoneSchema.index({ geometry: "2dsphere" });
