@@ -1472,13 +1472,13 @@ function buildPolygon(viewport) {
   ];
 }
 
-function generateZoneId(name) {
-  return name
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "");
-}
+// function generateZoneId(name) {
+//   return name
+//     .toUpperCase()
+//     .replace(/[^A-Z0-9]/g, "_")
+//     .replace(/_+/g, "_")
+//     .replace(/^_|_$/g, "");
+// }
 
 function getCity(address) {
   if (!address) return "";
@@ -1716,9 +1716,123 @@ export const SearchZones = async (req, res) => {
 //   }
 // };
 
+// export const CreateZone = async (req, res) => {
+//   try {
+//     const { search, coordinates } = req.body; // <-- NEW: Accept coordinates
+
+//     if (!search) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "search is required"
+//       });
+//     }
+
+//     // --- Existing duplicate check logic (keep as is) ---
+//     const exactMatch = await Zone.findOne({
+//       $or: [
+//         { name: { $regex: new RegExp(`^${search}$`, 'i') } },
+//         { zoneId: { $regex: new RegExp(`^${search}$`, 'i') } }
+//       ]
+//     });
+
+//     if (exactMatch) {
+//       return res.status(200).json({
+//         success: true,
+//         message: "Zone already exists",
+//         data: exactMatch,
+//         fromCache: true
+//       });
+//     }
+
+//     const potentialZoneId = search
+//       .toUpperCase()
+//       .replace(/[^A-Z0-9]/g, "_")
+//       .replace(/_+/g, "_")
+//       .replace(/^_|_$/g, "");
+
+//     const zoneIdMatch = await Zone.findOne({ zoneId: potentialZoneId });
+//     if (zoneIdMatch) {
+//       return res.status(200).json({
+//         success: true,
+//         message: "Zone already exists",
+//         data: zoneIdMatch,
+//         fromCache: true
+//       });
+//     }
+
+//     // --- Fetch place details from Google (keep as is) ---
+//     const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY;
+//     if (!GOOGLE_KEY) {
+//       return res.status(500).json({
+//         success: false,
+//         message: "Google Maps API key not configured"
+//       });
+//     }
+
+//     const response = await axios.get(
+//       "https://maps.googleapis.com/maps/api/place/findplacefromtext/json",
+//       {
+//         params: {
+//           input: search,
+//           inputtype: "textquery",
+//           fields: "name,formatted_address,geometry",
+//           key: GOOGLE_KEY
+//         },
+//         timeout: 5000
+//       }
+//     );
+
+//     const place = response.data.candidates?.[0];
+//     if (!place) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Location not found in Google Maps"
+//       });
+//     }
+
+//     // --- NEW: Determine polygon (custom or Google viewport) ---
+//     let polygon;
+//     if (coordinates && Array.isArray(coordinates) && coordinates.length >= 4) {
+//       // Client sent a manually drawn/edited polygon.
+//       // Ensure it's an array of [lng, lat] pairs.
+//       polygon = coordinates;
+//     } else {
+//       // Fallback to Google's viewport rectangle.
+//       polygon = buildPolygon(place.geometry.viewport);
+//     }
+
+//     const zoneId = generateZoneId(place.name);
+
+//     // --- Create zone with the chosen polygon ---
+//     const zone = await Zone.create({
+//       name: place.name,
+//       city: getCity(place.formatted_address),
+//       zoneId,
+//       geometry: {
+//         type: "Polygon",
+//         coordinates: [polygon] // MongoDB GeoJSON expects an array of LinearRings
+//       }
+//     });
+
+//     return res.status(201).json({
+//       success: true,
+//       message: "Zone created successfully",
+//       data: zone,
+//       fromCache: false
+//     });
+
+//   } catch (error) {
+//     console.error("CreateZone error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error: " + error.message
+//     });
+//   }
+// };
+
 export const CreateZone = async (req, res) => {
   try {
-    const { search, coordinates } = req.body; // <-- NEW: Accept coordinates
+    const { search, coordinates } = req.body;
 
     if (!search) {
       return res.status(400).json({
@@ -1727,40 +1841,7 @@ export const CreateZone = async (req, res) => {
       });
     }
 
-    // --- Existing duplicate check logic (keep as is) ---
-    const exactMatch = await Zone.findOne({
-      $or: [
-        { name: { $regex: new RegExp(`^${search}$`, 'i') } },
-        { zoneId: { $regex: new RegExp(`^${search}$`, 'i') } }
-      ]
-    });
-
-    if (exactMatch) {
-      return res.status(200).json({
-        success: true,
-        message: "Zone already exists",
-        data: exactMatch,
-        fromCache: true
-      });
-    }
-
-    const potentialZoneId = search
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "");
-
-    const zoneIdMatch = await Zone.findOne({ zoneId: potentialZoneId });
-    if (zoneIdMatch) {
-      return res.status(200).json({
-        success: true,
-        message: "Zone already exists",
-        data: zoneIdMatch,
-        fromCache: true
-      });
-    }
-
-    // --- Fetch place details from Google (keep as is) ---
+    // --- Fetch place details from Google ---
     const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY;
     if (!GOOGLE_KEY) {
       return res.status(500).json({
@@ -1790,27 +1871,39 @@ export const CreateZone = async (req, res) => {
       });
     }
 
-    // --- NEW: Determine polygon (custom or Google viewport) ---
+    // Extract city
+    const city = getCity(place.formatted_address) || "UNKNOWN_CITY";
+
+    // --- Determine polygon ---
     let polygon;
     if (coordinates && Array.isArray(coordinates) && coordinates.length >= 4) {
-      // Client sent a manually drawn/edited polygon.
-      // Ensure it's an array of [lng, lat] pairs.
       polygon = coordinates;
     } else {
-      // Fallback to Google's viewport rectangle.
       polygon = buildPolygon(place.geometry.viewport);
     }
 
-    const zoneId = generateZoneId(place.name);
+    // --- Generate unique zoneId (with duplicate handling) ---
+    const zoneId = generateZoneId(place.name, city);
 
-    // --- Create zone with the chosen polygon ---
+    // --- Check if zone already exists ---
+    const existingZone = await Zone.findOne({ zoneId });
+    if (existingZone) {
+      return res.status(200).json({
+        success: true,
+        message: "Zone already exists",
+        data: existingZone,
+        fromCache: true
+      });
+    }
+
+    // --- Create the zone ---
     const zone = await Zone.create({
       name: place.name,
-      city: getCity(place.formatted_address),
+      city: city,
       zoneId,
       geometry: {
         type: "Polygon",
-        coordinates: [polygon] // MongoDB GeoJSON expects an array of LinearRings
+        coordinates: [polygon]
       }
     });
 
@@ -1829,6 +1922,25 @@ export const CreateZone = async (req, res) => {
     });
   }
 };
+
+// Updated generator with deduplication logic
+function generateZoneId(name, city) {
+  const cleanName = name.trim();
+  const cleanCity = city.trim();
+
+  let base;
+  if (cleanName.toUpperCase() === cleanCity.toUpperCase()) {
+    base = cleanName; // Keep only one
+  } else {
+    base = `${cleanName}_${cleanCity}`;
+  }
+
+  return base
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
 
 export const resolveZone = async (req, res) => {
   try {
