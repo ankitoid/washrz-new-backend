@@ -3762,3 +3762,46 @@ export const setIsDelay = async (req, res) => {
     });
   }
 };
+
+// DELETE - Remove Zone
+
+// controller/zone.controller.js (or .ts)
+export const deleteZone = async (req, res) => {
+  try {
+    // 1. Extract zoneId from request parameters
+    const { zoneId } = req.params;
+
+    // 2. Validate presence of zoneId
+    if (!zoneId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Zone ID is required.',
+      });
+    }
+
+    // 3. Attempt to delete the zone
+    const result = await Zone.deleteOne({ zoneId });
+
+    // 4. Check if any document was deleted
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `Zone with ID "${zoneId}" not found.`,
+      });
+    }
+
+    // 5. Success response
+    return res.status(200).json({
+      success: true,
+      message: 'Zone deleted successfully.',
+      data: { deletedCount: result.deletedCount },
+    });
+  } catch (error) {
+    // 6. Centralised error handling
+    console.error('Error deleting zone:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error. Could not delete zone.',
+    });
+  }
+};

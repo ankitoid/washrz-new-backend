@@ -25,7 +25,7 @@
 // export { router as default };
 
 import express from "express";
-import { checkService, copySlots, CreateZone, generateSlotsConfig, getAllZones, getConfiguredDates, getSlots, getZoneSlots, resetSlots, resolveZone, saveSlots, SearchZones, setIsDelay } from "../controller/adminSlotController.js";
+import { checkService, copySlots, CreateZone, deleteZone, generateSlotsConfig, getAllZones, getConfiguredDates, getSlots, getZoneSlots, resetSlots, resolveZone, saveSlots, SearchZones, setIsDelay } from "../controller/adminSlotController.js";
 
 
 const router = express.Router();
@@ -67,6 +67,9 @@ router.get("/admin/slots/zone/:zoneId", getZoneSlots);
 
 // Service check for mobile app
 router.post("/service/check", checkService);
+
+// delete zone
+router.delete("/admin/slots/:zoneId", deleteZone);
 
 
 export default router;
