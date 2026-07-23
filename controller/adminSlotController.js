@@ -2077,42 +2077,51 @@ function generateZoneId(name, city) {
 
 //new resolve zone logic changed on 23 july 2026
 
+/**
+ * Resolve which zone a point belongs to.
+ * Returns the zone with the smallest polygon area (most specific).
+ */
 export const resolveZone = async (req, res) => {
   try {
     const { lat, lng } = req.query;
 
+    // Validate input
     if (!lat || !lng) {
       return res.status(400).json({
         error: "Latitude and longitude are required"
       });
     }
 
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+
+    if (isNaN(latNum) || isNaN(lngNum)) {
+      return res.status(400).json({
+        error: "Invalid latitude or longitude format"
+      });
+    }
+
     const point = {
       type: "Point",
-      coordinates: [parseFloat(lng), parseFloat(lat)]
+      coordinates: [lngNum, latNum]
     };
 
     // Aggregation pipeline:
-    // 1. Find all zones that contain the point.
-    // 2. Sort by area ascending (smallest first).
-    // 3. Return only the first (smallest) zone.
+    // 1. Find all zones that contain the point (using $geoIntersects)
+    // 2. Sort by area ascending (smallest first) – this picks the most specific zone
+    // 3. Return only the first result (the smallest polygon)
     const zones = await Zone.aggregate([
       {
-        $geoNear: {
-          near: point,
-          distanceField: "distance",
-          spherical: true,
-          query: {
-            geometry: {
-              $geoIntersects: {
-                $geometry: point
-              }
+        $match: {
+          geometry: {
+            $geoIntersects: {
+              $geometry: point
             }
           }
         }
       },
-      { $sort: { area: 1 } },  // ascending: smallest area first
-      { $limit: 1 }
+      { $sort: { area: 1 } },   // ascending: smallest area first
+      { $limit: 1 }             // take only the smallest
     ]);
 
     const zone = zones[0];
@@ -2132,7 +2141,9 @@ export const resolveZone = async (req, res) => {
     });
   } catch (err) {
     console.error("Zone resolve error:", err);
-    res.status(500).json({ error: "Zone resolve failed: " + err.message });
+    res.status(500).json({
+      error: "Zone resolve failed: " + err.message
+    });
   }
 };
 
