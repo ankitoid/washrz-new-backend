@@ -219,16 +219,19 @@ coupons_service.getAvailable = async (query,body) => {
   else if (serviceTypes && Array.isArray(serviceTypes) && serviceTypes.length > 0) {
     finalReqCategories = [...new Set(serviceTypes.map(normalizeCategory))];
   }
-  // Case 3: neither → return empty
-  else {
-    return [];
-  }
+  // Case 3: neither -> we just proceed with an empty array for finalReqCategories
+  // This allows global coupons (no category) to still be fetched.
 
   // Fetch all coupons that satisfy basic conditions
   const coupons = await Coupon.find(queryConditions).lean();
 
   // Filter coupons by exact normalized category array match
   const matchedCoupons = coupons.filter((coupon) => {
+    // If the coupon has no categories, it's applicable to all users/services
+    if (!coupon.categories || coupon.categories.length === 0) {
+      return true;
+    }
+
     // Normalize coupon's categories (remove hyphens, lowercase, unique, sorted)
     const couponCategories = [...new Set(
       coupon.categories.map(normalizeCategory)
@@ -271,7 +274,6 @@ coupons_service.getAvailable = async (query,body) => {
 
   return matchedCoupons;
 };
-
 // APPLY COUPON (RESERVE)
 // coupons_service.applyToOrder = async (userId, body) => {
 //   try {
