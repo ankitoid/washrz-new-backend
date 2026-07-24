@@ -380,6 +380,11 @@ const orderSchema = new Schema(
     deliveryDate: Date,
     deliveryTimeSlot: String,
 
+    batchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Batch",
+      default: null,
+    },
     riderId: String,
     riderName: String,
     riderContact: String,

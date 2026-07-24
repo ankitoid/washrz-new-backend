@@ -73,6 +73,11 @@ const schema = new pickupSchema(
       enum: ["wati", "app"],
       default: "wati",
     },
+    batchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Batch",
+      default: null,
+    },
     orderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "OrderSchema",

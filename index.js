@@ -11,6 +11,8 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import qrRoutes from "./routes/qrRoutes.js";
 import AppError from "./utills/appError.js";
 import tripRoutes from "./routes/tripRoutes.js";
+import batchRoutes from "./routes/batchRoutes.js";
+import vrpTripRoutes from "./routes/vrpTripRoutes.js";
 import http from "http";
 import cors from "cors";
 import os from "os";
@@ -853,6 +855,8 @@ setInterval(async () => {
 
 app.use("/api/v1/debug", debugRoutes);
 app.use("/api/v1/rider/push-tokens", pushTokenRoutes);
+app.use("/api/v1/batches", batchRoutes);
+app.use("/api/v1/vrp-trips", vrpTripRoutes);
 app.use("/api/v1/trips", tripRoutes);
 app.use("/api/v1", customerRoutes);
 app.use("/api/app", customerAppRoutes);

@@ -1070,6 +1070,13 @@ export const getPickups = catchAsync(async (req, res, next) => {
       pickup_date: pendingDateFilter,
     };
 
+    if (req.query.excludeBatched === "true" || req.query.excludeBatched === true) {
+      baseFilter.$or = [
+        { batchId: null },
+        { batchId: { $exists: false } }
+      ];
+    }
+
     const [pickups, total] = await Promise.all([
       new APIFeatures(pickup.find(baseFilter), req.query)
         .sort()
@@ -1811,19 +1818,24 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
   if (requestedStatus === "ready for delivery") {
     if (user.role === "admin" || user.role === "plant-manager") {
       const status = requestedStatus;
+      const baseFilter = { status, isRescheduled: false, plantName: plantName };
+
+      if (req.query.excludeBatched === "true" || req.query.excludeBatched === true) {
+        baseFilter.$or = [
+          { batchId: null },
+          { batchId: { $exists: false } }
+        ];
+      }
+
       const [orders, countTotal] = await Promise.all([
         new APIFeatures(
-          order.find({ status, isRescheduled: false, plantName: plantName }),
+          order.find(baseFilter),
           req.query,
         )
           .sort()
           .limitFields()
           .paginate().query,
-        order.countDocuments({
-          status,
-          isRescheduled: false,
-          plantName: plantName,
-        }),
+        order.countDocuments(baseFilter),
       ]);
 
       res.status(200).json({
