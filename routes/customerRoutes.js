@@ -63,4 +63,8 @@ router.get("/getCustomerOrderDetails/:phone",customer_services.customerOrdersDet
 // customer invoice route
 router.get("/generateInvoice/:orderId",customer_services.generateCustomerInvoice)
 
+
+// mark payment not done delay in delivery
+router.patch("/markPaymentNotDone/:orderId",customer_services.markPaymentNotDone)
+
 export { router as default };

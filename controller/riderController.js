@@ -633,11 +633,22 @@ export const uploadReadyForDeliveryImages = catchAsync(
 // Reschedule Pickup Controller
 export const reschedulePickup = async (req, res) => {
   const { id } = req.params;
-  const { newDate } = req.body;
+  const { newDate,slot } = req.body;
   try {
     const pickup = await Pickup.findById(id);
     if (!pickup) {
       return res.status(404).json({ message: "Pickup not found" });
+    }
+
+    if(slot){
+      if(pickup.bookingId){
+        await slotBookingSchema.findOneAndUpdate(
+          { bookingId: pickup.bookingId },
+          { slotTime: slot,
+            date: newDate,
+          }
+        );
+      }
     }
 
     // Update the rescheduled date and mark as rescheduled

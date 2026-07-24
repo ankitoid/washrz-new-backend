@@ -1,6 +1,7 @@
 import Order from "../models/orderSchema.js";
 import order from "../models/orderSchema.js";
 import pickup from "../models/pickupSchema.js";
+import slotBookingSchema from "../models/slotBookingSchema.js";
 import APIFeatures from "../utills/apiFeatures.js";
 
 export const getCustomerOrders = async (req,res) =>
@@ -48,17 +49,84 @@ try {
   });
   }
 
-  const order_details =  await order.findOne({order_id})
+  const order_details =  await order.findOne({order_id}).lean();
+  const pickup_details = await pickup.findOne({orderId: order_details?._id});
+  const booking_details = await slotBookingSchema.findOne({bookingId: pickup_details?.bookingId});
 
-if (!order_details) {
-  return res.status(404).json({
-    message: "Order not found",
-  });
-}
+  if (!order_details) {
+    return res.status(404).json({
+      message: "Order not found",
+    });
+  }
 
-  console.log("this is orderdetails==>>",order_details)
+  const orderData = order_details.toObject ? order_details.toObject() : order_details;
+  
+  const rawLabel = booking_details?.deliveryLabel || "";
+  orderData.deliveryLabel = rawLabel;
 
-  res.status(200).json({order_details: order_details, message: "Orders Retrieved Successfully"})
+  const intransitDate = orderData?.statusHistory?.intransit;
+  const isPaid = orderData?.isPaid || orderData?.payment?.status === "success";
+  const isCODConfirmed = orderData?.isCODConfirmed;
+
+  let deliveryInfo = {
+    rawLabel: rawLabel,
+    isTodayLabel: rawLabel.toLowerCase().startsWith("today"),
+    isTomorrowLabel: rawLabel.toLowerCase().startsWith("tomorrow"),
+    actualDeliveryText: "",
+    canGetFasterDelivery: false,
+    fasterDeliveryText: "",
+    codDeliveryText: "",
+  };
+
+  if (intransitDate) {
+    const pickupDate = new Date(intransitDate);
+    const now = new Date();
+    const tomorrow = new Date(pickupDate);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const isPickupToday = pickupDate.toDateString() === now.toDateString();
+    const isTomorrowToday = tomorrow.toDateString() === now.toDateString();
+    
+    if (rawLabel.toLowerCase().startsWith("today")) {
+      if (isPaid) {
+        deliveryInfo.actualDeliveryText = rawLabel; 
+      } else if (isCODConfirmed) {
+        deliveryInfo.actualDeliveryText = "Tomorrow during the day";
+      } else {
+        deliveryInfo.canGetFasterDelivery = true;
+        deliveryInfo.fasterDeliveryText = rawLabel;
+        deliveryInfo.codDeliveryText = "Tomorrow during the day";
+      }
+    } else {
+      if (isTomorrowToday) {
+        if (isPaid) {
+          deliveryInfo.actualDeliveryText = "Today by 10:00 AM";
+        } else if (isCODConfirmed) {
+          deliveryInfo.actualDeliveryText = "Delivering today";
+        } else {
+          deliveryInfo.canGetFasterDelivery = true;
+          deliveryInfo.fasterDeliveryText = "Today by 10:00 AM";
+          deliveryInfo.codDeliveryText = "Today during the day";
+        }
+      } else {
+        if (isPaid) {
+          deliveryInfo.actualDeliveryText = rawLabel; 
+        } else if (isCODConfirmed) {
+          deliveryInfo.actualDeliveryText = "Tomorrow during the day";
+        } else {
+          deliveryInfo.canGetFasterDelivery = true;
+          deliveryInfo.fasterDeliveryText = rawLabel;
+          deliveryInfo.codDeliveryText = "Tomorrow during the day";
+        }
+      }
+    }
+  }
+
+  orderData.deliveryInfo = deliveryInfo;
+
+  console.log("this is orderdetails==>>", orderData);
+
+  res.status(200).json({order_details: orderData, message: "Orders Retrieved Successfully"})
 } catch (error) {
   console.error(error);
     return res.status(500).json({

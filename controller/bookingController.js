@@ -118,6 +118,8 @@ export const createBooking = async (req, res) => {
       date,
       slotTime,
       customerDetails,
+      deliveryLabel,
+      isSameDayDelivery
     } = req.body;
     
     // Validation
@@ -191,6 +193,8 @@ export const createBooking = async (req, res) => {
       zoneId: zoneId.toUpperCase(),
       date: bookingDate,
       slotTime,
+      deliveryLabel: deliveryLabel || '',
+      isSameDayDelivery: isSameDayDelivery || false,
       customerDetails: {
         name: customerDetails.name,
         phone: customerDetails.phone,
@@ -214,6 +218,7 @@ export const createBooking = async (req, res) => {
           zoneId: booking.zoneId,
           date: booking.date,
           slotTime: booking.slotTime,
+          deliveryLabel: booking.deliveryLabel,
           customerDetails: booking.customerDetails,
           status: booking.status,
           createdAt: booking.createdAt

@@ -23,6 +23,16 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+    deliveryLabel: {
+    type: String,
+    default: null
+  },
+
+  isSameDayDelivery: {
+    type: Boolean,
+    default: false
+  },
+
   customerDetails: {
     appCustomerId : {type:String,requried : true},
     name: { type: String, required: true },
