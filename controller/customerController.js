@@ -1826,16 +1826,34 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
           { batchId: { $exists: false } }
         ];
       }
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
 
       const [orders, countTotal] = await Promise.all([
         new APIFeatures(
-          order.find(baseFilter),
+          order.find({
+            status,
+            plantName: plantName,
+            $or: [
+              { isRescheduled: false },
+              { isRescheduled: { $exists: false } },
+              { isRescheduled: true, rescheduledDate: { $lte: today } }
+            ]
+          }),
           req.query,
         )
           .sort()
           .limitFields()
           .paginate().query,
-        order.countDocuments(baseFilter),
+        order.countDocuments({
+          status,
+          plantName: plantName,
+          $or: [
+            { isRescheduled: false },
+            { isRescheduled: { $exists: false } },
+            { isRescheduled: true, rescheduledDate: { $lte: today } }
+          ]
+        }),
       ]);
 
       res.status(200).json({
@@ -1879,16 +1897,22 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
       const status = requestedStatus;
       const riderName = user.name;
       const RiderDate = todayDate;
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
 
       // Query ke andar riderDate ko bhi filter mein add karte hain
       const [orders, countTotal] = await Promise.all([
         new APIFeatures(
           order.find({
             status,
-            isRescheduled: false,
             plantName: plantName,
             riderName: riderName,
             riderDate: RiderDate, // Rider Date filter yahan add kiya hai
+            $or: [
+              { isRescheduled: false },
+              { isRescheduled: { $exists: false } },
+              { isRescheduled: true, rescheduledDate: { $lte: today } }
+            ]
           }),
           req.query,
         )
@@ -1900,6 +1924,11 @@ export const getOrdersByFilter = catchAsync(async (req, res, next) => {
           plantName: plantName,
           riderName: riderName,
           riderDate: RiderDate, // Rider Date filter yahan add kiya hai
+          $or: [
+            { isRescheduled: false },
+            { isRescheduled: { $exists: false } },
+            { isRescheduled: true, rescheduledDate: { $lte: today } }
+          ]
         }),
       ]);
 
