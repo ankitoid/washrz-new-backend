@@ -2384,23 +2384,7 @@ export const getOrdersByEmailAndDateRange = catchAsync(
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
 
-      filter.$and = filter.$and || [];
-      filter.$and.push({
-        $or: [
-          {
-            isRescheduled: false,
-            createdAt: { $gte: start, $lte: end },
-          },
-          {
-            isRescheduled: { $exists: false },
-            createdAt: { $gte: start, $lte: end },
-          },
-          {
-            isRescheduled: true,
-            rescheduledDate: { $gte: start, $lte: end },
-          },
-        ]
-      });
+      filter.createdAt = { $gte: start, $lte: end };
     }
 
     if (status && status !== "All Orders") {

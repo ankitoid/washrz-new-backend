@@ -190,7 +190,7 @@ const couponSchema = new mongoose.Schema(
 
     categories: {
       type: [String],
-      enum: ["LAUNDRY", "DRYCLEAN", "SHOESPA"],
+      enum: ["LAUNDRY", "DRYCLEAN", "SHOESPA", "LEATHER"],
       default: [],
     },
   },
