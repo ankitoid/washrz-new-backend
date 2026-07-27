@@ -19,6 +19,7 @@ import {
   ORDER_STATUS,
   updateOrderStatusByItems,
 } from "../services/orderStatusService.js";
+import Trip from "../models/Trip.js";
 
 const signAccToken = (id, type) => {
   return jwt.sign({ id, userType: type }, process.env.JWT_SECRET, {
@@ -560,6 +561,34 @@ export const updateOrderStatus = async (req, res) => {
       lineId,
       orderItemId,
     });
+
+    if (nextOrderStatus === ORDER_STATUS.DELIVERED) {
+      try {
+        const associatedTrip = await Trip.findOne({ "stops.id": orderId });
+        if (associatedTrip) {
+          let stopUpdated = false;
+          associatedTrip.stops.forEach(stop => {
+            if (stop.id === orderId) {
+              stop.status = "completed";
+              stopUpdated = true;
+            }
+          });
+          if (stopUpdated) {
+            const nonDepotStops = associatedTrip.stops.filter(s => s.type !== "depot");
+            const allCompleted = nonDepotStops.every(s => s.status === "completed");
+            if (allCompleted) {
+              associatedTrip.status = "completed";
+              associatedTrip.completedAt = new Date();
+            } else {
+              associatedTrip.status = "in_progress";
+            }
+            await associatedTrip.save();
+          }
+        }
+      } catch (err) {
+        console.error("[authController.updateOrderStatus] Failed to update VRP Trip stop status:", err);
+      }
+    }
 
     if (
       nextOrderStatus === ORDER_STATUS.DELIVERY_RIDER_ASSIGNED &&

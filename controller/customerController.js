@@ -19,6 +19,7 @@ import {
   normalizeOrderStatus,
   updateOrderStatusByItems,
 } from "../services/orderStatusService.js";
+import Trip from "../models/Trip.js";
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
@@ -2176,6 +2177,34 @@ export const changeOrderStatus = catchAsync(async (req, res, next) => {
     lineId: req.body.lineId,
     orderItemId: req.body.orderItemId,
   });
+
+  if (status === ORDER_STATUS.DELIVERED) {
+    try {
+      const associatedTrip = await Trip.findOne({ "stops.id": _id });
+      if (associatedTrip) {
+        let stopUpdated = false;
+        associatedTrip.stops.forEach(stop => {
+          if (stop.id === _id) {
+            stop.status = "completed";
+            stopUpdated = true;
+          }
+        });
+        if (stopUpdated) {
+          const nonDepotStops = associatedTrip.stops.filter(s => s.type !== "depot");
+          const allCompleted = nonDepotStops.every(s => s.status === "completed");
+          if (allCompleted) {
+            associatedTrip.status = "completed";
+            associatedTrip.completedAt = new Date();
+          } else {
+            associatedTrip.status = "in_progress";
+          }
+          await associatedTrip.save();
+        }
+      }
+    } catch (err) {
+      console.error("[customerController.changeOrderStatus] Failed to update VRP Trip stop status:", err);
+    }
+  }
 
   res.status(200).json({
     result: updatedOrder,

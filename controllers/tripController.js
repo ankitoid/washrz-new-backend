@@ -107,14 +107,32 @@ export const getRiderTrips = async (req, res) => {
 
     const filter = { riderId };
     if (status) {
-      filter.status = status;
+      if (status === "all") {
+        // Do not apply any status filter (returns all trips: planned, assigned, in_progress, completed, cancelled)
+      } else if (status.includes(",")) {
+        filter.status = { $in: status.split(",") };
+      } else if (status === "assigned" || status === "active" || status === "non_completed") {
+        filter.status = { $in: ["assigned", "in_progress"] };
+      } else if (status === "assigned_only") {
+        filter.status = "assigned";
+      } else {
+        filter.status = status;
+      }
     } else {
       filter.status = { $in: ["planned", "assigned", "in_progress"] };
     }
 
-    const trips = await Trip.find(filter)
+    let trips = await Trip.find(filter)
       .populate("riderId", "name phone email role plant plantName")
       .sort({ createdAt: -1 });
+
+    if (req.query.pendingStopsOnly === "true") {
+      trips = trips.map(t => {
+        const tripObj = t.toObject();
+        tripObj.stops = tripObj.stops.filter(stop => stop.status !== "completed");
+        return tripObj;
+      });
+    }
 
     return res.status(200).json({
       status: "success",
@@ -150,9 +168,14 @@ export const getTripById = async (req, res) => {
       });
     }
 
+    let tripData = trip.toObject();
+    if (req.query.pendingStopsOnly === "true") {
+      tripData.stops = tripData.stops.filter(stop => stop.status !== "completed");
+    }
+
     return res.status(200).json({
       status: "success",
-      data: trip,
+      data: tripData,
     });
   } catch (error) {
     console.error("[tripController.getTripById] Error:", error);
