@@ -281,6 +281,17 @@ export const updateTripStatus = async (req, res) => {
     trip.status = status;
     if (status === "completed") {
       trip.completedAt = new Date();
+      if (trip.stops && Array.isArray(trip.stops)) {
+        trip.stops.forEach(stop => {
+          stop.status = "completed";
+        });
+      }
+    } else if (status === "cancelled" || status === "planned" || status === "assigned") {
+      if (trip.stops && Array.isArray(trip.stops)) {
+        trip.stops.forEach(stop => {
+          stop.status = "pending";
+        });
+      }
     }
     await trip.save();
 
