@@ -11,6 +11,7 @@ const stopSchema = new mongoose.Schema(
     item_types: [{ type: String }],
     delivery_weight: { type: Number, default: 0 },
     index: { type: Number },
+    address: { type: String, default: "" },
   },
   { _id: false }
 );

@@ -12,6 +12,7 @@ const stopSchema = new mongoose.Schema(
     delivery_weight: { type: Number, default: 0 },
     index: { type: Number },
     status: { type: String, enum: ["pending", "completed"], default: "pending" },
+    address: { type: String, default: "" },
   },
   { _id: false }
 );

@@ -24,6 +24,7 @@ export const buildLocations = async (pickupIds = [], orderIds = []) => {
     {
       id: "DEPOT",
       name: DEPOT.name,
+      address: DEPOT.name,
       lat: DEPOT.lat,
       lng: DEPOT.lng,
       type: "depot",
@@ -66,6 +67,7 @@ export const buildLocations = async (pickupIds = [], orderIds = []) => {
         locations.push({
           id: p._id.toString(),
           name: p.Name || p.contactName || p.Address || "Pickup Stop",
+          address: p.Address || p.address || "",
           lat: Number(lat),
           lng: Number(lng),
           type: "pickup",
@@ -108,6 +110,7 @@ export const buildLocations = async (pickupIds = [], orderIds = []) => {
         locations.push({
           id: o._id.toString(),
           name: o.customerName || "Delivery Stop",
+          address: o.address || "",
           lat: Number(lat),
           lng: Number(lng),
           type: "delivery",
