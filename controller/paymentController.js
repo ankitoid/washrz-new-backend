@@ -264,6 +264,7 @@ export const verifyRazorpayPayment = async (req, res) => {
     // Send customer FCM notification & save notification record
     if (order.appCustomerId) {
       const paidAmount = order.payment?.amount || order.totalAmount || order.price || 0;
+      console.log("Sending payment success notification to customer:", order.appCustomerId, "Amount:", paidAmount);
       await createCustomerNotification({
         customerId: String(order.appCustomerId),
         title: "Payment Received! 💳✨",
@@ -589,6 +590,7 @@ export const razorpayWebhook = async (req, res) => {
       // Send customer FCM notification & save notification record
       if (order.appCustomerId) {
         const paidAmount = order.payment?.amount || order.totalAmount || order.price || 0;
+        console.log("Sending payment success notification to customer:", order.appCustomerId, "Amount:", paidAmount);
         await createCustomerNotification({
           customerId: String(order.appCustomerId),
           title: "Payment Received! 💳✨",
