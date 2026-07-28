@@ -3,6 +3,7 @@ import axios from 'axios';
 import Razorpay from "razorpay";
 import Order from "../models/orderSchema.js";
 import coupons_service from "../services/coupon.service.js";
+import { createCustomerNotification } from "./customerNotificationController.js";
 
 // ================= RAZORPAY INSTANCE =================
 
@@ -259,6 +260,23 @@ export const verifyRazorpayPayment = async (req, res) => {
     await order.save();
 
     console.log("Payment verified with mode:", paymentMode, "for order:", order.order_id);
+
+    // Send customer FCM notification & save notification record
+    if (order.appCustomerId) {
+      const paidAmount = order.payment?.amount || order.totalAmount || order.price || 0;
+      await createCustomerNotification({
+        customerId: String(order.appCustomerId),
+        title: "Payment Received! 💳✨",
+        message: `Your payment of ₹${paidAmount} for order #${order.order_id} was successfully received.`,
+        type: "payment_success",
+        data: {
+          type: "payment_success",
+          orderId: String(order.order_id),
+          amount: String(paidAmount),
+          screen: "OrderDetails",
+        },
+      });
+    }
 
     // 7. Socket updates
     req.socket.emitToAdmin("paymentUpdate", {
@@ -567,6 +585,23 @@ export const razorpayWebhook = async (req, res) => {
       });
 
       console.log("✅ Webhook updated order:", order.order_id);
+
+      // Send customer FCM notification & save notification record
+      if (order.appCustomerId) {
+        const paidAmount = order.payment?.amount || order.totalAmount || order.price || 0;
+        await createCustomerNotification({
+          customerId: String(order.appCustomerId),
+          title: "Payment Received! 💳✨",
+          message: `Your payment of ₹${paidAmount} for order #${order.order_id} was successfully received.`,
+          type: "payment_success",
+          data: {
+            type: "payment_success",
+            orderId: String(order.order_id),
+            amount: String(paidAmount),
+            screen: "OrderDetails",
+          },
+        });
+      }
 
       // =====================================================
       // ================= SOCKET ============================
