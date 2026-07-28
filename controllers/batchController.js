@@ -435,26 +435,33 @@ export const removeLocationsFromBatch = async (req, res) => {
 
     // Revert batch association and reset task statuses for the removed locations
     if (pickupIds && pickupIds.length > 0) {
-      await pickup.updateMany(
-        { _id: { $in: pickupIds } },
-        { $set: { batchId: null, PickupStatus: "pending", assignedRider: null } }
-      );
+      for (const pid of pickupIds) {
+        const pDoc = await pickup.findById(pid);
+        if (pDoc) {
+          pDoc.batchId = null;
+          pDoc.PickupStatus = "pending";
+          pDoc.assignedRider = { pickup: null };
+          await pDoc.save();
+        }
+      }
     }
     if (orderIds && orderIds.length > 0) {
-      await Order.updateMany(
-        { _id: { $in: orderIds } },
-        {
-          $set: {
-            batchId: null,
-            status: "ready for delivery",
-            riderId: null,
-            riderName: null,
-            riderContact: null,
-            riderAssignedAt: null,
-            assignedRider: null,
-          },
+      for (const oid of orderIds) {
+        const oDoc = await Order.findById(oid);
+        if (oDoc) {
+          oDoc.batchId = null;
+          oDoc.status = "ready for delivery";
+          oDoc.riderId = undefined;
+          oDoc.riderName = undefined;
+          oDoc.riderContact = undefined;
+          oDoc.riderAssignedAt = undefined;
+          oDoc.assignedRider = {
+            pickup: oDoc.assignedRider?.pickup || null,
+            delivery: null
+          };
+          await oDoc.save();
         }
-      );
+      }
     }
 
     await Roster.deleteMany({ batchId: id });
@@ -492,28 +499,35 @@ export const deleteBatch = async (req, res) => {
 
     // Revert batch association and status on all associated pickups
     if (batch.pickupIds && batch.pickupIds.length > 0) {
-      await pickup.updateMany(
-        { _id: { $in: batch.pickupIds } },
-        { $set: { batchId: null, PickupStatus: "pending", assignedRider: null } }
-      );
+      for (const pid of batch.pickupIds) {
+        const pDoc = await pickup.findById(pid);
+        if (pDoc) {
+          pDoc.batchId = null;
+          pDoc.PickupStatus = "pending";
+          pDoc.assignedRider = { pickup: null };
+          await pDoc.save();
+        }
+      }
     }
 
     // Revert batch association and status on all associated orders
     if (batch.orderIds && batch.orderIds.length > 0) {
-      await Order.updateMany(
-        { _id: { $in: batch.orderIds } },
-        {
-          $set: {
-            batchId: null,
-            status: "ready for delivery",
-            riderId: null,
-            riderName: null,
-            riderContact: null,
-            riderAssignedAt: null,
-            assignedRider: null,
-          },
+      for (const oid of batch.orderIds) {
+        const oDoc = await Order.findById(oid);
+        if (oDoc) {
+          oDoc.batchId = null;
+          oDoc.status = "ready for delivery";
+          oDoc.riderId = undefined;
+          oDoc.riderName = undefined;
+          oDoc.riderContact = undefined;
+          oDoc.riderAssignedAt = undefined;
+          oDoc.assignedRider = {
+            pickup: oDoc.assignedRider?.pickup || null,
+            delivery: null
+          };
+          await oDoc.save();
         }
-      );
+      }
     }
 
     // Delete associated rosters and trips

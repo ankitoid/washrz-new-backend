@@ -13,7 +13,7 @@ import { createCustomerNotification } from "./customerNotificationController.js"
 import CatalogItem from "../models/catalogItemSchema.js";
 import slotBookingSchema from "../models/slotBookingSchema.js";
 import { assignPickupToRider } from "../services/pickupAssignmentService.js";
-import Trip from "../models/Trip.js";
+import { syncTripStatus } from "../controllers/tripController.js";
 
 // upload audio and voice
 // Configure AWS S3
@@ -450,33 +450,9 @@ export const uploadFiles = (req, res, next) => {
       // Mark pickup complete
       // -------------------------
       await Pickup.findByIdAndUpdate(id, { PickupStatus: "complete", orderId: order_details._id });
+      await syncTripStatus(id);
 
-      // Update stop status in associated VRP Trip
-      try {
-        const associatedTrip = await Trip.findOne({ "stops.id": id });
-        if (associatedTrip) {
-          let stopUpdated = false;
-          associatedTrip.stops.forEach(stop => {
-            if (stop.id === id) {
-              stop.status = "completed";
-              stopUpdated = true;
-            }
-          });
-          if (stopUpdated) {
-            const nonDepotStops = associatedTrip.stops.filter(s => s.type !== "depot");
-            const allCompleted = nonDepotStops.every(s => s.status === "completed");
-            if (allCompleted) {
-              associatedTrip.status = "completed";
-              associatedTrip.completedAt = new Date();
-            } else {
-              associatedTrip.status = "in_progress";
-            }
-            await associatedTrip.save();
-          }
-        }
-      } catch (err) {
-        console.error("[riderController.uploadFiles] Failed to update VRP Trip stop status:", err);
-      }
+
 
       const customerId = pickup_details?.appCustomerId
         ? String(pickup_details.appCustomerId)
@@ -683,9 +659,15 @@ export const reschedulePickup = async (req, res) => {
     pickup.rescheduledDate = newDate;
     pickup.pickup_date = newDate;
     pickup.PickupStatus = "pending";
-    // pickup.isRescheduled = true;
+    pickup.isRescheduled = true;
     pickup.type = "reschdule";
+    pickup.batchId = null;
     await pickup.save();
+
+    // Sync VRP Trip status now that this stop is rescheduled (resolved)
+    await syncTripStatus(id);
+
+
 
     if (pickup.appCustomerId) {
       await createCustomerNotification({
@@ -826,6 +808,7 @@ export const deletePickup = catchAsync(async (req, res, next) => {
   const pickupData = await Pickup.findByIdAndUpdate(req.params.id, {
     isDeleted: true,
     PickupStatus: "deleted",
+    batchId: null,
     cancelledAt: new Date(),
     cancelNote : "cancelled by customer",
     cancelledBy: {
@@ -842,6 +825,11 @@ export const deletePickup = catchAsync(async (req, res, next) => {
       { status: "cancelled" },
     );
   }
+
+  // Sync VRP Trip status now that this stop is deleted (resolved)
+  await syncTripStatus(req.params.id);
+
+
 
   if(req.socket)
   {
@@ -974,33 +962,9 @@ export const uploadDeliverImage = catchAsync(async (req, res) => {
         status: "delivered",
         "statusHistory.delivered": new Date()
       });
+      await syncTripStatus(id);
 
-      // Update stop status in associated VRP Trip
-      try {
-        const associatedTrip = await Trip.findOne({ "stops.id": id });
-        if (associatedTrip) {
-          let stopUpdated = false;
-          associatedTrip.stops.forEach(stop => {
-            if (stop.id === id) {
-              stop.status = "completed";
-              stopUpdated = true;
-            }
-          });
-          if (stopUpdated) {
-            const nonDepotStops = associatedTrip.stops.filter(s => s.type !== "depot");
-            const allCompleted = nonDepotStops.every(s => s.status === "completed");
-            if (allCompleted) {
-              associatedTrip.status = "completed";
-              associatedTrip.completedAt = new Date();
-            } else {
-              associatedTrip.status = "in_progress";
-            }
-            await associatedTrip.save();
-          }
-        }
-      } catch (err) {
-        console.error("[riderController.uploadDeliverImage] Failed to update VRP Trip stop status:", err);
-      }
+
       res.status(200).json({
         message: "Files uploaded successfully and pickup status updated.",
       });
@@ -1174,7 +1138,11 @@ export const rescheduleOrder = async (req, res) => {
     // Update the rescheduled date and mark as rescheduled
     order.rescheduledDate = newDate;
     order.isRescheduled = true;
+    order.batchId = null;
     await order.save();
+
+    // Sync VRP Trip status now that this stop is rescheduled (resolved)
+    await syncTripStatus(id);
 
     res.status(200).json({ message: "Order rescheduled successfully" });
   } catch (error) {

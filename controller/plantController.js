@@ -270,23 +270,24 @@ export const assignRider = async (req, res) => {
 
     const riderDate = new Date().toISOString().split("T")[0];
 
-    const order = await Order.findByIdAndUpdate(
-      orderId,
-      {
-        riderName,
-        riderDate,
-        "assignedRider.delivery": {
-          riderId,
-          riderName,
-          assignedAt: new Date(),
-        },
-      },
-      { new: true },
-    );
-
+    const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
+
+    if (!order.assignedRider || order.assignedRider === null) {
+      order.assignedRider = {};
+    }
+
+    order.riderName = riderName;
+    order.riderDate = riderDate;
+    order.assignedRider.delivery = {
+      riderId,
+      riderName,
+      assignedAt: new Date(),
+    };
+
+    await order.save();
     console.log(
       `🔄 Assigning rider ${riderName} (${riderId}) to order ${orderId}`,
     );
@@ -367,24 +368,25 @@ export const assignPickupRider = async (req, res) => {
 
     const riderDate = new Date().toISOString().split("T")[0];
 
-    const pickup = await Pickup.findByIdAndUpdate(
-      orderId,
-      {
-        riderName,
-        riderDate,
-        PickupStatus: "assigned",
-        "assignedRider.pickup": {
-          riderId,
-          riderName,
-          assignedAt: new Date(),
-        },
-      },
-      { new: true },
-    );
-
+    const pickup = await Pickup.findById(orderId);
     if (!pickup) {
       return res.status(404).json({ message: "Pickup not found" });
     }
+
+    if (!pickup.assignedRider || pickup.assignedRider === null) {
+      pickup.assignedRider = {};
+    }
+
+    pickup.riderName = riderName;
+    pickup.riderDate = riderDate;
+    pickup.PickupStatus = "assigned";
+    pickup.assignedRider.pickup = {
+      riderId,
+      riderName,
+      assignedAt: new Date(),
+    };
+
+    await pickup.save();
 
     // req.socket.emit("assignedPickup", { pickup, riderName });
     req.socket.emitToAdmin("assignedPickup", { pickup, riderName });
@@ -481,24 +483,25 @@ export const assignRiderUnified = async (req, res) => {
 
     if (type === "delivery") {
       // --- Delivery assignment ---
-      const order = await Order.findOneAndUpdate(
-        { order_id: orderId },
-        {
-          riderName,
-          status : "delivery rider assigned",
-          riderDate,
-          "assignedRider.delivery": {
-            riderId,
-            riderName,
-            assignedAt: new Date(),
-          },
-        },
-        { new: true }
-      );
-
+      const order = await Order.findOne({ order_id: orderId });
       if (!order) {
         return res.status(404).json({ message: "Order not found" });
       }
+
+      if (!order.assignedRider || order.assignedRider === null) {
+        order.assignedRider = {};
+      }
+
+      order.riderName = riderName;
+      order.status = "delivery rider assigned";
+      order.riderDate = riderDate;
+      order.assignedRider.delivery = {
+        riderId,
+        riderName,
+        assignedAt: new Date(),
+      };
+
+      await order.save();
 
       console.log(`🔄 Assigning rider ${riderName} (${riderId}) to order ${orderId}`);
 
@@ -556,24 +559,25 @@ export const assignRiderUnified = async (req, res) => {
       };
     } else {
       // --- Pickup assignment ---
-      const pickup = await Pickup.findByIdAndUpdate(
-        orderId,
-        {
-          riderName,
-          riderDate,
-          PickupStatus: "assigned",
-          "assignedRider.pickup": {
-            riderId,
-            riderName,
-            assignedAt: new Date(),
-          },
-        },
-        { new: true }
-      );
-
+      const pickup = await Pickup.findById(orderId);
       if (!pickup) {
         return res.status(404).json({ message: "Pickup not found" });
       }
+
+      if (!pickup.assignedRider || pickup.assignedRider === null) {
+        pickup.assignedRider = {};
+      }
+
+      pickup.riderName = riderName;
+      pickup.riderDate = riderDate;
+      pickup.PickupStatus = "assigned";
+      pickup.assignedRider.pickup = {
+        riderId,
+        riderName,
+        assignedAt: new Date(),
+      };
+
+      await pickup.save();
 
       // Socket notifications
       req.socket.emitToAdmin("assignedPickup", { pickup, riderName });

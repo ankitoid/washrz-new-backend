@@ -10,24 +10,25 @@ export const assignPickupToRider = async ({
 }) => {
   const riderDate = new Date().toISOString().split("T")[0];
 
-  const pickup = await Pickup.findByIdAndUpdate(
-    pickupId,
-    {
-      riderName,
-      riderDate,
-      PickupStatus: "assigned",
-      "assignedRider.pickup": {
-        riderId,
-        riderName,
-        assignedAt: new Date(),
-      },
-    },
-    { new: true },
-  );
-
+  const pickup = await Pickup.findById(pickupId);
   if (!pickup) {
     throw new Error("Pickup not found");
   }
+
+  if (!pickup.assignedRider || pickup.assignedRider === null) {
+    pickup.assignedRider = {};
+  }
+
+  pickup.riderName = riderName;
+  pickup.riderDate = riderDate;
+  pickup.PickupStatus = "assigned";
+  pickup.assignedRider.pickup = {
+    riderId,
+    riderName,
+    assignedAt: new Date(),
+  };
+
+  await pickup.save();
 
   if (riderId) {
     socket?.emitToRider?.(riderId, "riderAssignedPickup", { pickup });

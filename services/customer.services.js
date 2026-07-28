@@ -1,6 +1,8 @@
 import Orders from "../models/orderSchema.js";
 import pickup from "../models/pickupSchema.js";
 import slotBookingSchema from "../models/slotBookingSchema.js";
+import { syncTripStatus } from "../controllers/tripController.js";
+
 
 export const customer_services = {};
 
@@ -281,7 +283,14 @@ const rescheduleOrderService = async (orderId, newDate) => {
 
   order.rescheduledDate = newDate;
   order.isRescheduled = true;
+  order.batchId = null;
   await order.save();
+
+  // Sync VRP Trip status now that this stop is rescheduled (resolved)
+  await syncTripStatus(order._id);
+
+
+
   return order;
 };
 

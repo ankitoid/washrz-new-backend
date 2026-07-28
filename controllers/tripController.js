@@ -1,8 +1,131 @@
+import mongoose from "mongoose";
 import Trip from "../models/Trip.js";
 import Roster from "../models/Roster.js";
 import User from "../models/userModel.js";
 import pickup from "../models/pickupSchema.js";
 import Order from "../models/orderSchema.js";
+
+const populateTripStops = async (trips) => {
+  const isArray = Array.isArray(trips);
+  const tripsList = isArray ? trips : [trips];
+
+  const pickupIds = [];
+  const orderIds = [];
+  tripsList.forEach(t => {
+    t.stops?.forEach(stop => {
+      if (stop.type === "pickup" && stop.id && mongoose.Types.ObjectId.isValid(stop.id)) {
+        pickupIds.push(stop.id);
+      }
+      if (stop.type === "delivery" && stop.id && mongoose.Types.ObjectId.isValid(stop.id)) {
+        orderIds.push(stop.id);
+      }
+    });
+  });
+
+  const [pickups, orders] = await Promise.all([
+    pickup.find({ _id: { $in: pickupIds } }),
+    Order.find({ _id: { $in: orderIds } })
+  ]);
+
+  const pickupsMap = new Map(pickups.map(p => [p._id.toString(), p]));
+  const ordersMap = new Map(orders.map(o => [o._id.toString(), o]));
+
+  const populated = tripsList.map(t => {
+    const tripObj = t.toObject ? t.toObject() : t;
+    tripObj.stops = (tripObj.stops || []).map(stop => {
+      if (stop.type === "pickup") {
+        const p = pickupsMap.get(stop.id);
+        if (p) {
+          return {
+            ...stop,
+            address: p.Address || p.address || "",
+            isDeleted: p.isDeleted || false,
+            isRescheduled: p.isRescheduled || false,
+            status: p.PickupStatus === "complete" ? "completed" : "pending"
+          };
+        }
+      } else if (stop.type === "delivery") {
+        const o = ordersMap.get(stop.id);
+        if (o) {
+          return {
+            ...stop,
+            address: o.address || "",
+            isDeleted: o.isDeleted || false,
+            isRescheduled: o.isRescheduled || false,
+            status: o.status === "delivered" ? "completed" : "pending"
+          };
+        }
+      }
+      return stop;
+    });
+    return tripObj;
+  });
+
+  return isArray ? populated : populated[0];
+};
+
+export const syncTripStatus = async (stopId) => {
+  try {
+    const associatedTrip = await Trip.findOne({ "stops.id": stopId });
+    if (associatedTrip) {
+      const pickupIds = [];
+      const orderIds = [];
+      associatedTrip.stops.forEach(stop => {
+        if (stop.type === "pickup" && stop.id && mongoose.Types.ObjectId.isValid(stop.id)) {
+          pickupIds.push(stop.id);
+        }
+        if (stop.type === "delivery" && stop.id && mongoose.Types.ObjectId.isValid(stop.id)) {
+          orderIds.push(stop.id);
+        }
+      });
+
+      const [pickups, orders] = await Promise.all([
+        pickup.find({ _id: { $in: pickupIds } }),
+        Order.find({ _id: { $in: orderIds } })
+      ]);
+
+      const pickupsMap = new Map(pickups.map(p => [
+        p._id.toString(),
+        { isDone: p.PickupStatus === "complete" || p.isDeleted || p.isRescheduled }
+      ]));
+      const ordersMap = new Map(orders.map(o => [
+        o._id.toString(),
+        { isDone: o.status === "delivered" || o.isDeleted || o.isRescheduled }
+      ]));
+
+      let resolvedCount = 0;
+      let totalNonDepot = 0;
+
+      associatedTrip.stops.forEach(stop => {
+        if (stop.type === "pickup") {
+          totalNonDepot++;
+          const pData = pickupsMap.get(stop.id);
+          if (pData?.isDone) {
+            resolvedCount++;
+          }
+        } else if (stop.type === "delivery") {
+          totalNonDepot++;
+          const oData = ordersMap.get(stop.id);
+          if (oData?.isDone) {
+            resolvedCount++;
+          }
+        }
+      });
+
+      if (resolvedCount === totalNonDepot && totalNonDepot > 0) {
+        associatedTrip.status = "completed";
+        associatedTrip.completedAt = new Date();
+      } else if (resolvedCount > 0) {
+        associatedTrip.status = "in_progress";
+      } else {
+        associatedTrip.status = "assigned";
+      }
+      await associatedTrip.save();
+    }
+  } catch (err) {
+    console.error("[syncTripStatus] Error syncing VRP Trip status:", err);
+  }
+};
 
 /**
  * @desc   Create trip documents from a selected optimization Roster
@@ -82,10 +205,12 @@ export const getTrips = async (req, res) => {
       .populate("riderId", "name phone email role plant plantName")
       .sort({ createdAt: -1 });
 
+    const populatedTrips = await populateTripStops(trips);
+
     return res.status(200).json({
       status: "success",
-      count: trips.length,
-      data: trips,
+      count: populatedTrips.length,
+      data: populatedTrips,
     });
   } catch (error) {
     console.error("[tripController.getTrips] Error:", error);
@@ -126,18 +251,19 @@ export const getRiderTrips = async (req, res) => {
       .populate("riderId", "name phone email role plant plantName")
       .sort({ createdAt: -1 });
 
+    let populatedTrips = await populateTripStops(trips);
+
     if (req.query.pendingStopsOnly === "true") {
-      trips = trips.map(t => {
-        const tripObj = t.toObject();
-        tripObj.stops = tripObj.stops.filter(stop => stop.status !== "completed");
-        return tripObj;
+      populatedTrips = populatedTrips.map(t => {
+        t.stops = t.stops.filter(stop => stop.status !== "completed");
+        return t;
       });
     }
 
     return res.status(200).json({
       status: "success",
-      count: trips.length,
-      data: trips,
+      count: populatedTrips.length,
+      data: populatedTrips,
     });
   } catch (error) {
     console.error("[tripController.getRiderTrips] Error:", error);
@@ -168,14 +294,14 @@ export const getTripById = async (req, res) => {
       });
     }
 
-    let tripData = trip.toObject();
+    const populatedTrip = await populateTripStops(trip);
     if (req.query.pendingStopsOnly === "true") {
-      tripData.stops = tripData.stops.filter(stop => stop.status !== "completed");
+      populatedTrip.stops = populatedTrip.stops.filter(stop => stop.status !== "completed");
     }
 
     return res.status(200).json({
       status: "success",
-      data: tripData,
+      data: populatedTrip,
     });
   } catch (error) {
     console.error("[tripController.getTripById] Error:", error);
@@ -215,6 +341,20 @@ export const assignRider = async (req, res) => {
       return res.status(404).json({
         status: "error",
         message: `Trip with ID ${tripId} not found`,
+      });
+    }
+
+    // Validation: Ensure the rider does not have any other active VRP trip (assigned or in_progress)
+    const activeTrip = await Trip.findOne({
+      riderId,
+      status: { $in: ["assigned", "in_progress"] },
+      _id: { $ne: tripId }
+    });
+
+    if (activeTrip) {
+      return res.status(400).json({
+        status: "error",
+        message: `Rider ${riderUser.name} already has an active trip (Trip ID: ${activeTrip._id}) assigned. Please complete or unassign the active trip first.`,
       });
     }
 
@@ -427,23 +567,26 @@ export const deleteTrip = async (req, res) => {
     if (trip.stops && Array.isArray(trip.stops)) {
       for (const stop of trip.stops) {
         if (stop.type === "pickup") {
-          await pickup.findByIdAndUpdate(stop.id, {
-            $set: {
-              PickupStatus: "pending",
-              assignedRider: null,
-            },
-          });
+          const pDoc = await pickup.findById(stop.id);
+          if (pDoc) {
+            pDoc.PickupStatus = "pending";
+            pDoc.assignedRider = { pickup: null };
+            await pDoc.save();
+          }
         } else if (stop.type === "delivery") {
-          await Order.findByIdAndUpdate(stop.id, {
-            $set: {
-              status: "ready for delivery",
-              riderId: null,
-              riderName: null,
-              riderContact: null,
-              riderAssignedAt: null,
-              assignedRider: null,
-            },
-          });
+          const oDoc = await Order.findById(stop.id);
+          if (oDoc) {
+            oDoc.status = "ready for delivery";
+            oDoc.riderId = undefined;
+            oDoc.riderName = undefined;
+            oDoc.riderContact = undefined;
+            oDoc.riderAssignedAt = undefined;
+            oDoc.assignedRider = {
+              pickup: oDoc.assignedRider?.pickup || null,
+              delivery: null
+            };
+            await oDoc.save();
+          }
         }
       }
     }
