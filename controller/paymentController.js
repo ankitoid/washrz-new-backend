@@ -269,6 +269,7 @@ export const verifyRazorpayPayment = async (req, res) => {
         customerId: String(order.appCustomerId),
         title: "Payment Received! 💳✨",
         message: `Your payment of ₹${paidAmount} for order #${order.order_id} was successfully received.`,
+        type: "payment",
         data: {
           type: "payment_success",
           orderId: String(order.order_id),
@@ -594,6 +595,7 @@ export const razorpayWebhook = async (req, res) => {
           customerId: String(order.appCustomerId),
           title: "Payment Received! 💳✨",
           message: `Your payment of ₹${paidAmount} for order #${order.order_id} was successfully received.`,
+          type: "payment",
           data: {
             type: "payment_success",
             orderId: String(order.order_id),
