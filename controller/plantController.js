@@ -681,7 +681,10 @@ cron.schedule("30 0 * * *", async () => {
       {
         status: { $nin: ["delivered"] },
       },
-      {
+      { 
+        $set:{
+        status: "ready for delivery"
+        },
         $unset: {
           riderName: "",
           riderDate: "",
