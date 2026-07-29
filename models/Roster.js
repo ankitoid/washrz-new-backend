@@ -12,6 +12,8 @@ const stopSchema = new mongoose.Schema(
     delivery_weight: { type: Number, default: 0 },
     index: { type: Number },
     address: { type: String, default: "" },
+    isDeleted: { type: Boolean, default: false },
+    isRescheduled: { type: Boolean, default: false },
   },
   { _id: false }
 );

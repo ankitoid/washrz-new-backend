@@ -13,6 +13,8 @@ const stopSchema = new mongoose.Schema(
     index: { type: Number },
     status: { type: String, enum: ["pending", "completed"], default: "pending" },
     address: { type: String, default: "" },
+    isDeleted: { type: Boolean, default: false },
+    isRescheduled: { type: Boolean, default: false },
   },
   { _id: false }
 );

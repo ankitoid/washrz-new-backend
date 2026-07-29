@@ -74,6 +74,8 @@ export const buildLocations = async (pickupIds = [], orderIds = []) => {
           price: p.totalAmount || 0,
           item_types: [],
           delivery_weight: 0,
+          isDeleted: p.isDeleted || false,
+          isRescheduled: p.isRescheduled || false,
         });
       }
     }
@@ -117,6 +119,8 @@ export const buildLocations = async (pickupIds = [], orderIds = []) => {
           price: o.totalAmount || 0,
           item_types: Array.from(itemTypesSet).sort(),
           delivery_weight: Number(totalWeight.toFixed(2)),
+          isDeleted: o.isDeleted || false,
+          isRescheduled: o.isRescheduled || false,
         });
       }
     }
