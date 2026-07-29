@@ -26,6 +26,7 @@ const customerNotificationSchema = new mongoose.Schema(
         "out_for_Delivery",
         "order_Delivered",
         "system",
+        "payment",
       ],
       required: true,
     },
