@@ -26,6 +26,7 @@ const notificationSchema = new mongoose.Schema(
         "delivery_assigned",
         "order_update",
         "system",
+        "payment",
       ],
       required: true,
     },

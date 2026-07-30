@@ -738,6 +738,20 @@ const moveRescheduledOrders = async () => {
     for (const order of ordersToMove) {
       order.isRescheduled = false; // Mark as live
       order.rescheduledDate = null; // Clear the rescheduled date
+      if(order.status){                                                  // changed but may be create bug so need to look into this in future.
+        order.status = "ready for delivery" 
+        if( order?.statusHistory?.readyForDelivery) 
+        {
+         order.statusHistory.readyForDelivery = today
+        }
+        if(order?.statusHistory?.deliveryriderassigned)
+        {
+          order.statusHistory.deliveryriderassigned = null
+        }
+      }
+      if(order?.assignedRider?.delivery){
+        order.assignedRider.delivery = null 
+      }
       await order.save();
     }
 
