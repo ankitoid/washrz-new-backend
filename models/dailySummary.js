@@ -20,15 +20,15 @@ const dailySummarySchema = new mongoose.Schema(
     startImages: [{ 
       imageUrl: String,
       timestamp: Date,
-      tripId: { type: mongoose.Schema.Types.ObjectId, ref: "Trip" }
+      tripId: { type: mongoose.Schema.Types.ObjectId, ref: "Shift" }
     }],
     endImages: [{ 
       imageUrl: String,
       timestamp: Date,
-      tripId: { type: mongoose.Schema.Types.ObjectId, ref: "Trip" }
+      tripId: { type: mongoose.Schema.Types.ObjectId, ref: "Shift" }
     }],
     trips: [{
-      tripId: { type: mongoose.Schema.Types.ObjectId, ref: "Trip" },
+      tripId: { type: mongoose.Schema.Types.ObjectId, ref: "Shift" },
       startTime: Date,
       endTime: Date,
       startKm: Number,

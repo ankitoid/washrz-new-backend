@@ -1,6 +1,7 @@
 import AWS from "aws-sdk";
 import multer from "multer";
-import Trip from "../models/tripSchema.js";
+import Shift from "../models/shiftSchema.js";
+import VrpTrip from "../models/Trip.js";
 import DailySummary from "../models/dailySummary.js";
 import User from "../models/userModel.js";
 import catchAsync from "../utills/catchAsync.js";
@@ -9,6 +10,11 @@ const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_S3_SECRET_ACCESS_KEY,
   region: process.env.AWS_S3_REGION,
+  httpOptions: {
+    timeout: 8000,
+    connectTimeout: 8000,
+  },
+  maxRetries: 1,
 });
 
 // Helper function to get YYYY-MM-DD format
@@ -32,7 +38,7 @@ const uploadSingleImage = multer({
 }).single("image");
 
 // Helper to update daily summary
-const updateDailySummary = async (riderId, date, tripData, isStart = false) => {
+const updateDailySummary = async (riderId, date, shiftData, isStart = false) => {
   const dayString = getDayString(date);
   
   if (isStart) {
@@ -43,9 +49,9 @@ const updateDailySummary = async (riderId, date, tripData, isStart = false) => {
         $inc: { totalDistance: 0 }, // Initialize if doesn't exist
         $push: {
           startImages: {
-            imageUrl: tripData.startImage,
+            imageUrl: shiftData.startImage,
             timestamp: date,
-            tripId: tripData._id
+            tripId: shiftData._id
           }
         }
       },
@@ -56,20 +62,20 @@ const updateDailySummary = async (riderId, date, tripData, isStart = false) => {
     await DailySummary.findOneAndUpdate(
       { rider: riderId, date: dayString },
       {
-        $inc: { totalDistance: tripData.distance },
+        $inc: { totalDistance: shiftData.distance },
         $push: {
           endImages: {
-            imageUrl: tripData.endImage,
+            imageUrl: shiftData.endImage,
             timestamp: new Date(),
-            tripId: tripData._id
+            tripId: shiftData._id
           },
           trips: {
-            tripId: tripData._id,
-            startTime: tripData.createdAt,
+            tripId: shiftData._id,
+            startTime: shiftData.createdAt,
             endTime: new Date(),
-            startKm: tripData.startKm,
-            endKm: tripData.endKm,
-            distance: tripData.distance
+            startKm: shiftData.startKm,
+            endKm: shiftData.endKm,
+            distance: shiftData.distance
           }
         }
       },
@@ -78,143 +84,197 @@ const updateDailySummary = async (riderId, date, tripData, isStart = false) => {
   }
 };
 
-// POST /trips/start
-export const startTrip = catchAsync(async (req, res, next) => {
+// POST /shifts/start
+export const startShift = catchAsync(async (req, res, next) => {
   uploadSingleImage(req, res, async (err) => {
     if (err) return res.status(400).json({ message: "Upload error", err });
 
-    const { riderId, startKm } = req.body;
-    if (!riderId || startKm == null) {
-      return res.status(400).json({ message: "riderId and startKm are required" });
-    }
+    try {
+      const { riderId, startKm } = req.body;
+      if (!riderId || startKm == null) {
+        return res.status(400).json({ message: "riderId and startKm are required" });
+      }
 
-    // Check if rider has an active trip
-    const activeTrip = await Trip.findOne({ 
-      rider: riderId, 
-      status: "started" 
-    });
-    
-    if (activeTrip) {
-      return res.status(400).json({ 
-        message: "You have an active trip. Please end it before starting a new one.",
-        activeTripId: activeTrip._id 
+      // Check if rider has an active shift
+      const activeShift = await Shift.findOne({ 
+        rider: riderId, 
+        status: "started" 
+      });
+      
+      if (activeShift) {
+        return res.status(400).json({ 
+          message: "You have an active shift. Please end it before starting a new one.",
+          activeShiftId: activeShift._id 
+        });
+      }
+
+      const now = new Date();
+      let startImageUrl = null;
+      
+      if (req.file) {
+        const uploaded = await uploadToS3Buffer(
+          req.file,
+          process.env.AWS_S3_BUCKET_NAME,
+          "riderTripPic/start"
+        );
+        startImageUrl = uploaded.Location;
+      }
+
+      // Check if there is an active VRP Trip assigned to this rider
+      const activeVrpTrip = await VrpTrip.findOne({
+        riderId,
+        status: { $in: ["assigned", "in_progress"] }
+      });
+
+      let vrpTripId = null;
+      if (activeVrpTrip) {
+        vrpTripId = activeVrpTrip._id;
+        activeVrpTrip.status = "in_progress";
+        await activeVrpTrip.save({ validateBeforeSave: false });
+      }
+
+      // Create new shift
+      const shift = await Shift.create({
+        rider: riderId,
+        date: now,
+        startKm: Number(startKm),
+        startImage: startImageUrl,
+        status: "started",
+        vrpTripId,
+      });
+
+      // Update daily summary with start info
+      await updateDailySummary(riderId, now, {
+        _id: shift._id,
+        startImage: startImageUrl
+      }, true);
+
+      res.status(201).json({ 
+        message: "Shift started successfully", 
+        trip: shift // Keep the key name as 'trip' for API compatibility
+      });
+    } catch (error) {
+      console.error("Error in startShift callback:", error);
+      return res.status(500).json({
+        status: "error",
+        message: error.message || "Failed to start shift due to S3 upload or database issue."
       });
     }
-
-    const now = new Date();
-    let startImageUrl = null;
-    
-    if (req.file) {
-      const uploaded = await uploadToS3Buffer(
-        req.file,
-        process.env.AWS_S3_BUCKET_NAME,
-        "riderTripPic/start"
-      );
-      startImageUrl = uploaded.Location;
-    }
-
-    // Create new trip
-    const trip = await Trip.create({
-      rider: riderId,
-      date: now,
-      startKm: Number(startKm),
-      startImage: startImageUrl,
-      status: "started",
-    });
-
-    // Update daily summary with start info
-    await updateDailySummary(riderId, now, {
-      _id: trip._id,
-      startImage: startImageUrl
-    }, true);
-
-    res.status(201).json({ 
-      message: "Trip started successfully", 
-      trip 
-    });
   });
 });
 
-// PUT /trips/:tripId/end
-export const endTrip = catchAsync(async (req, res, next) => {
+// PUT /shifts/:shiftId/end
+export const endShift = catchAsync(async (req, res, next) => {
   uploadSingleImage(req, res, async (err) => {
     if (err) return res.status(400).json({ message: "Upload error", err });
 
-    const { tripId } = req.params;
-    const { endKm } = req.body;
-    
-    if (!tripId || endKm == null) {
-      return res.status(400).json({ message: "tripId and endKm are required" });
-    }
+    try {
+      const shiftId = req.params.shiftId || req.params.tripId; // Support both tripId and shiftId params
+      const { endKm } = req.body;
+      
+      if (!shiftId || endKm == null) {
+        return res.status(400).json({ message: "shiftId and endKm are required" });
+      }
 
-    // Find and validate trip
-    const trip = await Trip.findById(tripId);
-    if (!trip) return res.status(404).json({ message: "Trip not found" });
-    
-    if (trip.status !== "started") {
-      return res.status(400).json({ message: "Trip is not in started state" });
-    }
+      // Find and validate shift
+      const shift = await Shift.findById(shiftId);
+      if (!shift) return res.status(404).json({ message: "Shift not found" });
+      
+      if (shift.status !== "started") {
+        return res.status(400).json({ message: "Shift is not in started state" });
+      }
 
-    const numericEndKm = Number(endKm);
-    if (numericEndKm < trip.startKm) {
-      return res.status(400).json({ 
-        message: "endKm must be greater than or equal to startKm" 
+      // Check if the rider has an active uncompleted VRP Trip
+      const uncompletedVrpTrip = await VrpTrip.findOne({
+        riderId: shift.rider,
+        status: { $in: ["assigned", "in_progress"] }
+      });
+
+      if (uncompletedVrpTrip) {
+        return res.status(400).json({
+          status: "error",
+          message: "You cannot end your shift because you have uncompleted stops on your route. Please complete all pickups and deliveries first."
+        });
+      }
+
+      const numericEndKm = Number(endKm);
+      if (numericEndKm < shift.startKm) {
+        return res.status(400).json({ 
+          message: "endKm must be greater than or equal to startKm" 
+        });
+      }
+
+      // Upload end image if exists
+      let endImageUrl = null;
+      if (req.file) {
+        const uploaded = await uploadToS3Buffer(
+          req.file,
+          process.env.AWS_S3_BUCKET_NAME,
+          "riderTripPic/end"
+        );
+        endImageUrl = uploaded.Location;
+      }
+
+      const distance = numericEndKm - shift.startKm;
+
+      // Get the VRP Trip for distance comparison
+      const vrpTrip = shift.vrpTripId ? await VrpTrip.findById(shift.vrpTripId) : await VrpTrip.findOne({
+        riderId: shift.rider,
+        status: "completed"
+      }).sort({ updatedAt: -1 });
+
+      // Update shift
+      shift.endKm = numericEndKm;
+      shift.endImage = endImageUrl;
+      shift.distance = distance;
+      shift.status = "ended";
+      shift.actualDistance = distance;
+      if (vrpTrip) {
+        shift.optimizedDistance = vrpTrip.distanceKm || 0;
+        shift.distanceDiff = distance - (vrpTrip.distanceKm || 0);
+      }
+      await shift.save({ validateBeforeSave: false });
+
+      // Update user's total km
+      const user = await User.findByIdAndUpdate(
+        shift.rider, 
+        { $inc: { totalKm: distance } }, 
+        { new: true }
+      );
+
+      // Update daily summary
+      await updateDailySummary(
+        shift.rider, 
+        shift.date, 
+        {
+          _id: shift._id,
+          startKm: shift.startKm,
+          endKm: shift.endKm,
+          distance: shift.distance,
+          startImage: shift.startImage,
+          endImage: shift.endImage,
+          createdAt: shift.createdAt
+        }, 
+        false
+      );
+
+      res.status(200).json({ 
+        message: "Shift ended successfully", 
+        trip: shift, // Keep the key name as 'trip' for API compatibility
+        userTotalKm: user.totalKm
+      });
+    } catch (error) {
+      console.error("Error in endShift callback:", error);
+      return res.status(500).json({
+        status: "error",
+        message: error.message || "Failed to end shift due to S3 upload or database issue."
       });
     }
-
-    // Upload end image if exists
-    let endImageUrl = null;
-    if (req.file) {
-      const uploaded = await uploadToS3Buffer(
-        req.file,
-        process.env.AWS_S3_BUCKET_NAME,
-        "riderTripPic/end"
-      );
-      endImageUrl = uploaded.Location;
-    }
-
-    const distance = numericEndKm - trip.startKm;
-
-    // Update trip
-    trip.endKm = numericEndKm;
-    trip.endImage = endImageUrl;
-    trip.distance = distance;
-    trip.status = "ended";
-    await trip.save();
-
-    // Update user's total km
-    const user = await User.findByIdAndUpdate(
-      trip.rider, 
-      { $inc: { totalKm: distance } }, 
-      { new: true }
-    );
-
-    // Update daily summary
-    await updateDailySummary(
-      trip.rider, 
-      trip.date, 
-      {
-        _id: trip._id,
-        startKm: trip.startKm,
-        endKm: trip.endKm,
-        distance: trip.distance,
-        startImage: trip.startImage,
-        endImage: trip.endImage,
-        createdAt: trip.createdAt
-      }, 
-      false
-    );
-
-    res.status(200).json({ 
-      message: "Trip ended successfully", 
-      trip,
-      userTotalKm: user.totalKm
-    });
   });
 });
 
-// GET /trips/daily/:riderId?date=YYYY-MM-DD
-export const getDailySummary = catchAsync(async (req, res, next) => {
+// GET /shifts/daily/:riderId?date=YYYY-MM-DD
+export const getDailyShiftSummary = catchAsync(async (req, res, next) => {
   const { riderId } = req.params;
   const { date } = req.query;
   
@@ -230,19 +290,19 @@ export const getDailySummary = catchAsync(async (req, res, next) => {
     date: targetDate
   }).populate('trips.tripId', 'startKm endKm distance startImage endImage createdAt');
 
-  // Get all trips for the day
+  // Get all shifts for the day
   const startOfDay = new Date(targetDate);
   const endOfDay = new Date(targetDate);
   endOfDay.setDate(endOfDay.getDate() + 1);
 
-  const dailyTrips = await Trip.find({
+  const dailyShifts = await Shift.find({
     rider: riderId,
     date: { $gte: startOfDay, $lt: endOfDay },
     status: "ended"
   }).sort({ date: -1 });
 
   // Calculate total distance for the day
-  const totalDailyDistance = dailyTrips.reduce((sum, trip) => sum + trip.distance, 0);
+  const totalDailyDistance = dailyShifts.reduce((sum, s) => sum + s.distance, 0);
 
   res.status(200).json({
     date: targetDate,
@@ -253,14 +313,14 @@ export const getDailySummary = catchAsync(async (req, res, next) => {
       endImages: [],
       trips: []
     },
-    dailyTrips,
+    dailyTrips: dailyShifts, // Keep key name for API compatibility
     totalDailyDistance,
-    tripCount: dailyTrips.length
+    tripCount: dailyShifts.length
   });
 });
 
-// GET /trips/custom-summary/:riderId
-export const getCustomSummary = catchAsync(async (req, res, next) => {
+// GET /shifts/custom-summary/:riderId
+export const getCustomShiftSummary = catchAsync(async (req, res, next) => {
   const { riderId } = req.params;
   
   if (!riderId) {
@@ -278,17 +338,15 @@ export const getCustomSummary = catchAsync(async (req, res, next) => {
   let summaryType = "complete";
   
   if (user.lastResetAt) {
-    // Custom summary from lastResetAt to now
     startDate = user.lastResetAt;
     summaryType = "sinceReset";
   } else {
-    // If no reset, show all-time summary
-    startDate = new Date(0); // Beginning of time
+    startDate = new Date(0);
     summaryType = "allTime";
   }
 
-  // Get trips since last reset
-  const tripsSinceReset = await Trip.find({
+  // Get shifts since last reset
+  const shiftsSinceReset = await Shift.find({
     rider: riderId,
     date: { $gte: startDate },
     status: "ended"
@@ -304,8 +362,8 @@ export const getCustomSummary = catchAsync(async (req, res, next) => {
   }).sort({ date: -1 });
 
   // Calculate statistics
-  const totalDistance = tripsSinceReset.reduce((sum, trip) => sum + trip.distance, 0);
-  const tripCount = tripsSinceReset.length;
+  const totalDistance = shiftsSinceReset.reduce((sum, s) => sum + s.distance, 0);
+  const tripCount = shiftsSinceReset.length;
   const daysWithTrips = dailySummaries.length;
   
   // Calculate average per day
@@ -317,18 +375,18 @@ export const getCustomSummary = catchAsync(async (req, res, next) => {
     startDate: user.lastResetAt || "No reset date found",
     endDate: new Date(),
     totalDistance,
-    userTotalKm: user.totalKm, // Should match
+    userTotalKm: user.totalKm,
     tripCount,
     daysWithTrips,
     daysSinceReset: daysSinceReset > 0 ? daysSinceReset : "N/A",
     averagePerDay: avgPerDay.toFixed(2),
     dailySummaries,
-    trips: tripsSinceReset.slice(0, 50) // Limit trips for response size
+    trips: shiftsSinceReset.slice(0, 50) // Keep key name for API compatibility
   });
 });
 
-// GET /trips/:riderId?startDate=&endDate=&page=&limit=
-export const getTrips = catchAsync(async (req, res, next) => {
+// GET /shifts/:riderId?startDate=&endDate=&page=&limit=
+export const getShifts = catchAsync(async (req, res, next) => {
   const { riderId } = req.params;
   const { startDate, endDate, page = 1, limit = 20 } = req.query;
   
@@ -344,19 +402,19 @@ export const getTrips = catchAsync(async (req, res, next) => {
     if (startDate) query.date.$gte = new Date(startDate);
     if (endDate) {
       const end = new Date(endDate);
-      end.setDate(end.getDate() + 1); // Include the entire end date
+      end.setDate(end.getDate() + 1);
       query.date.$lt = end;
     }
   }
 
   const skip = (page - 1) * limit;
 
-  const [trips, total] = await Promise.all([
-    Trip.find(query)
+  const [shifts, total] = await Promise.all([
+    Shift.find(query)
       .sort({ date: -1 })
       .skip(skip)
       .limit(Number(limit)),
-    Trip.countDocuments(query)
+    Shift.countDocuments(query)
   ]);
 
   // Get user info
@@ -369,7 +427,7 @@ export const getTrips = catchAsync(async (req, res, next) => {
       totalKm: user.totalKm,
       lastResetAt: user.lastResetAt
     },
-    trips,
+    trips: shifts, // Keep key name for API compatibility
     total,
     page: Number(page),
     limit: Number(limit),
@@ -377,8 +435,8 @@ export const getTrips = catchAsync(async (req, res, next) => {
   });
 });
 
-// POST /trips/reset/:riderId
-export const resetTotalKm = catchAsync(async (req, res, next) => {
+// POST /shifts/reset/:riderId
+export const resetShiftTotalKm = catchAsync(async (req, res, next) => {
   const { riderId } = req.params;
   
   if (!riderId) {
@@ -409,8 +467,8 @@ export const resetTotalKm = catchAsync(async (req, res, next) => {
   });
 });
 
-// GET /trips/monthly/:riderId?year=&month=
-export const getMonthlySummary = catchAsync(async (req, res, next) => {
+// GET /shifts/monthly/:riderId?year=&month=
+export const getMonthlyShiftSummary = catchAsync(async (req, res, next) => {
   const { riderId } = req.params;
   const { year, month } = req.query;
   
@@ -447,22 +505,22 @@ export const getMonthlySummary = catchAsync(async (req, res, next) => {
   });
 });
 
-// GET /trips/active/:riderId
-export const getActiveTrip = catchAsync(async (req, res) => {
+// GET /shifts/active/:riderId
+export const getActiveShift = catchAsync(async (req, res) => {
   const { riderId } = req.params;
 
   if (!riderId) {
     return res.status(400).json({ message: "riderId is required" });
   }
 
-  const activeTrip = await Trip.findOne({
+  const activeShift = await Shift.findOne({
     rider: riderId,
     status: "started",
   }).sort({ createdAt: -1 });
 
-  if (!activeTrip) {
+  if (!activeShift) {
     return res.status(200).json({
-      hasActiveTrip: false,
+      hasActiveTrip: false, // Keep key name for API compatibility
       trip: null,
     });
   }
@@ -470,16 +528,17 @@ export const getActiveTrip = catchAsync(async (req, res) => {
   res.status(200).json({
     hasActiveTrip: true,
     trip: {
-      _id: activeTrip._id,
-      startKm: activeTrip.startKm,
-      startImage: activeTrip.startImage,
-      startedAt: activeTrip.createdAt,
-      date: activeTrip.date,
+      _id: activeShift._id,
+      startKm: activeShift.startKm,
+      startImage: activeShift.startImage,
+      startedAt: activeShift.createdAt,
+      date: activeShift.date,
     },
   });
 });
 
-export const getRidersSummary = catchAsync(async (req, res, next) => {
+// GET /shifts/riders-summary
+export const getRidersShiftSummary = catchAsync(async (req, res, next) => {
   const {
     date = new Date().toISOString().split("T")[0],
     page = 1,

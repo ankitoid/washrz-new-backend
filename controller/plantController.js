@@ -3,12 +3,42 @@ import mongoose from "mongoose";
 import Pickup from "../models/pickupSchema.js";
 import Plant from "../models/plantSchema.js";
 import User from "../models/userModel.js";
+import Batch from "../models/Batch.js";
+import Roster from "../models/Roster.js";
+import Trip from "../models/Trip.js";
 import cron from "node-cron";
 import fcmService from "../services/fcmService.js";
 import RiderLocation from "../models/riderLocationSchema.js";
 import { createNotification } from "../controller/notificationController.js";
 import { createCustomerNotification } from "./customerNotificationController.js";
 import customerFcmService from "../services/customerFcmService.js";
+
+const unlinkFromBatch = async (stopId, stopType) => {
+  try {
+    const query = stopType === "pickup" ? { pickupIds: stopId } : { orderIds: stopId };
+    const batch = await Batch.findOne(query);
+    if (batch) {
+      console.log(`[unlinkFromBatch] Found stop ${stopId} in batch ${batch._id}. Unlinking...`);
+      if (stopType === "pickup") {
+        batch.pickupIds = batch.pickupIds.filter(id => id.toString() !== stopId.toString());
+      } else {
+        batch.orderIds = batch.orderIds.filter(id => id.toString() !== stopId.toString());
+      }
+      batch.status = "created";
+      batch.selectedRosterId = null;
+      await batch.save();
+
+      // Wipe associated VRP rosters and trips since the batch inputs changed
+      await Promise.all([
+        Roster.deleteMany({ batchId: batch._id }),
+        Trip.deleteMany({ batchId: batch._id })
+      ]);
+      console.log(`[unlinkFromBatch] Successfully unlinked stop and cleared old VRP results for batch ${batch._id}.`);
+    }
+  } catch (err) {
+    console.error("[unlinkFromBatch] Error unlinking stop from batch:", err);
+  }
+};
 
 // Create a new plant
 export const addPlant = async (req, res) => {
@@ -275,6 +305,10 @@ export const assignRider = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    // Unlink order from batch and reset VRP rosters/trips
+    await unlinkFromBatch(orderId, "delivery");
+    order.batchId = null;
+
     if (!order.assignedRider || order.assignedRider === null) {
       order.assignedRider = {};
     }
@@ -287,7 +321,7 @@ export const assignRider = async (req, res) => {
       assignedAt: new Date(),
     };
 
-    await order.save();
+    await order.save({ validateBeforeSave: false });
     console.log(
       `🔄 Assigning rider ${riderName} (${riderId}) to order ${orderId}`,
     );
@@ -373,6 +407,10 @@ export const assignPickupRider = async (req, res) => {
       return res.status(404).json({ message: "Pickup not found" });
     }
 
+    // Unlink pickup from batch and reset VRP rosters/trips
+    await unlinkFromBatch(orderId, "pickup");
+    pickup.batchId = null;
+
     if (!pickup.assignedRider || pickup.assignedRider === null) {
       pickup.assignedRider = {};
     }
@@ -386,7 +424,7 @@ export const assignPickupRider = async (req, res) => {
       assignedAt: new Date(),
     };
 
-    await pickup.save();
+    await pickup.save({ validateBeforeSave: false });
 
     // req.socket.emit("assignedPickup", { pickup, riderName });
     req.socket.emitToAdmin("assignedPickup", { pickup, riderName });
@@ -488,6 +526,10 @@ export const assignRiderUnified = async (req, res) => {
         return res.status(404).json({ message: "Order not found" });
       }
 
+      // Unlink order from batch and reset VRP rosters/trips
+      await unlinkFromBatch(order._id, "delivery");
+      order.batchId = null;
+
       if (!order.assignedRider || order.assignedRider === null) {
         order.assignedRider = {};
       }
@@ -501,7 +543,7 @@ export const assignRiderUnified = async (req, res) => {
         assignedAt: new Date(),
       };
 
-      await order.save();
+      await order.save({ validateBeforeSave: false });
 
       console.log(`🔄 Assigning rider ${riderName} (${riderId}) to order ${orderId}`);
 
@@ -564,6 +606,10 @@ export const assignRiderUnified = async (req, res) => {
         return res.status(404).json({ message: "Pickup not found" });
       }
 
+      // Unlink pickup from batch and reset VRP rosters/trips
+      await unlinkFromBatch(orderId, "pickup");
+      pickup.batchId = null;
+
       if (!pickup.assignedRider || pickup.assignedRider === null) {
         pickup.assignedRider = {};
       }
@@ -577,7 +623,7 @@ export const assignRiderUnified = async (req, res) => {
         assignedAt: new Date(),
       };
 
-      await pickup.save();
+      await pickup.save({ validateBeforeSave: false });
 
       // Socket notifications
       req.socket.emitToAdmin("assignedPickup", { pickup, riderName });

@@ -1,6 +1,9 @@
 import Pickup from "../models/pickupSchema.js";
 import { createCustomerNotification } from "../controller/customerNotificationController.js";
 import customerFcmService from "../services/customerFcmService.js";
+import Batch from "../models/Batch.js";
+import Roster from "../models/Roster.js";
+import Trip from "../models/Trip.js";
 
 export const assignPickupToRider = async ({
   pickupId,
@@ -15,6 +18,20 @@ export const assignPickupToRider = async ({
     throw new Error("Pickup not found");
   }
 
+  // Unlink pickup from batch and reset VRP rosters/trips
+  const batch = await Batch.findOne({ pickupIds: pickupId });
+  if (batch) {
+    batch.pickupIds = batch.pickupIds.filter(id => id.toString() !== pickupId.toString());
+    batch.status = "created";
+    batch.selectedRosterId = null;
+    await batch.save();
+    await Promise.all([
+      Roster.deleteMany({ batchId: batch._id }),
+      Trip.deleteMany({ batchId: batch._id })
+    ]);
+  }
+  pickup.batchId = null;
+
   if (!pickup.assignedRider || pickup.assignedRider === null) {
     pickup.assignedRider = {};
   }
@@ -28,7 +45,7 @@ export const assignPickupToRider = async ({
     assignedAt: new Date(),
   };
 
-  await pickup.save();
+  await pickup.save({ validateBeforeSave: false });
 
   if (riderId) {
     socket?.emitToRider?.(riderId, "riderAssignedPickup", { pickup });

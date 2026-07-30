@@ -571,7 +571,7 @@ export const deleteTrip = async (req, res) => {
           if (pDoc) {
             pDoc.PickupStatus = "pending";
             pDoc.assignedRider = { pickup: null };
-            await pDoc.save();
+            await pDoc.save({ validateBeforeSave: false });
           }
         } else if (stop.type === "delivery") {
           const oDoc = await Order.findById(stop.id);
@@ -585,7 +585,7 @@ export const deleteTrip = async (req, res) => {
               pickup: oDoc.assignedRider?.pickup || null,
               delivery: null
             };
-            await oDoc.save();
+            await oDoc.save({ validateBeforeSave: false });
           }
         }
       }

@@ -441,7 +441,7 @@ export const removeLocationsFromBatch = async (req, res) => {
           pDoc.batchId = null;
           pDoc.PickupStatus = "pending";
           pDoc.assignedRider = { pickup: null };
-          await pDoc.save();
+          await pDoc.save({ validateBeforeSave: false });
         }
       }
     }
@@ -459,7 +459,7 @@ export const removeLocationsFromBatch = async (req, res) => {
             pickup: oDoc.assignedRider?.pickup || null,
             delivery: null
           };
-          await oDoc.save();
+          await oDoc.save({ validateBeforeSave: false });
         }
       }
     }
@@ -505,7 +505,7 @@ export const deleteBatch = async (req, res) => {
           pDoc.batchId = null;
           pDoc.PickupStatus = "pending";
           pDoc.assignedRider = { pickup: null };
-          await pDoc.save();
+          await pDoc.save({ validateBeforeSave: false });
         }
       }
     }
@@ -525,7 +525,7 @@ export const deleteBatch = async (req, res) => {
             pickup: oDoc.assignedRider?.pickup || null,
             delivery: null
           };
-          await oDoc.save();
+          await oDoc.save({ validateBeforeSave: false });
         }
       }
     }

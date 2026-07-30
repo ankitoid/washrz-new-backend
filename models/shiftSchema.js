@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const tripSchema = new mongoose.Schema(
+const shiftSchema = new mongoose.Schema(
   {
     rider: { 
       type: mongoose.Schema.Types.ObjectId, 
@@ -37,8 +37,25 @@ const tripSchema = new mongoose.Schema(
       enum: ["started", "ended"],
       default: "started",
     },
+    vrpTripId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Trip", // Links to VRP Route/Trip (collection: vrp_trips)
+      default: null
+    },
+    actualDistance: { 
+      type: Number, 
+      default: 0 
+    },
+    optimizedDistance: { 
+      type: Number, 
+      default: 0 
+    },
+    distanceDiff: { 
+      type: Number, 
+      default: 0 
+    },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "shifts" }
 );
 
-export default mongoose.model("Trip", tripSchema);
+export default mongoose.model("Shift", shiftSchema);
