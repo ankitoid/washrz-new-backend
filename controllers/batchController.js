@@ -7,6 +7,7 @@ import User from "../models/userModel.js";
 import { runOptimization as optimizeBatchService } from "../services/optimizerService.js";
 import { DEFAULT_CONSTRAINTS } from "../config/constants.js";
 import { geocodeWithOla } from "../services/olaMapsService.js";
+import Shift from "../models/shiftSchema.js";
 
 /**
  * @desc   Create a new VRP batch
@@ -424,6 +425,35 @@ export const removeLocationsFromBatch = async (req, res) => {
       });
     }
 
+    // Check if any VRP Trip in this batch is active/completed, or if any assigned rider has started their shift
+    const vrpTrips = await Trip.find({ batchId: id });
+    if (vrpTrips && vrpTrips.length > 0) {
+      const activeOrDoneTrip = vrpTrips.find(t => ["in_progress", "completed"].includes(t.status));
+      if (activeOrDoneTrip) {
+        return res.status(400).json({
+          status: "error",
+          message: "Cannot modify this batch because one of its routes is already in progress or completed."
+        });
+      }
+
+      const assignedRiderIds = vrpTrips
+        .map(t => t.riderId)
+        .filter(rid => rid !== null && rid !== undefined);
+
+      if (assignedRiderIds.length > 0) {
+        const activeShift = await Shift.findOne({
+          rider: { $in: assignedRiderIds },
+          status: "started"
+        });
+        if (activeShift) {
+          return res.status(400).json({
+            status: "error",
+            message: "Cannot modify this batch because an assigned rider has already started their shift."
+          });
+        }
+      }
+    }
+
     // Remove matching entries
     batch.pickupIds = batch.pickupIds.filter((pid) => !pickupIds.includes(pid.toString()));
     batch.orderIds = batch.orderIds.filter((oid) => !orderIds.includes(oid.toString()));
@@ -495,6 +525,35 @@ export const deleteBatch = async (req, res) => {
         status: "error",
         message: `Batch with ID ${id} not found`,
       });
+    }
+
+    // Check if any VRP Trip in this batch is active/completed, or if any assigned rider has started their shift
+    const vrpTrips = await Trip.find({ batchId: id });
+    if (vrpTrips && vrpTrips.length > 0) {
+      const activeOrDoneTrip = vrpTrips.find(t => ["in_progress", "completed"].includes(t.status));
+      if (activeOrDoneTrip) {
+        return res.status(400).json({
+          status: "error",
+          message: "Cannot delete this batch because one of its routes is already in progress or completed."
+        });
+      }
+
+      const assignedRiderIds = vrpTrips
+        .map(t => t.riderId)
+        .filter(rid => rid !== null && rid !== undefined);
+
+      if (assignedRiderIds.length > 0) {
+        const activeShift = await Shift.findOne({
+          rider: { $in: assignedRiderIds },
+          status: "started"
+        });
+        if (activeShift) {
+          return res.status(400).json({
+            status: "error",
+            message: "Cannot delete this batch because an assigned rider has already started their shift."
+          });
+        }
+      }
     }
 
     // Revert batch association and status on all associated pickups

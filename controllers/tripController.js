@@ -4,6 +4,7 @@ import Roster from "../models/Roster.js";
 import User from "../models/userModel.js";
 import pickup from "../models/pickupSchema.js";
 import Order from "../models/orderSchema.js";
+import Shift from "../models/shiftSchema.js";
 
 const populateTripStops = async (trips) => {
   const isArray = Array.isArray(trips);
@@ -344,6 +345,28 @@ export const assignRider = async (req, res) => {
       });
     }
 
+    // Block reassignment if the trip is already active or completed
+    if (["in_progress", "completed"].includes(trip.status)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Cannot reassign this route because it is already in progress or completed."
+      });
+    }
+
+    // Block reassignment if the currently assigned rider has already started their shift
+    if (trip.riderId) {
+      const activeShift = await Shift.findOne({
+        rider: trip.riderId,
+        status: "started"
+      });
+      if (activeShift) {
+        return res.status(400).json({
+          status: "error",
+          message: "Cannot reassign this route because the currently assigned rider has already started their shift."
+        });
+      }
+    }
+
     // Validation: Ensure the rider does not have any other active VRP trip (assigned or in_progress)
     const activeTrip = await Trip.findOne({
       riderId,
@@ -561,6 +584,28 @@ export const deleteTrip = async (req, res) => {
         status: "error",
         message: `Trip with ID ${id} not found`,
       });
+    }
+
+    // Block deletion if the trip is active or completed
+    if (["in_progress", "completed"].includes(trip.status)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Cannot delete this trip because it is already in progress or completed."
+      });
+    }
+
+    // Block deletion if the assigned rider has already started their shift
+    if (trip.riderId) {
+      const activeShift = await Shift.findOne({
+        rider: trip.riderId,
+        status: "started"
+      });
+      if (activeShift) {
+        return res.status(400).json({
+          status: "error",
+          message: "Cannot delete this trip because the assigned rider has already started their shift."
+        });
+      }
     }
 
     // Revert stops in this VRP trip to unassigned states (maintains batchId association)
