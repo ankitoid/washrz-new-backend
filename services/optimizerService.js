@@ -89,8 +89,33 @@ export const buildLocations = async (pickupIds = [], orderIds = []) => {
     });
 
     for (const o of orders) {
-      const lat = o.orderLocation?.latitude ?? o.lat;
-      const lng = o.orderLocation?.longitude ?? o.lng;
+      let lat = o.orderLocation?.latitude ?? o.lat;
+      let lng = o.orderLocation?.longitude ?? o.lng;
+
+      if (lat === undefined || lat === null || lng === undefined || lng === null) {
+        const address = o.address;
+        if (address) {
+          console.log(`[optimizerService] Geocoding missing coordinates for Order ID ${o._id} (Order No: ${o.order_id}): "${address}"`);
+          try {
+            const coords = await geocodeWithOla(address);
+            lat = coords.lat;
+            lng = coords.lng;
+
+            // Update database document
+            o.orderLocation = {
+              latitude: lat,
+              longitude: lng
+            };
+            await o.save({ validateBeforeSave: false });
+            console.log(`[optimizerService] Order ID ${o._id} (Order No: ${o.order_id}) Geocoded successfully and updated in database: ${lat}, ${lng}`);
+          } catch (err) {
+            console.error(`[optimizerService] Geocoding failed for Order ID ${o._id} (Order No: ${o.order_id}):`, err.message);
+          }
+        } else {
+          console.warn(`[optimizerService] Order ID ${o._id} (Order No: ${o.order_id}) has no address to geocode`);
+        }
+      }
+
       if (lat !== undefined && lat !== null && lng !== undefined && lng !== null) {
         let totalWeight = 0;
         const itemTypesSet = new Set();
@@ -122,6 +147,8 @@ export const buildLocations = async (pickupIds = [], orderIds = []) => {
           isDeleted: o.isDeleted || false,
           isRescheduled: o.isRescheduled || false,
         });
+      } else {
+        console.warn(`[optimizerService] Skipping Order ID ${o._id} (Order No: ${o.order_id}) due to missing coordinates`);
       }
     }
   }

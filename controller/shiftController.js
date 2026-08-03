@@ -95,6 +95,10 @@ export const startShift = catchAsync(async (req, res, next) => {
         return res.status(400).json({ message: "riderId and startKm are required" });
       }
 
+      if (!req.file) {
+        return res.status(400).json({ message: "Odometer image is required to start shift" });
+      }
+
       // Check if rider has an active shift
       const activeShift = await Shift.findOne({ 
         rider: riderId, 
@@ -111,14 +115,12 @@ export const startShift = catchAsync(async (req, res, next) => {
       const now = new Date();
       let startImageUrl = null;
       
-      if (req.file) {
-        const uploaded = await uploadToS3Buffer(
-          req.file,
-          process.env.AWS_S3_BUCKET_NAME,
-          "riderTripPic/start"
-        );
-        startImageUrl = uploaded.Location;
-      }
+      const uploaded = await uploadToS3Buffer(
+        req.file,
+        process.env.AWS_S3_BUCKET_NAME,
+        "riderTripPic/start"
+      );
+      startImageUrl = uploaded.Location;
 
       // Check if there is an active VRP Trip assigned to this rider
       const activeVrpTrip = await VrpTrip.findOne({
@@ -170,10 +172,14 @@ export const endShift = catchAsync(async (req, res, next) => {
 
     try {
       const shiftId = req.params.shiftId || req.params.tripId; // Support both tripId and shiftId params
-      const { endKm } = req.body;
+       const { endKm } = req.body;
       
       if (!shiftId || endKm == null) {
         return res.status(400).json({ message: "shiftId and endKm are required" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: "Odometer image is required to end shift" });
       }
 
       // Find and validate shift
@@ -204,16 +210,14 @@ export const endShift = catchAsync(async (req, res, next) => {
         });
       }
 
-      // Upload end image if exists
+      // Upload end image
       let endImageUrl = null;
-      if (req.file) {
-        const uploaded = await uploadToS3Buffer(
-          req.file,
-          process.env.AWS_S3_BUCKET_NAME,
-          "riderTripPic/end"
-        );
-        endImageUrl = uploaded.Location;
-      }
+      const uploaded = await uploadToS3Buffer(
+        req.file,
+        process.env.AWS_S3_BUCKET_NAME,
+        "riderTripPic/end"
+      );
+      endImageUrl = uploaded.Location;
 
       const distance = numericEndKm - shift.startKm;
 

@@ -322,21 +322,6 @@ export const assignRider = async (req, res) => {
     const { tripId } = req.params;
     const { riderId } = req.body;
 
-    if (!riderId) {
-      return res.status(400).json({
-        status: "error",
-        message: "riderId (User ID) is required",
-      });
-    }
-
-    const riderUser = await User.findById(riderId);
-    if (!riderUser) {
-      return res.status(404).json({
-        status: "error",
-        message: `User (Rider) with ID ${riderId} not found`,
-      });
-    }
-
     const trip = await Trip.findById(tripId);
     if (!trip) {
       return res.status(404).json({
@@ -345,15 +330,15 @@ export const assignRider = async (req, res) => {
       });
     }
 
-    // Block reassignment if the trip is already active or completed
+    // Block reassignment/unassignment if the trip is already active or completed
     if (["in_progress", "completed"].includes(trip.status)) {
       return res.status(400).json({
         status: "error",
-        message: "Cannot reassign this route because it is already in progress or completed."
+        message: "Cannot reassign or unassign this route because it is already in progress or completed."
       });
     }
 
-    // Block reassignment if the currently assigned rider has already started their shift
+    // Block reassignment/unassignment if the currently assigned rider has already started their shift
     if (trip.riderId) {
       const activeShift = await Shift.findOne({
         rider: trip.riderId,
@@ -362,9 +347,58 @@ export const assignRider = async (req, res) => {
       if (activeShift) {
         return res.status(400).json({
           status: "error",
-          message: "Cannot reassign this route because the currently assigned rider has already started their shift."
+          message: "Cannot reassign or unassign this route because the currently assigned rider has already started their shift."
         });
       }
+    }
+
+    // 1. Handle Unassignment case
+    if (!riderId) {
+      trip.riderId = null;
+      trip.status = "planned";
+      trip.assignedAt = null;
+      await trip.save();
+
+      // Propagate unassignment to pickups and delivery orders in the stops list
+      if (trip.stops && Array.isArray(trip.stops)) {
+        for (const stop of trip.stops) {
+          if (stop.type === "pickup") {
+            await pickup.findByIdAndUpdate(stop.id, {
+              PickupStatus: "created",
+              riderName: null,
+              assignedRider: { pickup: null }
+            });
+          } else if (stop.type === "delivery") {
+            const oDoc = await Order.findById(stop.id);
+            if (oDoc) {
+              oDoc.status = "created";
+              oDoc.riderId = null;
+              oDoc.riderName = null;
+              oDoc.riderContact = null;
+              oDoc.riderAssignedAt = null;
+              if (oDoc.assignedRider) {
+                oDoc.assignedRider.delivery = null;
+              }
+              await oDoc.save({ validateBeforeSave: false });
+            }
+          }
+        }
+      }
+
+      return res.status(200).json({
+        status: "success",
+        message: "Trip unassigned and stop assignments reverted successfully.",
+        data: trip,
+      });
+    }
+
+    // 2. Handle Assignment case
+    const riderUser = await User.findById(riderId);
+    if (!riderUser) {
+      return res.status(404).json({
+        status: "error",
+        message: `User (Rider) with ID ${riderId} not found`,
+      });
     }
 
     // Validation: Ensure the rider does not have any other active VRP trip (assigned or in_progress)
@@ -381,8 +415,14 @@ export const assignRider = async (req, res) => {
       });
     }
 
+    // Check if the target rider has already started their shift
+    const targetActiveShift = await Shift.findOne({
+      rider: riderId,
+      status: "started"
+    });
+
     trip.riderId = riderId;
-    trip.status = "assigned";
+    trip.status = targetActiveShift ? "in_progress" : "assigned";
     trip.assignedAt = new Date();
     await trip.save();
 
@@ -594,18 +634,12 @@ export const deleteTrip = async (req, res) => {
       });
     }
 
-    // Block deletion if the assigned rider has already started their shift
+    // Block deletion if the trip has an assigned rider
     if (trip.riderId) {
-      const activeShift = await Shift.findOne({
-        rider: trip.riderId,
-        status: "started"
+      return res.status(400).json({
+        status: "error",
+        message: "Cannot delete this trip because it is already assigned to a rider. Please unassign the rider first."
       });
-      if (activeShift) {
-        return res.status(400).json({
-          status: "error",
-          message: "Cannot delete this trip because the assigned rider has already started their shift."
-        });
-      }
     }
 
     // Revert stops in this VRP trip to unassigned states (maintains batchId association)

@@ -9,6 +9,45 @@ import { DEFAULT_CONSTRAINTS } from "../config/constants.js";
 import { geocodeWithOla } from "../services/olaMapsService.js";
 import Shift from "../models/shiftSchema.js";
 
+const checkIfBatchIsLocked = async (batchId) => {
+  const vrpTrips = await Trip.find({ batchId });
+  if (vrpTrips && vrpTrips.length > 0) {
+    const activeOrDoneTrip = vrpTrips.find(t => ["in_progress", "completed"].includes(t.status));
+    if (activeOrDoneTrip) {
+      return {
+        isLocked: true,
+        message: "Cannot modify this batch because one of its routes is already in progress or completed."
+      };
+    }
+
+    const assignedTrip = vrpTrips.find(t => t.riderId !== null && t.riderId !== undefined);
+    if (assignedTrip) {
+      return {
+        isLocked: true,
+        message: "Cannot modify this batch because one of its routes has already been assigned to a rider."
+      };
+    }
+
+    const assignedRiderIds = vrpTrips
+      .map(t => t.riderId)
+      .filter(rid => rid !== null && rid !== undefined);
+
+    if (assignedRiderIds.length > 0) {
+      const activeShift = await Shift.findOne({
+        rider: { $in: assignedRiderIds },
+        status: "started"
+      });
+      if (activeShift) {
+        return {
+          isLocked: true,
+          message: "Cannot modify this batch because an assigned rider has already started their shift."
+        };
+      }
+    }
+  }
+  return { isLocked: false };
+};
+
 /**
  * @desc   Create a new VRP batch
  * @route  POST /api/v1/batches
@@ -88,12 +127,30 @@ export const getBatches = async (req, res) => {
 
     const total = await Batch.countDocuments(filter);
 
+    const batchesData = [];
+    for (const b of batches) {
+      const bObj = b.toObject();
+      const lockStatus = await checkIfBatchIsLocked(b._id);
+      bObj.hasLockedTrips = lockStatus.isLocked;
+
+      // Compute detailed trip statistics
+      const vrpTrips = await Trip.find({ batchId: b._id });
+      bObj.tripStats = {
+        totalTrips: vrpTrips.length,
+        assignedTrips: vrpTrips.filter(t => t.riderId !== null && t.riderId !== undefined).length,
+        inProgressTrips: vrpTrips.filter(t => t.status === "in_progress").length,
+        completedTrips: vrpTrips.filter(t => t.status === "completed").length
+      };
+
+      batchesData.push(bObj);
+    }
+
     return res.status(200).json({
       status: "success",
-      count: batches.length,
+      count: batchesData.length,
       total,
       page: parseInt(page, 10),
-      data: batches,
+      data: batchesData,
     });
   } catch (error) {
     console.error("[batchController.getBatches] Error:", error);
@@ -136,10 +193,22 @@ export const getBatchById = async (req, res) => {
         .sort({ routeIndex: 1 });
     }
 
+    const lockStatus = await checkIfBatchIsLocked(id);
+    const batchObj = batch.toObject();
+    batchObj.hasLockedTrips = lockStatus.isLocked;
+
+    const vrpTrips = await Trip.find({ batchId: id });
+    batchObj.tripStats = {
+      totalTrips: vrpTrips.length,
+      assignedTrips: vrpTrips.filter(t => t.riderId !== null && t.riderId !== undefined).length,
+      inProgressTrips: vrpTrips.filter(t => t.status === "in_progress").length,
+      completedTrips: vrpTrips.filter(t => t.status === "completed").length
+    };
+
     return res.status(200).json({
       status: "success",
       data: {
-        batch,
+        batch: batchObj,
         rosters,
         selectedRoster: batch.selectedRosterId,
         trips,
@@ -168,6 +237,14 @@ export const updateConstraints = async (req, res) => {
       return res.status(404).json({
         status: "error",
         message: `Batch with ID ${id} not found`,
+      });
+    }
+
+    const lockStatus = await checkIfBatchIsLocked(id);
+    if (lockStatus.isLocked) {
+      return res.status(400).json({
+        status: "error",
+        message: lockStatus.message
       });
     }
 
@@ -208,6 +285,14 @@ export const runOptimization = async (req, res) => {
       return res.status(404).json({
         status: "error",
         message: `Batch with ID ${id} not found`,
+      });
+    }
+
+    const lockStatus = await checkIfBatchIsLocked(id);
+    if (lockStatus.isLocked) {
+      return res.status(400).json({
+        status: "error",
+        message: lockStatus.message
       });
     }
 
@@ -275,6 +360,14 @@ export const selectRoster = async (req, res) => {
       return res.status(404).json({
         status: "error",
         message: `Batch with ID ${id} not found`,
+      });
+    }
+
+    const lockStatus = await checkIfBatchIsLocked(id);
+    if (lockStatus.isLocked) {
+      return res.status(400).json({
+        status: "error",
+        message: lockStatus.message
       });
     }
 
@@ -363,6 +456,14 @@ export const addLocationsToBatch = async (req, res) => {
       });
     }
 
+    const lockStatus = await checkIfBatchIsLocked(id);
+    if (lockStatus.isLocked) {
+      return res.status(400).json({
+        status: "error",
+        message: lockStatus.message
+      });
+    }
+
     // Add unique entries
     const existingPickupIds = batch.pickupIds.map((pid) => pid.toString());
     pickupIds.forEach((pid) => {
@@ -425,33 +526,12 @@ export const removeLocationsFromBatch = async (req, res) => {
       });
     }
 
-    // Check if any VRP Trip in this batch is active/completed, or if any assigned rider has started their shift
-    const vrpTrips = await Trip.find({ batchId: id });
-    if (vrpTrips && vrpTrips.length > 0) {
-      const activeOrDoneTrip = vrpTrips.find(t => ["in_progress", "completed"].includes(t.status));
-      if (activeOrDoneTrip) {
-        return res.status(400).json({
-          status: "error",
-          message: "Cannot modify this batch because one of its routes is already in progress or completed."
-        });
-      }
-
-      const assignedRiderIds = vrpTrips
-        .map(t => t.riderId)
-        .filter(rid => rid !== null && rid !== undefined);
-
-      if (assignedRiderIds.length > 0) {
-        const activeShift = await Shift.findOne({
-          rider: { $in: assignedRiderIds },
-          status: "started"
-        });
-        if (activeShift) {
-          return res.status(400).json({
-            status: "error",
-            message: "Cannot modify this batch because an assigned rider has already started their shift."
-          });
-        }
-      }
+    const lockStatus = await checkIfBatchIsLocked(id);
+    if (lockStatus.isLocked) {
+      return res.status(400).json({
+        status: "error",
+        message: lockStatus.message
+      });
     }
 
     // Remove matching entries
@@ -527,33 +607,12 @@ export const deleteBatch = async (req, res) => {
       });
     }
 
-    // Check if any VRP Trip in this batch is active/completed, or if any assigned rider has started their shift
-    const vrpTrips = await Trip.find({ batchId: id });
-    if (vrpTrips && vrpTrips.length > 0) {
-      const activeOrDoneTrip = vrpTrips.find(t => ["in_progress", "completed"].includes(t.status));
-      if (activeOrDoneTrip) {
-        return res.status(400).json({
-          status: "error",
-          message: "Cannot delete this batch because one of its routes is already in progress or completed."
-        });
-      }
-
-      const assignedRiderIds = vrpTrips
-        .map(t => t.riderId)
-        .filter(rid => rid !== null && rid !== undefined);
-
-      if (assignedRiderIds.length > 0) {
-        const activeShift = await Shift.findOne({
-          rider: { $in: assignedRiderIds },
-          status: "started"
-        });
-        if (activeShift) {
-          return res.status(400).json({
-            status: "error",
-            message: "Cannot delete this batch because an assigned rider has already started their shift."
-          });
-        }
-      }
+    const lockStatus = await checkIfBatchIsLocked(id);
+    if (lockStatus.isLocked) {
+      return res.status(400).json({
+        status: "error",
+        message: lockStatus.message
+      });
     }
 
     // Revert batch association and status on all associated pickups
