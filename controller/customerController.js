@@ -284,11 +284,6 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
       morning_delivery,
       isHeavy,
       bookingId,
-      // ✅ NEW //  Format:
-      //  [
-      //    { "itemId": "catalogItemId", "quantity": 2 },
-      //    { "itemId": "catalogItemId2", "quantity": 1 }
-      //  ]
     } = req.body;
 
     console.log("REQ BODY 👉", req.body);
@@ -303,95 +298,12 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     }
 
     const name = lastName ? `${firstName} ${lastName}` : firstName;
-    // -------------------------
-    // Validate Items (if provided)
-    // -------------------------
-    let processedItems = [];
-
-    if (items && Array.isArray(items) && items.length > 0) {
-      // quantity validation
-      if (items.some((i) => !i.itemId || !i.quantity || i.quantity < 1)) {
-        return res.status(400).json({
-          message: "Invalid items payload",
-        });
-      }
-
-      const itemIds = items.map((i) => i.itemId);
-
-      const catalogItems = await CatalogItem.find({
-        _id: { $in: itemIds },
-        isActive: true,
-      });
-
-      if (catalogItems.length !== itemIds.length) {
-        return res.status(400).json({
-          message: "Some items are invalid or inactive",
-        });
-      }
-
-      processedItems = items.map((reqItem) => {
-        const catalogItem = catalogItems.find(
-          (ci) => ci._id.toString() === reqItem.itemId,
-        );
-
-        return {
-          itemId: catalogItem._id,
-          label: catalogItem.label, // snapshot
-          price: catalogItem.price, // snapshot
-          unit: catalogItem.unit, // snapshot
-          quantity: reqItem.quantity,
-        };
-      });
-    }
-
-    // -------------------------
-    // Fetch addresses
-    // -------------------------
-    const addrRes = await fetch(
-      `https://customer.shiptos.com/v1/addresses?customerid=${appCustomerId}`,
-    );
-
-    const addrData = await addrRes.json();
-
-    console.log("ADDR API RESPONSE 👉", addrData);
-
-    const addresses = addrData?.results;
-
-    if (!Array.isArray(addresses) || addresses.length === 0) {
-      return res.status(404).json({
-        message: "No address found for this customer",
-      });
-    }
-
-    // -------------------------
-    // Map pickup & delivery addresses
-    // -------------------------
-    const pickupAddress = addresses.find(
-      (addr) => addr.id === tempPickupAdresssId,
-    );
-
-    const deliveryAddress = addresses.find(
-      (addr) => addr.id === tempDeliveryAddressId,
-    );
-
-    if (!pickupAddress) {
-      return res.status(400).json({
-        message: "Invalid pickup address ID",
-      });
-    }
-
-    if (!deliveryAddress) {
-      return res.status(400).json({
-        message: "Invalid delivery address ID",
-      });
-    }
 
     // -------------------------
     // Helper: build full address
     // -------------------------
     const buildFullAddress = (address) => {
       const keys = ["addressLine1", "landmark", "city", "state", "pincode"];
-
       return keys
         .filter((key) => address[key])
         .map((key) => address[key])
@@ -399,117 +311,167 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
     };
 
     // -------------------------
-    // Calculate total (optional)
+    // 1. Fetch addresses and validate items in parallel
+    // -------------------------
+    const fetchAddresses = async () => {
+      const addrRes = await fetch(
+        `https://customer.shiptos.com/v1/addresses?customerid=${appCustomerId}`
+      );
+      if (!addrRes.ok) {
+        throw new Error("Failed to fetch addresses");
+      }
+      const addrData = await addrRes.json();
+      console.log("ADDR API RESPONSE 👉", addrData);
+      return addrData?.results || [];
+    };
+
+    const fetchAndValidateItems = async () => {
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return [];
+      }
+
+      if (items.some((i) => !i.itemId || !i.quantity || i.quantity < 1)) {
+        throw new Error("Invalid items payload");
+      }
+
+      const itemIds = items.map((i) => i.itemId);
+      const catalogItems = await CatalogItem.find(
+        { _id: { $in: itemIds }, isActive: true },
+        { label: 1, price: 1, unit: 1 } // projection for speed
+      ).lean();
+
+      if (catalogItems.length !== itemIds.length) {
+        throw new Error("Some items are invalid or inactive");
+      }
+
+      return items.map((reqItem) => {
+        const catalogItem = catalogItems.find(
+          (ci) => ci._id.toString() === reqItem.itemId
+        );
+        return {
+          itemId: catalogItem._id,
+          label: catalogItem.label,
+          price: catalogItem.price,
+          unit: catalogItem.unit,
+          quantity: reqItem.quantity,
+        };
+      });
+    };
+
+    // Run both tasks concurrently
+    const [addressesResult, processedItemsResult] = await Promise.allSettled([
+      fetchAddresses(),
+      fetchAndValidateItems(),
+    ]);
+
+    // Handle critical errors
+    if (addressesResult.status === "rejected") {
+      console.error("Address fetch error:", addressesResult.reason);
+      return res.status(500).json({
+        message: "Failed to fetch customer addresses",
+        error: addressesResult.reason.message,
+      });
+    }
+
+    const addresses = addressesResult.value;
+    if (!Array.isArray(addresses) || addresses.length === 0) {
+      return res.status(404).json({
+        message: "No address found for this customer",
+      });
+    }
+
+    let processedItems = [];
+    if (items && Array.isArray(items) && items.length > 0) {
+      if (processedItemsResult.status === "rejected") {
+        console.error("Item validation error:", processedItemsResult.reason);
+        return res.status(400).json({
+          message: processedItemsResult.reason.message || "Invalid items",
+        });
+      }
+      processedItems = processedItemsResult.value;
+    }
+
+    // -------------------------
+    // 2. Map pickup & delivery addresses
+    // -------------------------
+    const pickupAddress = addresses.find(
+      (addr) => addr.id === tempPickupAdresssId
+    );
+    const deliveryAddress = addresses.find(
+      (addr) => addr.id === tempDeliveryAddressId
+    );
+
+    if (!pickupAddress) {
+      return res.status(400).json({ message: "Invalid pickup address ID" });
+    }
+    if (!deliveryAddress) {
+      return res.status(400).json({ message: "Invalid delivery address ID" });
+    }
+
+    // -------------------------
+    // 3. Calculate total
     // -------------------------
     const totalAmount = processedItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
-      0,
+      0
     );
 
     // -------------------------
-    // Create pickup payload
+    // 4. Build and create pickup
     // -------------------------
     const pickupPayload = {
       Name: name,
       Contact: contact,
-
       Address: buildFullAddress(pickupAddress),
-
       plantName: "Delhi",
       type: slot ? "schedule" : "live",
       PickupStatus: "pending",
       pickup_date: new Date(),
-
       pickupLocation: {
         latitude: pickupAddress.latitude,
         longitude: pickupAddress.longitude,
       },
-
       contactName: pickupAddress.contactName || null,
       contactPhone: pickupAddress.contactPhone || null,
-
       deliveryAddress: buildFullAddress(deliveryAddress),
       deliveryLocation: {
         latitude: deliveryAddress.latitude,
         longitude: deliveryAddress.longitude,
       },
-
       appCustomerId,
       tempPickupAdresssId,
       tempDeliveryAddressId,
-
-      morning_delivery, // for deciding the delivery needed before 11 AM or after 11 AM
-
+      morning_delivery,
       platform_type: "app",
-      items: processedItems, // ✅ NEW
-      totalAmount, // ✅ OPTIONAL
+      items: processedItems,
+      totalAmount,
     };
 
     if (slot) {
       pickupPayload.slot = slot;
       pickupPayload.pickup_date = new Date(date);
     }
-
     if (note) pickupPayload.note = note;
-
-    if (isHeavy) {
-      pickupPayload.isHeavy = isHeavy;
-    }
-
-    if (bookingId) {
-      pickupPayload.bookingId = bookingId;
-    }
+    if (isHeavy) pickupPayload.isHeavy = isHeavy;
+    if (bookingId) pickupPayload.bookingId = bookingId;
 
     console.log("FINAL PAYLOAD 👉", pickupPayload);
 
-    // -------------------------
-    // Save pickup
-    // -------------------------
     const pickupData = await pickup.create(pickupPayload);
 
     // -------------------------
-    // Notification
+    // 5. Emit "addPickup" to all (fire and forget)
     // -------------------------
-    const notification = await createCustomerNotification({
-      customerId: pickupData.appCustomerId,
-      title: "Pickup Scheduled",
-      message: "Your pickup has been scheduled successfully.",
-      type: "pickup_Created",
-      data: {
-        pickupId: pickupData._id,
-        screen: "PickupDetails",
-      },
-    });
-
-    const unreadCount = await CustomerNotification.countDocuments({
-      customerId: pickupData.appCustomerId,
-      isRead: false,
-    });
-
-    req.socket.emitToUser(
-      String(pickupData.appCustomerId),
-      "CUSTOMER_NOTIFICATION",
-      {
-        notification: {
-          id: notification._id,
-          title: notification.title,
-          message: notification.message,
-          type: notification.type,
-          data: notification.data,
-          createdAt: notification.createdAt,
-          isRead: false,
-        },
-        unreadCount,
-      },
-    );
-
     req.socket.emitToAll("addPickup", pickupData);
-    // req.socket.emit("addPickup", pickupData);
 
     // -------------------------
-    // Push notification
+    // 6. Post‑pickup tasks
+    //    - Notification & unread count: AWAITED (needed for socket emit)
+    //    - Push notification: FIRE-AND-FORGET (not needed for response)
     // -------------------------
-    const pushResult = await customerFcmService.sendToCustomer(
+
+    // 🔥 Push runs in the background – we don't wait for it
+    customerFcmService.sendToCustomer(
       String(appCustomerId),
       {
         title: "Woo!, Pickup booked 🧺",
@@ -519,17 +481,70 @@ export const addPickupthroughApp = catchAsync(async (req, res, next) => {
         type: "pickup_Created",
         pickupId: String(pickupData._id),
         screen: "PickupDetails",
-      },
-    );
+      }
+    ).catch(err => console.error("Push notification failed:", err));
 
+    // Wait for notification and unread count (needed for real‑time socket)
+    const [notificationResult, unreadCountResult] = await Promise.allSettled([
+      createCustomerNotification({
+        customerId: pickupData.appCustomerId,
+        title: "Pickup Scheduled",
+        message: "Your pickup has been scheduled successfully.",
+        type: "pickup_Created",
+        data: {
+          pickupId: pickupData._id,
+          screen: "PickupDetails",
+        },
+      }),
+      CustomerNotification.countDocuments({
+        customerId: pickupData.appCustomerId,
+        isRead: false,
+      }),
+    ]);
+
+    // Prepare notification data for socket emit (if successful)
+    let notification = null;
+    let unreadCount = 0;
+    if (notificationResult.status === "fulfilled") {
+      notification = notificationResult.value;
+    } else {
+      console.error("Notification creation failed:", notificationResult.reason);
+    }
+    if (unreadCountResult.status === "fulfilled") {
+      unreadCount = unreadCountResult.value;
+    } else {
+      console.error("Unread count fetch failed:", unreadCountResult.reason);
+    }
+
+    // Emit real‑time notification to the user
+    if (notification) {
+      req.socket.emitToUser(
+        String(pickupData.appCustomerId),
+        "CUSTOMER_NOTIFICATION",
+        {
+          notification: {
+            id: notification._id,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            data: notification.data,
+            createdAt: notification.createdAt,
+            isRead: false,
+          },
+          unreadCount,
+        }
+      );
+    }
+
+    // -------------------------
+    // 7. Return response (NO PUSH FIELD)
+    // -------------------------
     return res.status(200).json({
       message: "Pickup added successfully",
       data: pickupData,
-      push: pushResult,
     });
   } catch (error) {
     console.error("addPickupthroughApp ERROR ❌", error);
-
     return res.status(500).json({
       message: "Failed to add pickup",
       error: error.message,
