@@ -15,6 +15,9 @@ const stopSchema = new mongoose.Schema(
     address: { type: String, default: "" },
     isDeleted: { type: Boolean, default: false },
     isRescheduled: { type: Boolean, default: false },
+    distanceFromPrevMeters: { type: Number, default: 0 },
+    distanceFromPrevKm: { type: Number, default: 0 },
+    cumulativeDistanceKm: { type: Number, default: 0 },
   },
   { _id: false }
 );
