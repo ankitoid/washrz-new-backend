@@ -78,6 +78,7 @@ app.use(
       "https://test-drydash.netlify.app",
       "https://new.shiptos.com",
       "https://test.shiptos.com",
+      "https://staging-shiptos.netlify.app"
     ],
     methods: "GET, POST, PUT, DELETE, PATCH",
     credentials: true, // Allow credentials (cookies) to be sent with the request
@@ -115,6 +116,7 @@ const io = new Server(server, {
 
      // adding for hoistinger test deployment
       "https://test.shiptos.com",
+      "https://staging-shiptos.netlify.app"
     ],
     credentials: true,
     methods: ["GET", "POST"],
